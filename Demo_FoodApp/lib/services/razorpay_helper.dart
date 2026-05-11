@@ -1,0 +1,1 @@
+export 'razorpay_mobile.dart' if (dart.library.html) 'razorpay_web.dart';
