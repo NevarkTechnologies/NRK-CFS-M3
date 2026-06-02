@@ -144,12 +144,12 @@ class _LoginPageState extends State<LoginPage> {
         _buildFood('assets/tomato.png', top: size.height * 0.42, left: size.width * 0.32, size: 80, blur: 4.0, duration: 3200, delay: 800, isMobile: isMobile), 
 
         // 🌟 UTENSILS (DESKTOP) - 6 TOTAL 🌟
-        _buildFood(null, bottom: size.height * 0.45, left: size.width * 0.28, size: 35, duration: 3800, delay: 100, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: 0.4),
-        _buildFood(null, bottom: size.height * 0.15, left: size.width * 0.6, size: 40, duration: 4200, delay: 600, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: -0.2),
-        _buildFood(null, top: size.height * 0.15, right: size.width * 0.35, size: 30, duration: 3400, delay: 900, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: 0.1),
-        _buildFood(null, top: size.height * 0.3, right: size.width * 0.45, size: 28, duration: 3600, delay: 300, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: 0.8),
-        _buildFood(null, bottom: size.height * 0.4, right: size.width * 0.2, size: 32, duration: 4000, delay: 700, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: -0.5),
-        _buildFood(null, top: size.height * 0.6, left: size.width * 0.1, size: 38, duration: 3900, delay: 200, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: 1.2),
+        _buildFood(null, bottom: size.height * 0.45, left: size.width * 0.28, size: 35, duration: 3800, delay: 100, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: 0.4),
+        _buildFood(null, bottom: size.height * 0.15, left: size.width * 0.6, size: 40, duration: 4200, delay: 600, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: -0.2),
+        _buildFood(null, top: size.height * 0.15, right: size.width * 0.35, size: 30, duration: 3400, delay: 900, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: 0.1),
+        _buildFood(null, top: size.height * 0.3, right: size.width * 0.45, size: 28, duration: 3600, delay: 300, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: 0.8),
+        _buildFood(null, bottom: size.height * 0.4, right: size.width * 0.2, size: 32, duration: 4000, delay: 700, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: -0.5),
+        _buildFood(null, top: size.height * 0.6, left: size.width * 0.1, size: 38, duration: 3900, delay: 200, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: 1.2),
 
         // Scattered pulsing dots
         _buildDotGroup(top: size.height * 0.25, left: size.width * 0.37, color: appBlue, dotSize: 8, isMobile: isMobile),
@@ -204,12 +204,12 @@ class _LoginPageState extends State<LoginPage> {
         _buildFood('assets/tomato.png', top: size.height * 0.45, left: 10, size: 70, blur: 3.5, duration: 3200, delay: 800, isMobile: isMobile),
 
         // 🌟 UTENSILS (MOBILE)
-        _buildFood(null, top: size.height * 0.12, right: 120, size: 30, duration: 3800, delay: 100, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: 0.4),
-        _buildFood(null, top: size.height * 0.55, right: 20, size: 35, duration: 4200, delay: 600, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: -0.2),
-        _buildFood(null, top: size.height * 0.65, left: 30, size: 32, duration: 3400, delay: 900, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.6), isMobile: isMobile, angle: 0.1),
-        _buildFood(null, top: size.height * 0.28, left: 20, size: 28, duration: 3600, delay: 300, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: 0.8),
-        _buildFood(null, bottom: size.height * 0.25, right: 15, size: 32, duration: 4000, delay: 700, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: -0.5),
-        _buildFood(null, bottom: size.height * 0.15, left: 40, size: 26, duration: 3900, delay: 200, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withOpacity(0.5), isMobile: isMobile, angle: 1.2),
+        _buildFood(null, top: size.height * 0.12, right: 120, size: 30, duration: 3800, delay: 100, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: 0.4),
+        _buildFood(null, top: size.height * 0.55, right: 20, size: 35, duration: 4200, delay: 600, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: -0.2),
+        _buildFood(null, top: size.height * 0.65, left: 30, size: 32, duration: 3400, delay: 900, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.6), isMobile: isMobile, angle: 0.1),
+        _buildFood(null, top: size.height * 0.28, left: 20, size: 28, duration: 3600, delay: 300, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: 0.8),
+        _buildFood(null, bottom: size.height * 0.25, right: 15, size: 32, duration: 4000, delay: 700, iconData: Icons.local_dining_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: -0.5),
+        _buildFood(null, bottom: size.height * 0.15, left: 40, size: 26, duration: 3900, delay: 200, iconData: Icons.restaurant_rounded, iconColor: Colors.white.withValues(alpha: 0.5), isMobile: isMobile, angle: 1.2),
         
         // Scattered dots
         _buildDotGroup(top: size.height * 0.15, right: -20, color: Colors.white, dotSize: 10, isMobile: isMobile),
@@ -275,7 +275,7 @@ class _LoginPageState extends State<LoginPage> {
   // ─── 3. RESPONSIVE BRANDING & SCALED LOGO ─────────────────────────────────
   Widget _buildBranding({required bool isMobile}) {
     final textColor = isMobile ? Colors.white : const Color(0xFF1E293B);
-    final subTextColor = isMobile ? Colors.white.withOpacity(0.9) : const Color(0xFF64748B);
+    final subTextColor = isMobile ? Colors.white.withValues(alpha: 0.9) : const Color(0xFF64748B);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -293,7 +293,7 @@ class _LoginPageState extends State<LoginPage> {
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: appBlue.withOpacity(0.3), 
+                          color: appBlue.withValues(alpha: 0.3), 
                           blurRadius: 15, 
                           offset: const Offset(0, 6),
                         )
@@ -304,7 +304,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Image.asset(
                   'assets/logo1.gif',
                   fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Icon(Icons.lunch_dining_rounded, color: isMobile ? appBlue : Colors.white, size: 30),
+                  errorBuilder: (_, _, _) => Icon(Icons.lunch_dining_rounded, color: isMobile ? appBlue : Colors.white, size: 30),
                 ),
               ),
             ),
@@ -344,7 +344,7 @@ class _LoginPageState extends State<LoginPage> {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: isMobile ? Colors.white.withOpacity(0.2) : Colors.white.withOpacity(0.6),
+              color: isMobile ? Colors.white.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.6),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: isMobile ? Colors.white : appBlue, size: 16), 
@@ -365,7 +365,7 @@ class _LoginPageState extends State<LoginPage> {
         borderRadius: BorderRadius.circular(32),
         border: Border.all(color: Colors.white, width: 2), 
         boxShadow: [
-          BoxShadow(color: appBlue.withOpacity(0.2), blurRadius: 40, offset: const Offset(0, 15)),
+          BoxShadow(color: appBlue.withValues(alpha: 0.2), blurRadius: 40, offset: const Offset(0, 15)),
         ],
       ),
       child: Column(
@@ -405,7 +405,7 @@ class _LoginPageState extends State<LoginPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset('assets/google.png', height: 24, errorBuilder: (_, __, ___) => const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue)),
+                  Image.asset('assets/google.png', height: 24, errorBuilder: (_, _, _) => const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue)),
                   const SizedBox(width: 14),
                   Text(
                     isSigningIn ? "Signing in..." : "Continue with Google",
@@ -454,7 +454,7 @@ class _LoginPageState extends State<LoginPage> {
       imageWidget = Image.asset(
         name, 
         width: size, height: size, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Icon(iconData ?? Icons.food_bank_rounded, size: size * 0.7, color: isMobile ? Colors.white70 : const Color(0xFF64748B)),
+        errorBuilder: (_, _, _) => Icon(iconData ?? Icons.food_bank_rounded, size: size * 0.7, color: isMobile ? Colors.white70 : const Color(0xFF64748B)),
       );
     } else {
       imageWidget = Icon(iconData ?? Icons.local_dining_rounded, size: size, color: iconColor);
@@ -465,7 +465,7 @@ class _LoginPageState extends State<LoginPage> {
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 20, offset: const Offset(0, 8))],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.12), blurRadius: 20, offset: const Offset(0, 8))],
         ),
         child: ClipOval(child: imageWidget),
       );
@@ -537,7 +537,7 @@ class _LoginPageState extends State<LoginPage> {
               margin: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: appBlue.withOpacity(0.15),
+                color: appBlue.withValues(alpha: 0.15),
               ),
             ),
           ),
@@ -583,7 +583,7 @@ class _PremiumWavePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (isMobile) {
       final paintMain = Paint()..color = appBlue..style = PaintingStyle.fill;
-      final paintAccent = Paint()..color = appBlue.withOpacity(0.4)..style = PaintingStyle.fill;
+      final paintAccent = Paint()..color = appBlue.withValues(alpha: 0.4)..style = PaintingStyle.fill;
 
       final pathAccent = Path()
         ..moveTo(0, 0)..lineTo(size.width, 0)..lineTo(size.width, size.height * 0.45)
@@ -597,7 +597,7 @@ class _PremiumWavePainter extends CustomPainter {
       canvas.drawPath(pathMain, paintMain);
     } else {
       final paintMain = Paint()..color = appBlue..style = PaintingStyle.fill;
-      final paintAccent = Paint()..color = appBlue.withOpacity(0.1)..style = PaintingStyle.fill;
+      final paintAccent = Paint()..color = appBlue.withValues(alpha: 0.1)..style = PaintingStyle.fill;
 
       final pathAccent = Path()
         ..moveTo(size.width * 0.35, 0)
@@ -783,7 +783,7 @@ class _LoopingFeaturePointsState extends State<_LoopingFeaturePoints> with Ticke
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(

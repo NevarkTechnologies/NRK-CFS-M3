@@ -20,7 +20,7 @@ class ApiService {
       'name': name,
       'email': email,
       'avatar': avatar,
-      if (fcmToken != null) 'fcmToken': fcmToken,
+      'fcmToken': ?fcmToken,
     };
 
     final response = await http.post(
@@ -207,7 +207,7 @@ class ApiService {
       body: jsonEncode({
         'title': title,
         'message': message,
-        if (targetUserIds != null) 'targetUserIds': targetUserIds,
+        'targetUserIds': ?targetUserIds,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -186,7 +186,7 @@ class _MenuPageState extends State<MenuPage> {
                             fontFamily: 'Inter',
                           ),
                           filled: true,
-                          fillColor: Colors.grey.withOpacity(0.05),
+                          fillColor: Colors.grey.withValues(alpha: 0.05),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(14),
                             borderSide: BorderSide.none,
@@ -237,7 +237,7 @@ class _MenuPageState extends State<MenuPage> {
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(16),
-                      color: Colors.grey.withOpacity(0.08),
+                      color: Colors.grey.withValues(alpha: 0.08),
                     ),
                     padding: const EdgeInsets.all(12),
                     child: Column(
@@ -419,7 +419,7 @@ class _MenuPageState extends State<MenuPage> {
             fontFamily: 'Inter',
           ),
           filled: true,
-          fillColor: Colors.grey.withOpacity(0.05),
+          fillColor: Colors.grey.withValues(alpha: 0.05),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -497,7 +497,7 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                     const SizedBox(height: 15),
                     DropdownButtonFormField<String>(
-                      value: category,
+                      initialValue: category,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: getCategoryOptions()
                           .map(
@@ -525,7 +525,7 @@ class _MenuPageState extends State<MenuPage> {
                     Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(16),
-                        color: Colors.grey.withOpacity(0.08),
+                        color: Colors.grey.withValues(alpha: 0.08),
                       ),
                       padding: const EdgeInsets.all(12),
                       child: Column(
@@ -719,7 +719,7 @@ class _MenuPageState extends State<MenuPage> {
                     Icon(
                       Icons.restaurant_menu_rounded,
                       size: 80,
-                      color: Colors.grey.withOpacity(0.5),
+                      color: Colors.grey.withValues(alpha: 0.5),
                     ),
                     const SizedBox(height: 16),
                     Text(
@@ -798,7 +798,7 @@ class _MenuPageState extends State<MenuPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -812,13 +812,13 @@ class _MenuPageState extends State<MenuPage> {
             width: double.infinity,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(16),
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
             ),
             clipBehavior: Clip.antiAlias,
             child: item.image.isEmpty
                 ? Icon(
                     Icons.fastfood_rounded,
-                    color: primaryBlue.withOpacity(0.5),
+                    color: primaryBlue.withValues(alpha: 0.5),
                     size: 40,
                   )
                 : _buildMenuItemImage(item.image),
@@ -859,8 +859,8 @@ class _MenuPageState extends State<MenuPage> {
                   onPressed: () => toggleAvailability(item),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: item.available
-                        ? primaryBlue.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.2),
+                        ? primaryBlue.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.2),
                     foregroundColor:
                         item.available ? primaryBlue : Colors.grey,
                     elevation: 0,
@@ -890,7 +890,7 @@ class _MenuPageState extends State<MenuPage> {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: IconButton(
@@ -909,7 +909,7 @@ class _MenuPageState extends State<MenuPage> {
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.1),
+                        color: Colors.red.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: IconButton(
@@ -933,8 +933,8 @@ class _MenuPageState extends State<MenuPage> {
                   onPressed: () => toggleAvailability(item),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: item.available
-                        ? primaryBlue.withOpacity(0.1)
-                        : Colors.grey.withOpacity(0.2),
+                        ? primaryBlue.withValues(alpha: 0.1)
+                        : Colors.grey.withValues(alpha: 0.2),
                     foregroundColor:
                         item.available ? primaryBlue : Colors.grey,
                     elevation: 0,
@@ -961,7 +961,7 @@ class _MenuPageState extends State<MenuPage> {
 
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: IconButton(
@@ -978,7 +978,7 @@ class _MenuPageState extends State<MenuPage> {
 
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: IconButton(

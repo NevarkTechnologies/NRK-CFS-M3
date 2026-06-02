@@ -8,7 +8,7 @@ class FoodCard extends StatelessWidget {
   final VoidCallback onRemove;
   final VoidCallback onFavoriteToggle;
 
-  FoodCard({
+  const FoodCard({super.key, 
     required this.food,
     required this.quantity,
     required this.onAdd,
@@ -30,7 +30,7 @@ class FoodCard extends StatelessWidget {
           // IMAGE + FAVORITE
           Stack(
             children: [
-              Container(
+              SizedBox(
                 height: 100,
                 width: double.infinity,
                 child: Builder(
@@ -42,7 +42,7 @@ class FoodCard extends StatelessWidget {
                     return Image.network(
                       imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                      errorBuilder: (_, _, _) => const SizedBox.shrink(),
                     );
                   },
                 ),

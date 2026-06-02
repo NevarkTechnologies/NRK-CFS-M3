@@ -104,8 +104,22 @@ async function connectDatabase() {
     throw new Error('MONGO_URI is missing. Add it to Backend/.env');
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
-  console.log('MongoDB connected');
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB connection failed:', err.message);
+    // If the user provided an SRV URI (mongodb+srv://) and DNS/SRV lookup fails
+    // attempt a local fallback. This keeps behavior predictable in offline/dev setups.
+    if (process.env.MONGO_URI.includes('+srv')) {
+      const fallback = process.env.MONGO_URI_FALLBACK || 'mongodb://127.0.0.1:27017/nevark';
+      console.log(`Attempting fallback MongoDB URI: ${fallback}`);
+      await mongoose.connect(fallback);
+      console.log('MongoDB connected (fallback)');
+      return;
+    }
+    throw err;
+  }
 }
 
 app.get('/api/health', (req, res) => {

@@ -194,7 +194,7 @@ class _SettingsPageState extends State<SettingsPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           )
@@ -208,7 +208,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: primaryBlue.withOpacity(0.1),
+                  color: primaryBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: primaryBlue, size: 20),
@@ -241,7 +241,7 @@ class _SettingsPageState extends State<SettingsPage> {
           labelText: label,
           labelStyle: TextStyle(color: Colors.grey.shade500, fontFamily: 'Inter'),
           filled: true,
-          fillColor: isDark ? Colors.white.withOpacity(0.05) : Colors.grey.shade100,
+          fillColor: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.grey.shade100,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide.none,
@@ -255,7 +255,7 @@ class _SettingsPageState extends State<SettingsPage> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
       child: SwitchListTile(
-        activeColor: primaryBlue,
+        activeThumbColor: primaryBlue,
         contentPadding: EdgeInsets.zero,
         title: Text(title,
             style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: text)),

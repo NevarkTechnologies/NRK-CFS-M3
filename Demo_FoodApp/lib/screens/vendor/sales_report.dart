@@ -327,7 +327,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
                 decoration: BoxDecoration(
                   color: cardColor,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: primaryBlue.withOpacity(0.25)),
+                  border: Border.all(color: primaryBlue.withValues(alpha: 0.25)),
                 ),
                 child: DropdownButton<String>(
                   value: selectedRange,
@@ -655,8 +655,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   showTitles: true,
                   reservedSize: 35,
                   getTitlesWidget: (value, meta) {
-                    if (value.toInt() % 3 != 0)
+                    if (value.toInt() % 3 != 0) {
                       return const SizedBox.shrink();
+                    }
                     return Transform.rotate(
                       angle: -0.5,
                       child: Text('${value.toInt()}h',
@@ -696,7 +697,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
           : ListView.separated(
               padding: EdgeInsets.zero,
               itemCount: recentOrders.length,
-              separatorBuilder: (_, __) => Divider(
+              separatorBuilder: (_, _) => Divider(
                 color: isDark ? Colors.white12 : Colors.grey.shade200,
               ),
               itemBuilder: (context, index) {

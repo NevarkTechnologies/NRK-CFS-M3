@@ -59,7 +59,7 @@ class NotificationPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.18 : 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 10),
           )
@@ -74,7 +74,7 @@ class NotificationPage extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFEAF2FF),
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFEAF2FF),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : const Color(0xFF0F4CFF), size: 20),
@@ -109,7 +109,7 @@ class NotificationPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.06),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
             blurRadius: 20, 
             offset: const Offset(0, 10)
           )
@@ -134,7 +134,7 @@ class NotificationPage extends StatelessWidget {
               width: 50,
               height: 50,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F0FF),
+                color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE8F0FF),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(Icons.notifications_active_rounded, color: isDark ? Colors.white : const Color(0xFF0F4CFF), size: 24),
@@ -166,7 +166,7 @@ class NotificationPage extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: subTextColor.withOpacity(0.5)),
+            Icon(Icons.arrow_forward_ios_rounded, size: 16, color: subTextColor.withValues(alpha: 0.5)),
           ],
         ),
       ),
@@ -178,7 +178,7 @@ class NotificationPage extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(Icons.notifications_none_rounded, size: 80, color: subTextColor.withOpacity(0.2)),
+        Icon(Icons.notifications_none_rounded, size: 80, color: subTextColor.withValues(alpha: 0.2)),
         const SizedBox(height: 16),
         Text(
           "No notifications yet", 
@@ -237,7 +237,7 @@ class NotificationDetailPage extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(20),
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), 
+                                      color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), 
                                       blurRadius: 10,
                                       offset: const Offset(0, 4)
                                     )
@@ -249,7 +249,7 @@ class NotificationDetailPage extends StatelessWidget {
                                       width: 44,
                                       height: 44,
                                       decoration: BoxDecoration(
-                                        color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F0FF),
+                                        color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE8F0FF),
                                         borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: Icon(Icons.fastfood_rounded, color: isDark ? Colors.white : const Color(0xFF0F4CFF), size: 20),
@@ -289,7 +289,7 @@ class NotificationDetailPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.18 : 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 10),
           )
@@ -304,7 +304,7 @@ class NotificationDetailPage extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFEAF2FF),
+                color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFEAF2FF),
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : const Color(0xFF0F4CFF), size: 20),

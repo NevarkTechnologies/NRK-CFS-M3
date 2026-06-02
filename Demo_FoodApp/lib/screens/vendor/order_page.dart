@@ -140,7 +140,7 @@ class _OrdersPageState extends State<OrdersPage> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           )
@@ -284,7 +284,7 @@ class _OrdersPageState extends State<OrdersPage> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-            color: Colors.green.withOpacity(0.1),
+            color: Colors.green.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(16)),
         child: const Center(
             child: Text("Order Completed successfully",
@@ -358,7 +358,7 @@ class _OrdersPageState extends State<OrdersPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(status.toUpperCase(),

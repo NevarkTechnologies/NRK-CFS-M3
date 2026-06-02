@@ -216,7 +216,7 @@ class _SuccessPageState extends State<SuccessPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [primary, primary.withOpacity(0.7)]),
+        gradient: LinearGradient(colors: [primary, primary.withValues(alpha: 0.7)]),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -241,7 +241,7 @@ class _SuccessPageState extends State<SuccessPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black54 : Colors.black.withOpacity(0.05),
+            color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
           ),
         ],
@@ -262,7 +262,7 @@ class _SuccessPageState extends State<SuccessPage> {
           borderRadius: BorderRadius.circular(18),
           boxShadow: [
             BoxShadow(
-              color: isDark ? Colors.black54 : Colors.black.withOpacity(0.08),
+              color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.08),
               blurRadius: 20,
             ),
           ],

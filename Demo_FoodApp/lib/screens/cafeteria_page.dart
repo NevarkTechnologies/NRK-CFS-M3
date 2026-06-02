@@ -195,7 +195,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
               image: const AssetImage('bg.jpg'), 
               fit: BoxFit.cover,
               colorFilter: ColorFilter.mode(
-                isDark ? const Color(0xFF0F172A).withOpacity(0.9) : const Color(0xFFF0F6FF).withOpacity(0.85), 
+                isDark ? const Color(0xFF0F172A).withValues(alpha: 0.9) : const Color(0xFFF0F6FF).withValues(alpha: 0.85), 
                 BlendMode.srcATop
               ),
             ),
@@ -213,7 +213,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         width: 50,
                         height: 50,
                         decoration: BoxDecoration(
-                          color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFDDE6FF),
+                          color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFDDE6FF),
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Icon(Icons.restaurant, color: appBlue, size: 28),
@@ -303,7 +303,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : Colors.white.withOpacity(0.8),
+        color: isDark ? Colors.white.withValues(alpha: 0.05) : Colors.white.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: isDark ? Colors.white12 : const Color(0xFFDDE6FF)),
       ),
@@ -328,7 +328,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -367,7 +367,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
             decoration: BoxDecoration(
               color: isDark ? Colors.white10 : Colors.white,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+              boxShadow: isDark ? [] : [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
             ),
             child: Icon(icon, color: isDark ? Colors.white : const Color(0xFF081F47), size: 24),
           ),
@@ -476,7 +476,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -497,7 +497,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         height: 190,
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(color: Colors.grey.shade200),
+                        errorBuilder: (_, _, _) => Container(color: Colors.grey.shade200),
                       );
                     }
                     return Image.network(
@@ -505,7 +505,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                       height: 190,
                       width: double.infinity,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(color: Colors.grey.shade200),
+                      errorBuilder: (_, _, _) => Container(color: Colors.grey.shade200),
                     );
                   },
                 ),
@@ -515,7 +515,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.75),
+                      color: Colors.black.withValues(alpha: 0.75),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
@@ -538,7 +538,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 4))
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 8, offset: const Offset(0, 4))
                       ],
                     ),
                     child: Text(
@@ -578,7 +578,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F0FF),
+                            color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE8F0FF),
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Row(
@@ -677,7 +677,7 @@ class CustomFloatingNavBar extends StatelessWidget {
                     color: isDark ? const Color(0xFF1E293B) : Colors.white,
                     borderRadius: BorderRadius.circular(30),
                     boxShadow: [
-                      BoxShadow(color: Colors.black.withOpacity(isDark ? 0.4 : 0.08), blurRadius: 20, offset: const Offset(0, 10))
+                      BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08), blurRadius: 20, offset: const Offset(0, 10))
                     ],
                   ),
                   child: ClipRRect(

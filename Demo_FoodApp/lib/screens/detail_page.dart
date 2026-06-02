@@ -183,7 +183,7 @@ class _DetailPageState extends State<DetailPage> {
                   borderRadius: BorderRadius.circular(20),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
+                      color: Colors.black.withValues(alpha: 0.05),
                       blurRadius: 10,
                     ),
                   ],
@@ -229,7 +229,7 @@ class _DetailPageState extends State<DetailPage> {
                             borderRadius: BorderRadius.circular(24),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(isDark ? 0.3 : 0.08),
+                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
                                 blurRadius: 25,
                                 offset: const Offset(0, 12),
                               ),
@@ -363,7 +363,7 @@ class _DetailPageState extends State<DetailPage> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.3 : 0.06), // Matched home page shadow
+                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06), // Matched home page shadow
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       ),
@@ -384,7 +384,7 @@ class _DetailPageState extends State<DetailPage> {
                               width: 65,
                               height: 65,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const SizedBox(width: 65, height: 65),
+                              errorBuilder: (_, _, _) => const SizedBox(width: 65, height: 65),
                             );
                           },
                         ),
@@ -450,9 +450,9 @@ class _DetailPageState extends State<DetailPage> {
                             )
                           : Container(
                               decoration: BoxDecoration(
-                                color: primary.withOpacity(0.1),
+                                color: primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: primary.withOpacity(0.3)),
+                                border: Border.all(color: primary.withValues(alpha: 0.3)),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -552,7 +552,7 @@ class _DetailPageState extends State<DetailPage> {
                 ),
               ),
             ),
-            ...orders.map((order) => _buildOrderCardFromApi(order, isDark)).toList(),
+            ...orders.map((order) => _buildOrderCardFromApi(order, isDark)),
           ],
         );
 
@@ -805,7 +805,7 @@ class _DetailPageState extends State<DetailPage> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withOpacity(0.16), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
       child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
     );
   }

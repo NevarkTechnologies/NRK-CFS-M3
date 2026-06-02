@@ -225,7 +225,7 @@ class _CartPageState extends State<CartPage> {
         borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.18 : 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 10),
           )
@@ -254,7 +254,7 @@ class _CartPageState extends State<CartPage> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withOpacity(0.12) : const Color(0xFFEAF2FF),
+                    color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFEAF2FF),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : primaryBlue, size: 20),
@@ -305,7 +305,7 @@ class _CartPageState extends State<CartPage> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Row(
         children: [
@@ -328,9 +328,9 @@ class _CartPageState extends State<CartPage> {
                   height: 32,
                   width: 100,
                   decoration: BoxDecoration(
-                    color: primaryBlue.withOpacity(0.1),
+                    color: primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: primaryBlue.withOpacity(0.3)),
+                    border: Border.all(color: primaryBlue.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -347,7 +347,7 @@ class _CartPageState extends State<CartPage> {
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
               child: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
             ),
             onPressed: () => setState(() {
@@ -368,7 +368,7 @@ class _CartPageState extends State<CartPage> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,7 +378,7 @@ class _CartPageState extends State<CartPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
+                color: Colors.green.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: Colors.green.shade300),
               ),
@@ -416,7 +416,7 @@ class _CartPageState extends State<CartPage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: primaryBlue.withOpacity(0.1),
+                    color: primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(Icons.local_offer_outlined, color: primaryBlue, size: 20),
@@ -483,16 +483,16 @@ class _CartPageState extends State<CartPage> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: eligible ? primaryBlue.withOpacity(0.35) : Colors.grey.withOpacity(0.2),
+                      color: eligible ? primaryBlue.withValues(alpha: 0.35) : Colors.grey.withValues(alpha: 0.2),
                     ),
-                    color: eligible ? primaryBlue.withOpacity(0.05) : Colors.transparent,
+                    color: eligible ? primaryBlue.withValues(alpha: 0.05) : Colors.transparent,
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: eligible ? primaryBlue.withOpacity(0.12) : Colors.grey.withOpacity(0.1),
+                          color: eligible ? primaryBlue.withValues(alpha: 0.12) : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -546,7 +546,7 @@ class _CartPageState extends State<CartPage> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,7 +617,7 @@ class _CartPageState extends State<CartPage> {
           const SizedBox(height: 8),
           Text(
             "Add items from cafeterias to see them here.",
-            style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: subTextColor.withOpacity(0.7)),
+            style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: subTextColor.withValues(alpha: 0.7)),
           ),
         ],
       ),

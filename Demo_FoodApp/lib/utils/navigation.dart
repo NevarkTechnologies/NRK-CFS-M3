@@ -4,8 +4,8 @@ void navigate(BuildContext context, Widget page) {
   Navigator.push(
     context,
     PageRouteBuilder(
-      pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, animation, __, child) {
+      pageBuilder: (_, _, _) => page,
+      transitionsBuilder: (_, animation, _, child) {
         return FadeTransition(
           opacity: animation,
           child: child,

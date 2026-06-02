@@ -25,7 +25,6 @@
         "path_provider",
         "qr_flutter",
         "razorpay_flutter",
-        "shared_preferences",
         "url_launcher"
       ],
       "devDependencies": [
@@ -56,19 +55,6 @@
         "stream_channel",
         "test_api",
         "vector_math"
-      ]
-    },
-    {
-      "name": "shared_preferences",
-      "version": "2.5.5",
-      "dependencies": [
-        "flutter",
-        "shared_preferences_android",
-        "shared_preferences_foundation",
-        "shared_preferences_linux",
-        "shared_preferences_platform_interface",
-        "shared_preferences_web",
-        "shared_preferences_windows"
       ]
     },
     {
@@ -284,7 +270,7 @@
     },
     {
       "name": "meta",
-      "version": "1.17.0",
+      "version": "1.18.0",
       "dependencies": []
     },
     {
@@ -346,7 +332,7 @@
     },
     {
       "name": "test_api",
-      "version": "0.7.10",
+      "version": "0.7.11",
       "dependencies": [
         "async",
         "boolean_selector",
@@ -357,64 +343,6 @@
         "stream_channel",
         "string_scanner",
         "term_glyph"
-      ]
-    },
-    {
-      "name": "shared_preferences_windows",
-      "version": "2.4.1",
-      "dependencies": [
-        "file",
-        "flutter",
-        "path",
-        "path_provider_platform_interface",
-        "path_provider_windows",
-        "shared_preferences_platform_interface"
-      ]
-    },
-    {
-      "name": "shared_preferences_web",
-      "version": "2.4.3",
-      "dependencies": [
-        "flutter",
-        "flutter_web_plugins",
-        "shared_preferences_platform_interface",
-        "web"
-      ]
-    },
-    {
-      "name": "shared_preferences_platform_interface",
-      "version": "2.4.2",
-      "dependencies": [
-        "flutter",
-        "plugin_platform_interface"
-      ]
-    },
-    {
-      "name": "shared_preferences_linux",
-      "version": "2.4.1",
-      "dependencies": [
-        "file",
-        "flutter",
-        "path",
-        "path_provider_linux",
-        "path_provider_platform_interface",
-        "shared_preferences_platform_interface"
-      ]
-    },
-    {
-      "name": "shared_preferences_foundation",
-      "version": "2.5.6",
-      "dependencies": [
-        "flutter",
-        "shared_preferences_platform_interface"
-      ]
-    },
-    {
-      "name": "shared_preferences_android",
-      "version": "2.4.23",
-      "dependencies": [
-        "flutter",
-        "shared_preferences_platform_interface"
       ]
     },
     {
@@ -905,14 +833,6 @@
       ]
     },
     {
-      "name": "file",
-      "version": "7.0.1",
-      "dependencies": [
-        "meta",
-        "path"
-      ]
-    },
-    {
       "name": "petitparser",
       "version": "7.0.2",
       "dependencies": [
@@ -1123,6 +1043,14 @@
         "collection",
         "meta",
         "pub_semver"
+      ]
+    },
+    {
+      "name": "file",
+      "version": "7.0.1",
+      "dependencies": [
+        "meta",
+        "path"
       ]
     }
   ],

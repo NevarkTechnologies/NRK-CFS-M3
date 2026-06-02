@@ -214,7 +214,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       trailing: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: appBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                        decoration: BoxDecoration(color: appBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
                         child: Text(
                           "${groupedFoods[cat]!.length}",
                           style: TextStyle(fontFamily: 'Inter', fontSize: 12, fontWeight: FontWeight.bold, color: appBlue),
@@ -339,7 +339,7 @@ class _HomePageState extends State<HomePage> {
                             decoration: BoxDecoration(
                               color: isDark ? Colors.white : const Color(0xFF081F47),
                               borderRadius: BorderRadius.circular(24),
-                              boxShadow: [BoxShadow(color: (isDark ? Colors.white : Colors.black).withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))],
+                              boxShadow: [BoxShadow(color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 8))],
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -386,10 +386,10 @@ class _HomePageState extends State<HomePage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF0F172A).withOpacity(0.95) : Colors.white.withOpacity(0.95),
+        color: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.05), blurRadius: 20, offset: const Offset(0, 8))
+          BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05), blurRadius: 20, offset: const Offset(0, 8))
         ],
       ),
       child: Row(
@@ -471,7 +471,7 @@ class _HomePageState extends State<HomePage> {
       decoration: BoxDecoration(
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
             blurRadius: 15,
             offset: const Offset(0, 6),
           )
@@ -492,7 +492,7 @@ class _HomePageState extends State<HomePage> {
             child: Icon(Icons.search, size: 18, color: isDark ? Colors.white54 : Colors.grey.shade600),
           ),
           filled: true,
-          fillColor: isDark ? const Color(0xFF0F172A).withOpacity(0.95) : Colors.white.withOpacity(0.95),
+          fillColor: isDark ? const Color(0xFF0F172A).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
           contentPadding: const EdgeInsets.symmetric(vertical: 14),
         ),
@@ -567,7 +567,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildFoodCard(Map<String, dynamic> food, bool isDark) {
     final qty = CartModel.getQty(food["id"]);
-    final cardBg = isDark ? const Color(0xFF0F172A).withOpacity(0.95) : Colors.white.withOpacity(0.95);
+    final cardBg = isDark ? const Color(0xFF0F172A).withValues(alpha: 0.95) : Colors.white.withValues(alpha: 0.95);
 
     return Container(
       decoration: BoxDecoration(
@@ -575,7 +575,7 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.3 : 0.05),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           )
@@ -598,7 +598,7 @@ class _HomePageState extends State<HomePage> {
                     height: 110,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(height: 110),
+                    errorBuilder: (_, _, _) => const SizedBox(height: 110),
                   );
                 },
               ),
@@ -612,7 +612,7 @@ class _HomePageState extends State<HomePage> {
                     decoration: BoxDecoration(
                         color: isDark ? const Color(0xFF1E293B) : Colors.white,
                         shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 6, offset: const Offset(0, 3))]),
+                        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 6, offset: const Offset(0, 3))]),
                     child: Icon(FavoriteModel.isFavorite(food["id"]) ? Icons.favorite_rounded : Icons.favorite_border_rounded, color: Colors.redAccent, size: 16),
                   ),
                 ),
@@ -646,7 +646,7 @@ class _HomePageState extends State<HomePage> {
                     children: [
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: isDark ? Colors.white.withOpacity(0.1) : const Color(0xFFE8F0FF), borderRadius: BorderRadius.circular(6)),
+                        decoration: BoxDecoration(color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE8F0FF), borderRadius: BorderRadius.circular(6)),
                         child: Row(
                           children: [
                             const Icon(Icons.star_rounded, color: Color(0xFFFFC107), size: 10),
@@ -686,7 +686,7 @@ class _HomePageState extends State<HomePage> {
                           : Container(
                               height: 30,
                               padding: const EdgeInsets.symmetric(horizontal: 4),
-                              decoration: BoxDecoration(color: appBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: appBlue.withOpacity(0.3))),
+                              decoration: BoxDecoration(color: appBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: appBlue.withValues(alpha: 0.3))),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -723,7 +723,7 @@ class _HomePageState extends State<HomePage> {
         decoration: BoxDecoration(
           gradient: LinearGradient(colors: [appBlue, const Color(0xFF0033CC)]),
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: appBlue.withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))],
+          boxShadow: [BoxShadow(color: appBlue.withValues(alpha: 0.4), blurRadius: 15, offset: const Offset(0, 8))],
         ),
         child: Row(
           children: [
@@ -736,7 +736,7 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   Text("$totalItems Item${totalItems > 1 ? 's' : ''} in Cart", style: const TextStyle(fontFamily: 'Inter', color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
                   const SizedBox(height: 2),
-                  Text("Checkout to proceed", style: TextStyle(fontFamily: 'Inter', color: Colors.white.withOpacity(0.85), fontWeight: FontWeight.w500, fontSize: 10)),
+                  Text("Checkout to proceed", style: TextStyle(fontFamily: 'Inter', color: Colors.white.withValues(alpha: 0.85), fontWeight: FontWeight.w500, fontSize: 10)),
                 ],
               ),
             ),
@@ -753,7 +753,7 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(width: 8),
                 Container(
                     padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), shape: BoxShape.circle),
                     child: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 10)
                 ),
               ],
@@ -773,8 +773,8 @@ class CuteFoodBackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final Color topColor = isDark ? const Color(0xFF1E293B).withOpacity(0.6) : const Color(0xFFFDE8E8); 
-    final Color bottomColor = isDark ? brandColor.withOpacity(0.15) : const Color(0xFFDDE6FF);
+    final Color topColor = isDark ? const Color(0xFF1E293B).withValues(alpha: 0.6) : const Color(0xFFFDE8E8); 
+    final Color bottomColor = isDark ? brandColor.withValues(alpha: 0.15) : const Color(0xFFDDE6FF);
 
     final Paint blobPaint = Paint()
       ..shader = LinearGradient(colors: [topColor, bottomColor]).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
@@ -783,7 +783,7 @@ class CuteFoodBackgroundPainter extends CustomPainter {
     canvas.drawCircle(Offset(size.width * 0.2, size.height * 0.1), 160, blobPaint);
     canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.7), 220, blobPaint);
 
-    final iconColor = isDark ? Colors.white.withOpacity(0.03) : brandColor.withOpacity(0.04);
+    final iconColor = isDark ? Colors.white.withValues(alpha: 0.03) : brandColor.withValues(alpha: 0.04);
 
     void drawIcon(IconData icon, Offset position, double iconSize, double angle) {
       final textPainter = TextPainter(
@@ -815,7 +815,7 @@ class CuteFoodBackgroundPainter extends CustomPainter {
     drawIcon(Icons.restaurant, Offset(size.width * 0.7, size.height * 0.5), 90, -0.15); 
 
     final random = math.Random(42);
-    final dotColor = isDark ? Colors.white.withOpacity(0.05) : brandColor.withOpacity(0.06);
+    final dotColor = isDark ? Colors.white.withValues(alpha: 0.05) : brandColor.withValues(alpha: 0.06);
     
     for (int i = 0; i < 75; i++) {
       double x = random.nextDouble() * size.width;

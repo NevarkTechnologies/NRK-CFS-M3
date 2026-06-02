@@ -83,7 +83,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
         color: cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 20,
             offset: const Offset(4, 0),
           )
@@ -101,7 +101,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
   height: 56,
   decoration: BoxDecoration(
     borderRadius: BorderRadius.circular(16),
-    color: primaryBlue.withOpacity(0.1),
+    color: primaryBlue.withValues(alpha: 0.1),
   ),
   clipBehavior: Clip.antiAlias,
   child: VendorData.displayImage.isNotEmpty
@@ -142,7 +142,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: textColor.withOpacity(0.6),
+                          color: textColor.withValues(alpha: 0.6),
                         ),
                       ),
                     ],
@@ -183,7 +183,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
+                  color: Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
@@ -225,8 +225,9 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
           if (MediaQuery.of(context).size.width < 850) Navigator.pop(context);
           Future.delayed(const Duration(milliseconds: 150), () {
             Widget page;
-            if (title == "Orders") page = const OrdersPage();
-            else if (title == "Analytics") page = const AnalyticsPage();
+            if (title == "Orders") {
+              page = const OrdersPage();
+            } else if (title == "Analytics") page = const AnalyticsPage();
             else if (title == "Menu") page = MenuPage(toggleTheme: widget.toggleTheme);
             else if (title == "Reports") page = const SalesReportPage();
             else if (title == "Settings") page = const SettingsPage();

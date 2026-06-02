@@ -122,7 +122,7 @@ Container(
               image: const AssetImage('assets/bg.jpg'), 
               fit: BoxFit.cover,
               colorFilter: ColorFilter.mode(
-                isDark ? const Color(0xFF0F172A).withOpacity(0.9) : const Color(0xFFF0F6FF).withOpacity(0.85), 
+                isDark ? const Color(0xFF0F172A).withValues(alpha: 0.9) : const Color(0xFFF0F6FF).withValues(alpha: 0.85), 
                 BlendMode.srcATop
               ),
             ),
@@ -189,7 +189,7 @@ Container(
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black54 : Colors.black.withOpacity(0.05),
+            color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
           )
         ],
@@ -471,7 +471,7 @@ Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F4CFF).withOpacity(0.16),
+                  color: const Color(0xFF0F4CFF).withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(Icons.check_circle_outline, color: Color(0xFF0F4CFF), size: 30),

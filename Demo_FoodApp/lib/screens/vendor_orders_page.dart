@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class VendorOrdersPage extends StatefulWidget {
+  const VendorOrdersPage({super.key});
+
   @override
   State<VendorOrdersPage> createState() => _VendorOrdersPageState();
 }
@@ -186,7 +188,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.2),
+                  color: statusColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(

@@ -50,7 +50,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 10,
                       )
                     ],
@@ -74,7 +74,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF0F4CFF).withOpacity(0.2) : const Color(0xFF0F4CFF).withOpacity(0.1),
+                            color: isDark ? const Color(0xFF0F4CFF).withValues(alpha: 0.2) : const Color(0xFF0F4CFF).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
@@ -99,7 +99,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF0F4CFF).withOpacity(0.2) : const Color(0xFF0F4CFF).withOpacity(0.1),
+                            color: isDark ? const Color(0xFF0F4CFF).withValues(alpha: 0.2) : const Color(0xFF0F4CFF).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(
@@ -119,7 +119,7 @@ class _ProfilePageState extends State<ProfilePage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isDark ? const Color(0xFF0F4CFF).withOpacity(0.2) : const Color(0xFF0F4CFF).withOpacity(0.1),
+                            color: isDark ? const Color(0xFF0F4CFF).withValues(alpha: 0.2) : const Color(0xFF0F4CFF).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Icon(
@@ -200,9 +200,9 @@ class _ProfilePageState extends State<ProfilePage> {
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.12),
+                              color: Colors.white.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.15)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                             ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -245,7 +245,7 @@ class _ProfilePageState extends State<ProfilePage> {
                           borderRadius: BorderRadius.circular(24),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(isDark ? 0.3 : 0.1),
+                              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
                               blurRadius: 25,
                               offset: const Offset(0, 12),
                             ),
@@ -262,7 +262,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     width: 44,
                                     height: 44,
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF0F4CFF).withOpacity(0.1),
+                                      color: const Color(0xFF0F4CFF).withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Icon(

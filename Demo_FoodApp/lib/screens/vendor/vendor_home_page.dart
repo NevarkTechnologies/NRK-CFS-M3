@@ -103,7 +103,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
       margin: const EdgeInsets.only(right: 16),
       decoration: BoxDecoration(
         color: cardColor,
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.04), blurRadius: 20, offset: const Offset(4, 0))],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04), blurRadius: 20, offset: const Offset(4, 0))],
       ),
       child: Column(
         children: [
@@ -114,7 +114,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: primaryBlue.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                  decoration: BoxDecoration(color: primaryBlue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
                   child: Icon(Icons.storefront_rounded, color: primaryBlue, size: 28),
                 ),
                 const SizedBox(width: 14),
@@ -123,7 +123,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(VendorData.displayName, style: TextStyle(fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.w900, color: textColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text("Vendor Portal", style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w500, color: textColor.withOpacity(0.6))),
+                      Text("Vendor Portal", style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w500, color: textColor.withValues(alpha: 0.6))),
                     ],
                   ),
                 ),
@@ -155,7 +155,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(16)),
+                decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
                 child: Row(
                   children: [
                     const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
@@ -185,8 +185,9 @@ class _VendorHomePageState extends State<VendorHomePage> {
           if (MediaQuery.of(context).size.width < 850) Navigator.pop(context);
           Future.delayed(const Duration(milliseconds: 150), () {
             Widget page;
-            if (title == "Orders") page = const OrdersPage();
-            else if (title == "Analytics") page = const AnalyticsPage();
+            if (title == "Orders") {
+              page = const OrdersPage();
+            } else if (title == "Analytics") page = const AnalyticsPage();
             else if (title == "Menu") page = MenuPage(toggleTheme: widget.toggleTheme);
             else if (title == "Reports") page = const SalesReportPage();
             else if (title == "Settings") page = const SettingsPage();
@@ -222,7 +223,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             decoration: BoxDecoration(
               color: cardColor, borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.2 : 0.05), blurRadius: 24, offset: const Offset(0, 10))]
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.05), blurRadius: 24, offset: const Offset(0, 10))]
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -271,13 +272,13 @@ class _VendorHomePageState extends State<VendorHomePage> {
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
                     color: cardColor, borderRadius: BorderRadius.circular(24),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 8))]
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 8))]
                   ),
                   child: Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(color: (data[index][3] as Color).withOpacity(0.15), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: (data[index][3] as Color).withValues(alpha: 0.15), shape: BoxShape.circle),
                         child: Icon(data[index][2] as IconData, color: data[index][3] as Color, size: 24),
                       ),
                       const SizedBox(width: 16),
@@ -327,7 +328,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
     */
 
     return Container(
-      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
+      decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: ListView.separated(
@@ -350,17 +351,17 @@ class _VendorHomePageState extends State<VendorHomePage> {
   Widget buildOrderRow(String id, String name, String amount, String status, Color textColor, Color subText) {
     Color statusColor; Color statusBg;
     switch (status) {
-      case "Pending": statusColor = Colors.orange; statusBg = Colors.orange.withOpacity(0.15); break;
-      case "Preparing": statusColor = primaryBlue; statusBg = primaryBlue.withOpacity(0.15); break;
-      case "Ready": statusColor = Colors.teal; statusBg = Colors.teal.withOpacity(0.15); break;
-      default: statusColor = Colors.grey; statusBg = Colors.grey.withOpacity(0.15);
+      case "Pending": statusColor = Colors.orange; statusBg = Colors.orange.withValues(alpha: 0.15); break;
+      case "Preparing": statusColor = primaryBlue; statusBg = primaryBlue.withValues(alpha: 0.15); break;
+      case "Ready": statusColor = Colors.teal; statusBg = Colors.teal.withValues(alpha: 0.15); break;
+      default: statusColor = Colors.grey; statusBg = Colors.grey.withValues(alpha: 0.15);
     }
     return Container(
       color: Colors.transparent, 
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
       child: Row(
         children: [
-          Container(height: 48, width: 48, decoration: BoxDecoration(color: Colors.grey.withOpacity(0.1), borderRadius: BorderRadius.circular(14)), child: Center(child: Text(name[0], style: TextStyle(fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.bold, color: textColor)))),
+          Container(height: 48, width: 48, decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14)), child: Center(child: Text(name[0], style: TextStyle(fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.bold, color: textColor)))),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(name, style: TextStyle(fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.bold, color: textColor)), const SizedBox(height: 4), Text(id, style: TextStyle(fontFamily: 'Inter', fontSize: 12, fontWeight: FontWeight.w500, color: subText))])),
           Column(crossAxisAlignment: CrossAxisAlignment.end, children: [Text(amount, style: TextStyle(fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.w900, color: textColor)), const SizedBox(height: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(8)), child: Text(status.toUpperCase(), style: TextStyle(fontFamily: 'Inter', fontSize: 10, fontWeight: FontWeight.bold, color: statusColor, letterSpacing: 0.5)))]),
@@ -437,7 +438,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
           children: [
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withOpacity(isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
+              decoration: BoxDecoration(color: cardColor, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -467,7 +468,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
                         ],
                       ),
                     );
-                  }).toList(),
+                  }),
                   
                   Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Divider(color: isDark ? Colors.white12 : Colors.grey.shade200)),
                   
@@ -493,11 +494,11 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
   Widget _buildStatusChip(String status) {
     Color color; Color bg;
     switch (status) {
-      case "Pending": color = Colors.orange; bg = Colors.orange.withOpacity(0.15); break;
-      case "Preparing": color = primaryBlue; bg = primaryBlue.withOpacity(0.15); break;
-      case "Ready": color = Colors.teal; bg = Colors.teal.withOpacity(0.15); break;
-      case "Rejected": color = Colors.red; bg = Colors.red.withOpacity(0.15); break;
-      default: color = Colors.grey; bg = Colors.grey.withOpacity(0.15);
+      case "Pending": color = Colors.orange; bg = Colors.orange.withValues(alpha: 0.15); break;
+      case "Preparing": color = primaryBlue; bg = primaryBlue.withValues(alpha: 0.15); break;
+      case "Ready": color = Colors.teal; bg = Colors.teal.withValues(alpha: 0.15); break;
+      case "Rejected": color = Colors.red; bg = Colors.red.withValues(alpha: 0.15); break;
+      default: color = Colors.grey; bg = Colors.grey.withValues(alpha: 0.15);
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -520,9 +521,9 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
     } else if (currentStatus == "Ready") {
       return SizedBox(width: double.infinity, child: _btn("Mark as Picked Up", Colors.teal, () => setState(() => currentStatus = "Completed")));
     } else if (currentStatus == "Completed") {
-      return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), child: const Center(child: Text("Order Completed", style: TextStyle(fontFamily: 'Inter', color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16))));
+      return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)), child: const Center(child: Text("Order Completed", style: TextStyle(fontFamily: 'Inter', color: Colors.green, fontWeight: FontWeight.bold, fontSize: 16))));
     }
-    return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(16)), child: const Center(child: Text("Order Rejected", style: TextStyle(fontFamily: 'Inter', color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16))));
+    return Container(width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 16), decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)), child: const Center(child: Text("Order Rejected", style: TextStyle(fontFamily: 'Inter', color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 16))));
   }
 
   Widget _btn(String title, Color color, VoidCallback onTap) {
