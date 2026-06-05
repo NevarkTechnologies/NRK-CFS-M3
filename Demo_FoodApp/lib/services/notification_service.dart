@@ -10,7 +10,6 @@ import 'session.dart';
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await _initializeLocalNotifications();
   await _showNotification(message);
 }
@@ -89,7 +88,7 @@ class NotificationService {
 
     _messaging = FirebaseMessaging.instance;
 
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+    //await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     if (!kIsWeb) {
       await _initializeLocalNotifications();
     }

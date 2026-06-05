@@ -41,49 +41,48 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyCMhVaENi5uDnGazWyKn9BWHAddjMnfybI',
-    appId: '1:748968496912:web:51ec7ce5c92cfe6cff1f95',
-    messagingSenderId: '748968496912',
-    projectId: 'foodapp-777d6',
-    authDomain: 'foodapp-777d6.firebaseapp.com',
-    storageBucket: 'foodapp-777d6.firebasestorage.app',
+    apiKey: 'AIzaSyBcdjchjHz394BuDCgYTdPGTiFhctu5Cbk',
+    appId: '1:561027608241:web:2a72e25cd9c085a470fc90',
+    messagingSenderId: '561027608241',
+    projectId: 'nrk-cfs',
+    authDomain: 'nrk-cfs.firebaseapp.com',
+    storageBucket: 'nrk-cfs.firebasestorage.app',
+    measurementId: 'G-TDZ8G8QXKS',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDL4lFFJQYndF4VqvLBPNAJd2xFpKAQpOw',
-    appId: '1:748968496912:android:f23b4c2081220031ff1f95',
-    messagingSenderId: '748968496912',
-    projectId: 'foodapp-777d6',
-    storageBucket: 'foodapp-777d6.firebasestorage.app',
+    apiKey: 'AIzaSyBLz1paNFUV35aqD4XbNjf6VmyGKsnN5Hs',
+    appId: '1:561027608241:android:38e49cd43adc4e0370fc90',
+    messagingSenderId: '561027608241',
+    projectId: 'nrk-cfs',
+    storageBucket: 'nrk-cfs.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBrhywYHpeJR5bQXJb2R8zSlRh5aiL_YqE',
-    appId: '1:748968496912:ios:37fb769d83b16dd2ff1f95',
-    messagingSenderId: '748968496912',
-    projectId: 'foodapp-777d6',
-    storageBucket: 'foodapp-777d6.firebasestorage.app',
-    iosClientId: '748968496912-ppncp5r26c10rkvourcn3aoct06db52n.apps.googleusercontent.com',
+    apiKey: 'AIzaSyAAEpQeg_A3SXX12GzaiI_5fDRhbYV_HS0',
+    appId: '1:561027608241:ios:137fb5e298c25c7870fc90',
+    messagingSenderId: '561027608241',
+    projectId: 'nrk-cfs',
+    storageBucket: 'nrk-cfs.firebasestorage.app',
+    iosClientId: '561027608241-fif5b97k0et50ip6glakair16sdefvks.apps.googleusercontent.com',
     iosBundleId: 'com.example.foodApp',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyBrhywYHpeJR5bQXJb2R8zSlRh5aiL_YqE',
-    appId: '1:748968496912:ios:37fb769d83b16dd2ff1f95',
-    messagingSenderId: '748968496912',
-    projectId: 'foodapp-777d6',
-    storageBucket: 'foodapp-777d6.firebasestorage.app',
-    iosClientId: '748968496912-ppncp5r26c10rkvourcn3aoct06db52n.apps.googleusercontent.com',
+    apiKey: 'AIzaSyAAEpQeg_A3SXX12GzaiI_5fDRhbYV_HS0',
+    appId: '1:561027608241:ios:137fb5e298c25c7870fc90',
+    messagingSenderId: '561027608241',
+    projectId: 'nrk-cfs',
+    storageBucket: 'nrk-cfs.firebasestorage.app',
+    iosClientId: '561027608241-fif5b97k0et50ip6glakair16sdefvks.apps.googleusercontent.com',
     iosBundleId: 'com.example.foodApp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyCMhVaENi5uDnGazWyKn9BWHAddjMnfybI',
-    appId: '1:748968496912:web:8438152b7035b1c5ff1f95',
-    messagingSenderId: '748968496912',
-    projectId: 'foodapp-777d6',
-    authDomain: 'foodapp-777d6.firebaseapp.com',
-    storageBucket: 'foodapp-777d6.firebasestorage.app',
+    apiKey: 'AIzaSyBcdjchjHz394BuDCgYTdPGTiFhctu5Cbk',
+    appId: '1:561027608241:web:e40ca13f0f5552c470fc90',
+    messagingSenderId: '561027608241',
+    projectId: 'nrk-cfs',
+    authDomain: 'nrk-cfs.firebaseapp.com',
+    storageBucket: 'nrk-cfs.firebasestorage.app',
+    measurementId: 'G-90CVZ9JZ05',
   );
-
 }

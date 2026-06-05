@@ -7,6 +7,8 @@ const Cafe = require('./models/cafe');
 const MenuItem = require('./models/menuitems');
 const Order = require('./models/order');
 const User = require('./models/user');
+const Notification = require('./models/notification');
+
 
 const app = express();
 const allowedStatuses = ['Pending', 'Preparing', 'Ready', 'Completed', 'Rejected'];
@@ -99,13 +101,30 @@ async function createOrder(req, res) {
   res.status(201).json(order);
 }
 
+function getMongoOptions() {
+  const uri = process.env.MONGO_URI;
+  const dbName = process.env.MONGO_DB_NAME || (() => {
+    const uriNoQuery = uri.split('?')[0];
+    const lastSegment = uriNoQuery.substring(uriNoQuery.lastIndexOf('/') + 1);
+    return lastSegment && !lastSegment.includes('@') ? lastSegment : undefined;
+  })();
+
+  if (!dbName) {
+    throw new Error('MONGO_DB_NAME is missing and MONGO_URI does not include a database name');
+  }
+
+  return { dbName };
+}
+
 async function connectDatabase() {
   if (!process.env.MONGO_URI) {
     throw new Error('MONGO_URI is missing. Add it to Backend/.env');
   }
 
+  const options = getMongoOptions();
+
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    await mongoose.connect(process.env.MONGO_URI, options);
     console.log('MongoDB connected');
   } catch (err) {
     console.error('MongoDB connection failed:', err.message);
@@ -114,7 +133,7 @@ async function connectDatabase() {
     if (process.env.MONGO_URI.includes('+srv')) {
       const fallback = process.env.MONGO_URI_FALLBACK || 'mongodb://127.0.0.1:27017/nevark';
       console.log(`Attempting fallback MongoDB URI: ${fallback}`);
-      await mongoose.connect(fallback);
+      await mongoose.connect(fallback, { dbName: 'nevark' });
       console.log('MongoDB connected (fallback)');
       return;
     }

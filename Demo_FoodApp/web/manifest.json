@@ -1,6 +1,6 @@
 {
-    "name": "food_app",
-    "short_name": "food_app",
+    "name": "Nevark_Foods",
+    "short_name": "Nevark_Foods",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

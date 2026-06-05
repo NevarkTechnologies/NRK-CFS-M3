@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:ui' as ui;
 
 import 'vendor/vendor_home_page.dart';
@@ -26,9 +27,22 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => isSigningIn = true);
 
     try {
-      // 1. Sign in with Google using Firebase Auth Web Popup
-      GoogleAuthProvider googleProvider = GoogleAuthProvider();
-      final UserCredential userCredential = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+      // 1. Sign in with Google using google_sign_in package (works on mobile and web)
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        setState(() => isSigningIn = false);
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
       final User? firebaseUser = userCredential.user;
 
       if (firebaseUser == null || firebaseUser.email == null) {

@@ -23,11 +23,7 @@ class _SplashPageState extends State<SplashPage> {
 
     bool isLoggedIn = false;
 
-    if (isLoggedIn) {
       Navigator.pushReplacementNamed(context, '/login');
-    } else {
-      Navigator.pushReplacementNamed(context, '/login');
-    }
   }
 
   @override

@@ -1,5 +1,5 @@
-name: food_app
-description: A new Flutter project.
+name: Nevark_Foods
+description: Nevark Foods is a food ordering app that connects students with local canteens. It offers a wide variety of cuisines, easy ordering, and reliable service.
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -22,10 +22,10 @@ dependencies:
   firebase_core: ^3.1.1
   firebase_auth: ^5.1.1
   cloud_firestore: ^5.0.1
-  # Removed google_sign_in since you are using Firebase Auth now
+  google_sign_in: ^6.2.0
   url_launcher: ^6.3.0
   firebase_messaging: ^15.1.0
-  flutter_local_notifications: ^14.0.0
+  flutter_local_notifications: ^19.4.0
   csv: ^8.0.0
   file_picker: ^11.0.2
   path_provider: ^2.1.2
