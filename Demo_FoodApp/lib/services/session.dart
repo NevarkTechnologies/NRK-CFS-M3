@@ -1,31 +1,38 @@
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+
 class AppSession {
   static Map<String, dynamic>? currentUser;
+  static const String _userKey = 'app_user_session';
 
   static bool get isLoggedIn => currentUser != null;
   static bool get isVendor => currentUser?["role"] == "vendor";
 
   static String get userId => currentUser?["_id"]?.toString() ?? "";
-  static String get name => currentUser?["name"]?.toString() ?? "John Doe";
-  static String get email => currentUser?["email"]?.toString() ?? "user@gmail.com";
+  static String get name => currentUser?["name"]?.toString() ?? "";
+  static String get email => currentUser?["email"]?.toString() ?? "";
   static String get vendorId {
     final id = currentUser?['_id']?.toString();
     if (id != null && id.isNotEmpty) return id;
     return currentUser?["vendorId"]?.toString() ?? "";
   }
+
   static String get cafeId {
-  final cafeData = currentUser?["cafeId"];
+    final cafeData = currentUser?["cafeId"];
 
-  if (cafeData is Map<String, dynamic>) {
-    return cafeData["_id"]?.toString() ?? "";
+    if (cafeData is Map<String, dynamic>) {
+      return cafeData["_id"]?.toString() ?? "";
+    }
+
+    if (cafeData is Map) {
+      return cafeData["_id"]?.toString() ?? "";
+    }
+
+    return cafeData?.toString() ?? "";
   }
 
-  if (cafeData is Map) {
-    return cafeData["_id"]?.toString() ?? "";
-  }
-
-  return cafeData?.toString() ?? "";
-}
-  static String get paymentLabel => currentUser?["paymentLabel"]?.toString() ?? "UPI";
+  static String get paymentLabel =>
+      currentUser?["paymentLabel"]?.toString() ?? "UPI";
 
   static Map<String, dynamic> get address {
     final value = currentUser?["address"];
@@ -41,11 +48,38 @@ class AppSession {
     return null;
   }
 
-  static void setUser(Map<String, dynamic> user) {
-    currentUser = user;
+  /// Initialize session from persistent storage
+  static Future<void> init() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final userJson = prefs.getString(_userKey);
+      if (userJson != null) {
+        currentUser = jsonDecode(userJson) as Map<String, dynamic>;
+      }
+    } catch (e) {
+      print('Error initializing session: $e');
+    }
   }
 
-  static void clear() {
+  /// Save user to session and persist to storage
+  static Future<void> setUser(Map<String, dynamic> user) async {
+    currentUser = user;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userKey, jsonEncode(user));
+    } catch (e) {
+      print('Error saving user session: $e');
+    }
+  }
+
+  /// Clear session and persistent storage
+  static Future<void> clear() async {
     currentUser = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_userKey);
+    } catch (e) {
+      print('Error clearing session: $e');
+    }
   }
 }

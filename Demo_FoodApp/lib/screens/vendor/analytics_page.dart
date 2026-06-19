@@ -6,7 +6,9 @@ import 'vendor_data.dart';
 import 'vendor_page_wrapper.dart';
 
 class AnalyticsPage extends StatefulWidget {
-  const AnalyticsPage({super.key});
+  final VoidCallback toggleTheme;
+
+  const AnalyticsPage({super.key, required this.toggleTheme});
 
   @override
   State<AnalyticsPage> createState() => _AnalyticsPageState();
@@ -112,7 +114,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return VendorPageWrapper(
       pageTitle: 'Analytics',
       selectedMenuIndex: 2,
-      toggleTheme: () {},
+      toggleTheme: widget.toggleTheme,
       child: Scaffold(
         backgroundColor: bgColor,
         body: Padding(
@@ -131,6 +133,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     Text(
                       "Track ${VendorData.displayName}'s performance",
                       style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 14),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ).animate().fade(duration: 300.ms),
                     const SizedBox(height: 20),
                     if (isLoading)

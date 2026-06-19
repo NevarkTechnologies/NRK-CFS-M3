@@ -23,61 +23,6 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
   late List<Map<String, dynamic>> filteredCafes;
   bool isLoadingCafes = true;
 
-  final List<Map<String, dynamic>> _fallbackCafes = [
-    {
-      'name': 'Madno - House of Sundaes and Waffles',
-      'rating': 4.4,
-      'reviews': 413,
-      'time': '45-50 mins',
-      'image': 'assets/cafes/cafe3.jpg',
-      'category': 'Desserts',
-      'cuisine': 'Ice Cream, Desserts',
-      'price': '₹500 for two',
-      'tag': 'Pure Veg',
-      'offer': 'Buy 1 get 1',
-      'location': 'Madno, 3.9 km',
-    },
-    {
-      'name': 'Dindigul Thalappakatti',
-      'rating': 4.3,
-      'reviews': 520,
-      'time': '45-55 mins',
-      'image': 'assets/cafes/cafe1.jpg',
-      'category': 'South Indian',
-      'cuisine': 'Biryani, South Indian',
-      'price': '₹400 for two',
-      'tag': 'Hyderabadi',
-      'offer': '20% off',
-      'location': 'Thalappakatti, 2.7 km',
-    },
-    {
-      'name': 'Baskin Robbins - Ice Cream Delight',
-      'rating': 4.5,
-      'reviews': 784,
-      'time': '25-30 mins',
-      'image': 'assets/cafes/cafe2.jpg',
-      'category': 'Desserts',
-      'cuisine': 'Ice Cream, Desserts',
-      'price': '₹350 for two',
-      'tag': 'Premium',
-      'offer': 'Buy 1 get 1',
-      'location': 'Baskin, 1.2 km',
-    },
-    {
-      'name': 'Cafe Lounge Express',
-      'rating': 4.2,
-      'reviews': 298,
-      'time': '30-40 mins',
-      'image': 'assets/cafes/cafe1.jpg',
-      'category': 'Cafe',
-      'cuisine': 'Coffee, Snacks',
-      'price': '₹320 for two',
-      'tag': 'Quick Bite',
-      'offer': '10% off',
-      'location': 'Central, 1.8 km',
-    },
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -96,11 +41,8 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
 
     try {
       cafes = await ApiService.getCafes();
-      if (cafes.isEmpty) {
-        cafes = List<Map<String, dynamic>>.from(_fallbackCafes);
-      }
     } catch (_) {
-      cafes = List<Map<String, dynamic>>.from(_fallbackCafes);
+      cafes = [];
     } finally {
       if (mounted) {
         setState(() {
@@ -192,7 +134,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE8F0FF),
             image: DecorationImage(
-              image: const AssetImage('bg.jpg'), 
+              image: const AssetImage('assets/bg.jpg'), 
               fit: BoxFit.cover,
               colorFilter: ColorFilter.mode(
                 isDark ? const Color(0xFF0F172A).withValues(alpha: 0.9) : const Color(0xFFF0F6FF).withValues(alpha: 0.85), 
@@ -501,7 +443,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                       );
                     }
                     return Image.network(
-                      imagePath.isNotEmpty ? imagePath : 'https://via.placeholder.com/400x300',
+                      imagePath.isNotEmpty ? imagePath : '',
                       height: 190,
                       width: double.infinity,
                       fit: BoxFit.cover,

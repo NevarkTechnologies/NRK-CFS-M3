@@ -35,39 +35,10 @@ class _HomePageState extends State<HomePage> {
   late List<Map<String, dynamic>> filteredFoods;
   bool isLoadingMenu = true;
 
+  // Removed demo/mock menu items. When a real menu cannot be fetched,
+  // return an empty list so the UI shows no items instead of demo data.
   List<Map<String, dynamic>> _getMenuForCafe(String cafeName, String image) {
-    String nameLower = cafeName.toLowerCase();
-
-    if (nameLower.contains('baskin') || nameLower.contains('ice cream') || nameLower.contains('dessert')) {
-      return [
-        {"id": "d1", "name": "Chocolate Fudge Sundae", "price": 220, "image": image, "desc": "Rich chocolate ice cream with hot fudge, nuts, & cherry.", "category": "Sundaes", "rating": 4.8, "reviews": 128, "isVeg": true},
-        {"id": "d2", "name": "Mint Choc Chip Scoop", "price": 120, "image": image, "desc": "Refreshing mint ice cream with chocolate chips.", "category": "Scoops", "rating": 4.5, "reviews": 85, "isVeg": true},
-        {"id": "d3", "name": "Strawberry Milkshake", "price": 160, "image": image, "desc": "Thick and creamy strawberry shake.", "category": "Shakes", "rating": 4.6, "reviews": 112, "isVeg": true},
-        {"id": "d4", "name": "Belgian Waffle", "price": 190, "image": image, "desc": "Warm waffle topped with vanilla ice cream and syrup.", "category": "Waffles", "rating": 4.9, "reviews": 230, "isVeg": true},
-      ];
-    } else if (nameLower.contains('pizza') || nameLower.contains('domino')) {
-      return [
-        {"id": "p1", "name": "Margherita Pizza", "price": 250, "image": image, "desc": "Classic cheese and tomato wood-fired pizza.", "category": "Pizzas", "rating": 4.7, "reviews": 320, "isVeg": true},
-        {"id": "p2", "name": "Pepperoni Pizza", "price": 300, "image": image, "desc": "Spicy pepperoni slices with mozzarella.", "category": "Pizzas", "rating": 4.9, "reviews": 410, "isVeg": false},
-        {"id": "p3", "name": "Garlic Breadsticks", "price": 120, "image": image, "desc": "Freshly baked garlic bread with cheese dip.", "category": "Sides", "rating": 4.5, "reviews": 150, "isVeg": true},
-        {"id": "p4", "name": "Coke Zero", "price": 60, "image": image, "desc": "Chilled aerated beverage.", "category": "Beverages", "rating": 4.3, "reviews": 90, "isVeg": true},
-      ];
-    } else if (nameLower.contains('starbucks') || nameLower.contains('coffee') || nameLower.contains('cafe')) {
-      return [
-        {"id": "c1", "name": "Caramel Macchiato", "price": 220, "image": image, "desc": "Freshly steamed milk with vanilla-flavored syrup.", "category": "Hot Coffees", "rating": 4.8, "reviews": 215, "isVeg": true},
-        {"id": "c2", "name": "Iced Vanilla Latte", "price": 240, "image": image, "desc": "Espresso poured over ice and milk.", "category": "Cold Coffees", "rating": 4.7, "reviews": 180, "isVeg": true},
-        {"id": "c3", "name": "Blueberry Muffin", "price": 150, "image": image, "desc": "Soft muffin baked with fresh blueberries.", "category": "Bakery", "rating": 4.5, "reviews": 95, "isVeg": true},
-        {"id": "c4", "name": "Butter Croissant", "price": 130, "image": image, "desc": "Flaky, buttery, authentic French croissant.", "category": "Bakery", "rating": 4.6, "reviews": 120, "isVeg": true},
-      ];
-    } else {
-      return [
-        {"id": "m1", "name": "Chicken Biryani", "price": 220, "image": image, "desc": "Spicy traditional biryani with tender chicken pieces.", "category": "Mains", "rating": 4.3, "reviews": 150, "isVeg": false},
-        {"id": "m2", "name": "Paneer Butter Masala", "price": 190, "image": image, "desc": "Cottage cheese cubes in a rich tomato gravy.", "category": "Mains", "rating": 4.6, "reviews": 180, "isVeg": true},
-        {"id": "s1", "name": "Paneer Tikka", "price": 180, "image": image, "desc": "Grilled paneer cubes marinated in spices.", "category": "Starters", "rating": 4.8, "reviews": 210, "isVeg": true},
-        {"id": "snk1", "name": "Masala French Fries", "price": 110, "image": image, "desc": "Crispy fries with Indian spices.", "category": "Snacks", "rating": 4.5, "reviews": 140, "isVeg": true},
-        {"id": "bev1", "name": "Fresh Lime Soda", "price": 70, "image": image, "desc": "Refreshing sweet and salt lime soda.", "category": "Beverages", "rating": 4.2, "reviews": 85, "isVeg": true},
-      ];
-    }
+    return [];
   }
 
   @override
@@ -109,11 +80,11 @@ class _HomePageState extends State<HomePage> {
         }).toList();
       } else {
         String cafeName = widget.cafe['name'] ?? 'Main Canteen';
-        String cafeImage = widget.cafe['image'] ?? 'https://via.placeholder.com/150';
+        String cafeImage = widget.cafe['image'] ?? '';
         allFoods = _getMenuForCafe(cafeName, cafeImage);
       }
     } catch (error) {
-      allFoods = _getMenuForCafe(widget.cafe['name'] ?? 'Main Canteen', widget.cafe['image'] ?? 'https://via.placeholder.com/150');
+      allFoods = _getMenuForCafe(widget.cafe['name'] ?? 'Main Canteen', widget.cafe['image'] ?? '');
     } finally {
       if (mounted) {
         setState(() {

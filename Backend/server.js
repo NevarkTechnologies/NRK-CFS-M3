@@ -150,7 +150,7 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/auth/google', asyncHandler(async (req, res) => {
-  const { googleId, name, email, avatar } = req.body;
+  const { googleId, name, email, avatar, role } = req.body;
   if (!name || !email) {
     return res.status(400).json({ message: 'name and email are required' });
   }
@@ -158,18 +158,47 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   let user = await User.findOneAndUpdate(
     { email: email.toLowerCase() },
     {
-      $set: { googleId, name, avatar },
-      $setOnInsert: { role: 'customer' },
+      $set: { googleId, name, avatar, role },
     },
-    { new: true, upsert: true, runValidators: true }
+    { returnDocument: 'after', upsert: true, runValidators: true }
   ).populate('cafeId');
 
-  if (user.role === 'vendor' && user.vendorId && !user.cafeId) {
-    const cafe = await Cafe.findOne({ vendorId: user.vendorId });
-    if (cafe) {
+  if (user.role === 'vendor') {
+    const vendorId = user.vendorId?.trim() || googleId || user._id.toString();
+    if (!user.vendorId || user.vendorId !== vendorId) {
       user = await User.findByIdAndUpdate(
         user._id,
-        { cafeId: cafe._id },
+        { vendorId },
+        { new: true, runValidators: true }
+      ).populate('cafeId');
+    }
+
+    if (!user.cafeId) {
+      let cafe = await Cafe.findOne({ vendorId });
+      if (!cafe) {
+        const baseSlug = name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '')
+            .slice(0, 40) || `vendor-${Date.now()}`;
+        const slug = `${baseSlug}-${Date.now().toString().slice(-4)}`;
+
+        cafe = await Cafe.create({
+          name: `${name}'s Cafe`,
+          slug,
+          cuisine: 'General',
+          description: '',
+          location: '',
+          city: '',
+          pin: '',
+          vendorId,
+          active: true,
+        });
+      }
+
+      user = await User.findByIdAndUpdate(
+        user._id,
+        { cafeId: cafe._id, vendorId },
         { new: true, runValidators: true }
       ).populate('cafeId');
     }
@@ -180,7 +209,7 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
 
 app.patch('/api/users/:id', asyncHandler(async (req, res) => {
   const allowed = {};
-  for (const key of ['name', 'email', 'avatar', 'address', 'paymentLabel']) {
+  for (const key of ['name', 'email', 'avatar', 'phone', 'paymentLabel']) {
     if (req.body[key] !== undefined) allowed[key] = req.body[key];
   }
 
@@ -287,7 +316,7 @@ app.patch('/api/orders/:orderId/status', asyncHandler(async (req, res) => {
   const order = await Order.findOneAndUpdate(
     { orderId: req.params.orderId },
     { status },
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   );
 
   if (!order) return res.status(404).json({ message: 'Order not found' });

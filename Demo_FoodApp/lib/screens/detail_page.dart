@@ -142,7 +142,7 @@ class _DetailPageState extends State<DetailPage> {
         },
         "paymentLabel": card.text.trim(),
       });
-      AppSession.setUser(updated);
+      await AppSession.setUser(updated);
       if (!mounted) return;
       setState(() => isEdit = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -565,7 +565,7 @@ class _DetailPageState extends State<DetailPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return TextField(
       controller: controller,
-      enabled: isEdit,
+      enabled: (label == "Email") ? false : isEdit,
       style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,

@@ -64,7 +64,7 @@ class DefaultFirebaseOptions {
     projectId: 'nrk-cfs',
     storageBucket: 'nrk-cfs.firebasestorage.app',
     iosClientId: '561027608241-fif5b97k0et50ip6glakair16sdefvks.apps.googleusercontent.com',
-    iosBundleId: 'com.example.foodApp',
+    iosBundleId: 'com.nevark.foodApp',
   );
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyAAEpQeg_A3SXX12GzaiI_5fDRhbYV_HS0',
@@ -73,7 +73,7 @@ class DefaultFirebaseOptions {
     projectId: 'nrk-cfs',
     storageBucket: 'nrk-cfs.firebasestorage.app',
     iosClientId: '561027608241-fif5b97k0et50ip6glakair16sdefvks.apps.googleusercontent.com',
-    iosBundleId: 'com.example.foodApp',
+    iosBundleId: 'com.nevark.foodApp',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(

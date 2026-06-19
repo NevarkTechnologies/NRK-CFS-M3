@@ -11,40 +11,8 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
   String selectedFilter = "All";
   int navIndex = 1; // 👈 Orders selected by default
 
-  List<Map<String, dynamic>> orders = [
-    {
-      "id": "ORD123456",
-      "customer": "Student #12345",
-      "items": ["Pizza", "Burger"],
-      "total": 271,
-      "status": "Pending",
-      "time": "5 min ago"
-    },
-    {
-      "id": "ORD123457",
-      "customer": "Student #12346",
-      "items": ["Pepperoni Pizza"],
-      "total": 189,
-      "status": "Preparing",
-      "time": "12 min ago"
-    },
-    {
-      "id": "ORD123458",
-      "customer": "Student #12347",
-      "items": ["Salad", "Smoothie"],
-      "total": 159,
-      "status": "Ready",
-      "time": "15 min ago"
-    },
-    {
-      "id": "ORD123459",
-      "customer": "Student #12348",
-      "items": ["Cake"],
-      "total": 69,
-      "status": "Completed",
-      "time": "1 hour ago"
-    },
-  ];
+  // Orders will be loaded from the backend. Removed hardcoded demo orders.
+  List<Map<String, dynamic>> orders = [];
 
   List<String> filters = ["All", "Pending", "Preparing", "Ready", "Completed"];
 

@@ -15,7 +15,9 @@ import 'vendor_page_wrapper.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 class SalesReportPage extends StatefulWidget {
-  const SalesReportPage({super.key});
+  final VoidCallback toggleTheme;
+
+  const SalesReportPage({super.key, required this.toggleTheme});
 
   @override
   State<SalesReportPage> createState() => _SalesReportPageState();
@@ -306,7 +308,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
     return VendorPageWrapper(
       pageTitle: 'Sales Reports',
       selectedMenuIndex: 4,
-      toggleTheme: () {},
+      toggleTheme: widget.toggleTheme,
       child: Scaffold(
         backgroundColor: bgColor,
         body: Padding(

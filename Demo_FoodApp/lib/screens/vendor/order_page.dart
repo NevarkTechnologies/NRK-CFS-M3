@@ -5,7 +5,9 @@ import '../../services/session.dart';
 import 'vendor_page_wrapper.dart';
 
 class OrdersPage extends StatefulWidget {
-  const OrdersPage({super.key});
+  final VoidCallback toggleTheme;
+
+  const OrdersPage({super.key, required this.toggleTheme});
 
   @override
   State<OrdersPage> createState() => _OrdersPageState();
@@ -78,7 +80,7 @@ class _OrdersPageState extends State<OrdersPage> {
     return VendorPageWrapper(
       pageTitle: "Order Management",
       selectedMenuIndex: 1,
-      toggleTheme: () {},
+      toggleTheme: widget.toggleTheme,
       child: Scaffold(
         backgroundColor: bgColor,
         body: RefreshIndicator(

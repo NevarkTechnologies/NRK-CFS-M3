@@ -1,12 +1,16 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'analytics_page.dart';
+import '../login_page.dart';
 import 'menu_page.dart';
 import 'settings_page.dart';
 import 'sales_report.dart';
 import 'order_page.dart';
 import 'vendor_home_page.dart';
 import 'vendor_data.dart';
+import '../../services/session.dart';
+
 class VendorPageWrapper extends StatefulWidget {
   final Widget child;
   final String pageTitle;
@@ -29,10 +33,87 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
   late int selectedIndex;
 
+  bool get _requiresBusinessDetails => !VendorData.isBusinessDetailsComplete;
+
   @override
   void initState() {
     super.initState();
     selectedIndex = widget.selectedMenuIndex;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_requiresBusinessDetails && selectedIndex != 5) {
+        _promptCompleteBusinessDetails();
+      }
+    });
+  }
+
+  void _promptCompleteBusinessDetails() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return PopScope(
+          canPop: false,
+          child: AlertDialog(
+            title: const Text('Complete Business Details'),
+            content: const Text(
+              'Please complete your restaurant profile in Settings before using other vendor pages.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => SettingsPage(toggleTheme: widget.toggleTheme),
+                    ),
+                  );
+                },
+                child: const Text('Go to Settings'),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<bool?> _confirmLogout() {
+    return showDialog<bool>(
+      context: context,
+      builder: (_) {
+        return AlertDialog(
+          title: const Text('Confirm Logout'),
+          content: const Text('Do you want to logout?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Logout'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _logout() async {
+    try {
+      await AppSession.clear();
+      await FirebaseAuth.instance.signOut();
+    } catch (_) {}
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LoginPage(toggleTheme: widget.toggleTheme),
+      ),
+      (route) => false,
+    );
   }
 
   @override
@@ -61,6 +142,16 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                   color: textColor,
                 ),
               ),
+              actions: [
+                IconButton(
+                  icon: Icon(
+                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: primaryBlue,
+                  ),
+                  onPressed: widget.toggleTheme,
+                  tooltip: 'Toggle dark mode',
+                ),
+              ],
             )
           : null,
       body: SafeArea(
@@ -68,7 +159,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isMobile) buildSidebar(textColor, cardColor, isDark),
-            Expanded(child: widget.child)
+            Expanded(child: widget.child),
           ],
         ),
       ),
@@ -86,7 +177,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
             blurRadius: 20,
             offset: const Offset(4, 0),
-          )
+          ),
         ],
       ),
       child: Column(
@@ -97,29 +188,29 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             child: Row(
               children: [
                 Container(
-  width: 56,
-  height: 56,
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(16),
-    color: primaryBlue.withValues(alpha: 0.1),
-  ),
-  clipBehavior: Clip.antiAlias,
-  child: VendorData.displayImage.isNotEmpty
-      ? Image.network(
-          VendorData.displayImage,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Icon(
-            Icons.storefront_rounded,
-            color: primaryBlue,
-            size: 28,
-          ),
-        )
-      : Icon(
-          Icons.storefront_rounded,
-          color: primaryBlue,
-          size: 28,
-        ),
-),
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: primaryBlue.withValues(alpha: 0.1),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: VendorData.displayImage.isNotEmpty
+                      ? Image.network(
+                          VendorData.displayImage,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.storefront_rounded,
+                            color: primaryBlue,
+                            size: 28,
+                          ),
+                        )
+                      : Icon(
+                          Icons.storefront_rounded,
+                          color: primaryBlue,
+                          size: 28,
+                        ),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -144,6 +235,8 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                           fontWeight: FontWeight.w500,
                           color: textColor.withValues(alpha: 0.6),
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -164,45 +257,54 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               children: [
-                buildMenu(Icons.dashboard_rounded, "Dashboard", 0, textColor, isDark),
-                buildMenu(Icons.shopping_bag_rounded, "Orders", 1, textColor, isDark),
-                buildMenu(Icons.insights_rounded, "Analytics", 2, textColor, isDark),
-                buildMenu(Icons.restaurant_menu_rounded, "Menu", 3, textColor, isDark),
-                buildMenu(Icons.bar_chart_rounded, "Reports", 4, textColor, isDark),
-                buildMenu(Icons.settings_rounded, "Settings", 5, textColor, isDark),
+                buildMenu(
+                  Icons.dashboard_rounded,
+                  "Dashboard",
+                  0,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(
+                  Icons.shopping_bag_rounded,
+                  "Orders",
+                  1,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(
+                  Icons.insights_rounded,
+                  "Analytics",
+                  2,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(
+                  Icons.restaurant_menu_rounded,
+                  "Menu",
+                  3,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(
+                  Icons.bar_chart_rounded,
+                  "Reports",
+                  4,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(
+                  Icons.settings_rounded,
+                  "Settings",
+                  5,
+                  textColor,
+                  isDark,
+                ),
+                buildMenu(Icons.logout_rounded, "Logout", 6, textColor, isDark),
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: InteractiveScale(
-              onTap: () {
-                if (MediaQuery.of(context).size.width < 850) Navigator.pop(context);
-                Navigator.pushNamed(context, '/login');
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 22),
-                    const SizedBox(width: 12),
-                    const Text(
-                      "Logout",
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.bold,
-                        color: Colors.redAccent,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          // Toggle Theme button removed from sidebar per request.
+          const SizedBox(height: 16),
         ],
       ),
     );
@@ -215,23 +317,62 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
     );
   }
 
-  Widget buildMenu(IconData icon, String title, int index, Color textColor, bool isDark) {
+  Widget buildMenu(
+    IconData icon,
+    String title,
+    int index,
+    Color textColor,
+    bool isDark,
+  ) {
     bool isSelected = selectedIndex == index;
+    final isLogout = title == "Logout";
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InteractiveScale(
         onTap: () {
-          setState(() => selectedIndex = index);
           if (MediaQuery.of(context).size.width < 850) Navigator.pop(context);
+          if (isLogout) {
+            _confirmLogout().then((yes) {
+              if (yes == true) _logout();
+            });
+            return;
+          }
+          if (_requiresBusinessDetails && title != "Settings") {
+            showDialog<void>(
+              context: context,
+              builder: (_) {
+                return AlertDialog(
+                  title: const Text('Complete Business Details'),
+                  content: const Text(
+                    'Please update your restaurant profile in Settings before using other vendor pages.',
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'),
+                    ),
+                  ],
+                );
+              },
+            );
+            return;
+          }
+          setState(() => selectedIndex = index);
           Future.delayed(const Duration(milliseconds: 150), () {
             Widget page;
             if (title == "Orders") {
-              page = const OrdersPage();
-            } else if (title == "Analytics") page = const AnalyticsPage();
-            else if (title == "Menu") page = MenuPage(toggleTheme: widget.toggleTheme);
-            else if (title == "Reports") page = const SalesReportPage();
-            else if (title == "Settings") page = const SettingsPage();
-            else page = VendorHomePage(toggleTheme: widget.toggleTheme);
+              page = OrdersPage(toggleTheme: widget.toggleTheme);
+            } else if (title == "Analytics") {
+              page = AnalyticsPage(toggleTheme: widget.toggleTheme);
+            } else if (title == "Menu") {
+              page = MenuPage(toggleTheme: widget.toggleTheme);
+            } else if (title == "Reports") {
+              page = SalesReportPage(toggleTheme: widget.toggleTheme);
+            } else if (title == "Settings") {
+              page = SettingsPage(toggleTheme: widget.toggleTheme);
+            } else {
+              page = VendorHomePage(toggleTheme: widget.toggleTheme);
+            }
 
             Navigator.pushReplacement(
               context,
@@ -244,7 +385,9 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
           curve: Curves.easeInOut,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
           decoration: BoxDecoration(
-            color: isSelected ? primaryBlue : Colors.transparent,
+            color: isSelected
+                ? (isLogout ? Colors.redAccent : primaryBlue)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
@@ -253,6 +396,8 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                 icon,
                 color: isSelected
                     ? Colors.white
+                    : isLogout
+                    ? Colors.redAccent
                     : (isDark ? Colors.white54 : Colors.grey.shade600),
                 size: 22,
               ),
@@ -265,6 +410,8 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
                   color: isSelected
                       ? Colors.white
+                      : isLogout
+                      ? Colors.redAccent
                       : (isDark ? Colors.white70 : Colors.black87),
                 ),
               ),

@@ -5,13 +5,14 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:5000/api',
+    defaultValue: 'http://10.0.2.2:5000/api', //'http://localhost:5000/api',
   );
 
   static Future<Map<String, dynamic>> googleSignIn({
     required String googleId,
     required String name,
     required String email,
+    required String role,
     String avatar = '',
     String? fcmToken,
   }) async {
@@ -19,8 +20,9 @@ class ApiService {
       'googleId': googleId,
       'name': name,
       'email': email,
+      'role': role,
       'avatar': avatar,
-      'fcmToken': ?fcmToken,
+      'fcmToken': fcmToken,
     };
 
     final response = await http.post(
@@ -83,28 +85,35 @@ class ApiService {
     String? status,
     String? customerEmail,
   }) async {
-    final uri = Uri.parse('$baseUrl/orders').replace(queryParameters: {
-      if (cafeId != null && cafeId.isNotEmpty) 'cafeId': cafeId,
-      if (status != null && status.isNotEmpty) 'status': status,
-      if (customerEmail != null && customerEmail.isNotEmpty) 'customerEmail': customerEmail,
-    });
+    final uri = Uri.parse('$baseUrl/orders').replace(
+      queryParameters: {
+        if (cafeId != null && cafeId.isNotEmpty) 'cafeId': cafeId,
+        if (status != null && status.isNotEmpty) 'status': status,
+        if (customerEmail != null && customerEmail.isNotEmpty)
+          'customerEmail': customerEmail,
+      },
+    );
 
     final response = await http.get(uri);
     return _decodeList(response);
   }
 
   static Future<List<Map<String, dynamic>>> getCafes({String? search}) async {
-    final uri = Uri.parse('$baseUrl/cafes').replace(queryParameters: {
-      if (search != null && search.isNotEmpty) 'search': search,
-    });
+    final uri = Uri.parse('$baseUrl/cafes').replace(
+      queryParameters: {
+        if (search != null && search.isNotEmpty) 'search': search,
+      },
+    );
     final response = await http.get(uri);
     return _decodeList(response);
   }
 
   static Future<List<Map<String, dynamic>>> getMenu({String? cafeId}) async {
-    final uri = Uri.parse('$baseUrl/menu').replace(queryParameters: {
-      if (cafeId != null && cafeId.isNotEmpty) 'cafeId': cafeId,
-    });
+    final uri = Uri.parse('$baseUrl/menu').replace(
+      queryParameters: {
+        if (cafeId != null && cafeId.isNotEmpty) 'cafeId': cafeId,
+      },
+    );
     final response = await http.get(uri);
     return _decodeList(response);
   }
@@ -139,7 +148,10 @@ class ApiService {
     return _decodeObject(response);
   }
 
-  static Future<Map<String, dynamic>> updateMenuItem(String itemId, Map<String, dynamic> data) async {
+  static Future<Map<String, dynamic>> updateMenuItem(
+    String itemId,
+    Map<String, dynamic> data,
+  ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/menu/$itemId'),
       headers: {'Content-Type': 'application/json'},
@@ -162,7 +174,10 @@ class ApiService {
     }
   }
 
-  static Future<Map<String, dynamic>> updateOrderStatus(String orderId, String status) async {
+  static Future<Map<String, dynamic>> updateOrderStatus(
+    String orderId,
+    String status,
+  ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/orders/$orderId/status'),
       headers: {'Content-Type': 'application/json'},
@@ -172,12 +187,21 @@ class ApiService {
     return _decodeObject(response);
   }
 
-  static Future<Map<String, dynamic>> getVendorDashboard(String vendorId) async {
-    final response = await http.get(Uri.parse('$baseUrl/vendor/$vendorId/dashboard'));
+  static Future<Map<String, dynamic>> getVendorDashboard(
+    String vendorId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/vendor/$vendorId/dashboard'),
+    );
     return _decodeObject(response);
   }
-  static Future<List<Map<String, dynamic>>> getNotifications(String userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/notifications/$userId'));
+
+  static Future<List<Map<String, dynamic>>> getNotifications(
+    String userId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/notifications/$userId'),
+    );
     return _decodeList(response);
   }
 
@@ -224,25 +248,27 @@ class ApiService {
       Uri.parse('$baseUrl/notifications/$notificationId/read'),
       headers: {'Content-Type': 'application/json'},
     );
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    final decoded = jsonDecode(response.body);
-    final message = decoded is Map && decoded['message'] != null
-        ? decoded['message'].toString()
-        : 'Request failed with status ${response.statusCode}';
-    throw Exception(message);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = jsonDecode(response.body);
+      final message = decoded is Map && decoded['message'] != null
+          ? decoded['message'].toString()
+          : 'Request failed with status ${response.statusCode}';
+      throw Exception(message);
+    }
   }
-}
 
-static Future<void> deleteNotification(String notificationId) async {
-  final response = await http.delete(Uri.parse('$baseUrl/notifications/$notificationId'));
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    final decoded = jsonDecode(response.body);
-    final message = decoded is Map && decoded['message'] != null
-        ? decoded['message'].toString()
-        : 'Request failed with status ${response.statusCode}';
-    throw Exception(message);
+  static Future<void> deleteNotification(String notificationId) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/notifications/$notificationId'),
+    );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final decoded = jsonDecode(response.body);
+      final message = decoded is Map && decoded['message'] != null
+          ? decoded['message'].toString()
+          : 'Request failed with status ${response.statusCode}';
+      throw Exception(message);
+    }
   }
-}
 
   static Map<String, dynamic> _decodeObject(http.Response response) {
     final decoded = jsonDecode(response.body);
@@ -263,7 +289,8 @@ static Future<void> deleteNotification(String notificationId) async {
           : 'Request failed with status ${response.statusCode}';
       throw Exception(message);
     }
-    return (decoded as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    return (decoded as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 }
-
