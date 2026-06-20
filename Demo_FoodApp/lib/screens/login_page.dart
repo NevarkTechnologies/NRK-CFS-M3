@@ -84,6 +84,7 @@ class _LoginPageState extends State<LoginPage> {
         email: firebaseUser.email!,
         role: role,
         avatar: firebaseUser.photoURL ?? '',
+        idToken: await firebaseUser.getIdToken(),
       );
 
       await AppSession.setUser(backendUser);

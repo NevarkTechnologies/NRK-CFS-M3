@@ -1,5 +1,7 @@
 import 'dart:js' as js;
 
+const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
 late void Function(String) _paymentErrorCallback;
 
@@ -18,6 +20,11 @@ Future<void> openRazorpayCheckout(
   String? selectedApp,
 }) async {
   try {
+    if (_razorpayKey.isEmpty) {
+      _paymentErrorCallback('Razorpay key is not configured');
+      return;
+    }
+
     final prefill = <String, dynamic>{
       'email': email,
       'contact': '9999999999', 
@@ -31,7 +38,7 @@ Future<void> openRazorpayCheckout(
     }
 
     final options = js.JsObject.jsify({
-      'key': 'rzp_test_SlvgRUZCtwvlVA',
+      'key': _razorpayKey,
       'amount': razorpayOrder['amount'],
       'currency': razorpayOrder['currency'] ?? 'INR',
       'name': 'Food App Lunchtime',

@@ -5,8 +5,6 @@ import 'cart_page.dart';
 import '../services/api_service.dart';
 import '../services/session.dart';
 import '../services/razorpay_helper.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:url_launcher/url_launcher.dart';
 
 class CheckoutPage extends StatefulWidget {
@@ -374,43 +372,31 @@ Container(
 
     setState(() => isSubmitting = true);
     try {
-      final response = await http.post(
-        Uri.parse('${ApiService.baseUrl}/orders'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'customerName': AppSession.name,
-          'customerEmail': AppSession.email,
-          'userId': AppSession.userId.isEmpty ? null : AppSession.userId,
-          'cafeId': widget.cafeId,
-          'cafeteriaName': _cafeteriaName(),
-          'items': orderItems,
-          'payment': {
-            'method': 'Online',
-            'provider': 'Razorpay',
-            'status': 'Pending',
-          },
-          'location': widget.pickupLocation ?? "Pickup counter",
-        }),
+      final data = await ApiService.createOrderForPayment(
+        customerName: AppSession.name,
+        customerEmail: AppSession.email,
+        userId: AppSession.userId.isEmpty ? null : AppSession.userId,
+        cafeId: widget.cafeId,
+        cafeteriaName: _cafeteriaName(),
+        items: orderItems,
+        location: widget.pickupLocation ?? "Pickup counter",
       );
 
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 201) {
-        _currentOrder = data['order'];
-        _razorpayOrder = data['razorpayOrder'];
+      _currentOrder = Map<String, dynamic>.from(data['order'] as Map);
+      final razorpayOrder = data['razorpayOrder'];
+      _razorpayOrder = razorpayOrder is Map
+          ? Map<String, dynamic>.from(razorpayOrder)
+          : null;
 
-        if (_razorpayOrder != null) {
-          await _openRazorpayCheckout();
-        } else {
-          // Fallback if no razorpay order
-          if (_currentOrder != null) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
-            );
-          }
-        }
+      if (_razorpayOrder != null) {
+        await _openRazorpayCheckout();
       } else {
-        _showError(data['message'] ?? 'Failed to place order');
+        if (_currentOrder != null && mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
+          );
+        }
       }
     } catch (error) {
       _showError(error.toString().replaceFirst("Exception: ", ""));
@@ -501,37 +487,28 @@ Container(
 
   Future<void> _handleRazorpaySuccess(Map<String, dynamic> response) async {
     try {
-      final verifyResponse = await http.post(
-        Uri.parse('${ApiService.baseUrl}/payment/verify'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'razorpay_order_id': response['orderId'],
-          'razorpay_payment_id': response['paymentId'],
-          'razorpay_signature': response['signature'],
-        }),
+      await ApiService.verifyRazorpayPayment(
+        orderId: response['orderId']?.toString() ?? '',
+        paymentId: response['paymentId']?.toString() ?? '',
+        signature: response['signature']?.toString() ?? '',
       );
 
-      if (verifyResponse.statusCode == 200) {
-        if (_currentOrder != null) {
-          await http.patch(
-            Uri.parse('${ApiService.baseUrl}/orders/${_currentOrder!['orderId']}/payment'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'transactionId': response['paymentId'],
-              'status': 'Paid',
-            }),
-          );
-        }
-
-        if (!mounted || _currentOrder == null) return;
-        await _showOrderPlacedPopup();
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
+      if (_currentOrder != null) {
+        _currentOrder = await ApiService.updateOrderPayment(
+          orderId: _currentOrder!['orderId']?.toString() ?? '',
+          transactionId: response['paymentId']?.toString() ?? '',
+          status: 'Paid',
+          razorpayOrderId: response['orderId']?.toString() ?? '',
+          razorpaySignature: response['signature']?.toString() ?? '',
         );
-      } else {
-        _showError('Payment verification failed');
       }
+
+      if (!mounted || _currentOrder == null) return;
+      await _showOrderPlacedPopup();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
+      );
     } catch (error) {
       _showError('Payment verification error: $error');
     }

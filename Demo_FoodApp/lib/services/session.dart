@@ -12,9 +12,9 @@ class AppSession {
   static String get name => currentUser?["name"]?.toString() ?? "";
   static String get email => currentUser?["email"]?.toString() ?? "";
   static String get vendorId {
-    final id = currentUser?['_id']?.toString();
-    if (id != null && id.isNotEmpty) return id;
-    return currentUser?["vendorId"]?.toString() ?? "";
+    final vendor = currentUser?["vendorId"]?.toString();
+    if (vendor != null && vendor.isNotEmpty) return vendor;
+    return currentUser?["_id"]?.toString() ?? "";
   }
 
   static String get cafeId {

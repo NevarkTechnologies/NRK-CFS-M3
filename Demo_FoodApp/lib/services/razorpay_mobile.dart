@@ -1,5 +1,7 @@
 import 'package:razorpay_flutter/razorpay_flutter.dart';
 
+const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+
 late Razorpay _razorpay;
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
 late void Function(String) _paymentErrorCallback;
@@ -33,7 +35,11 @@ Future<void> openRazorpayCheckout(
   String? upiId,
   String? selectedApp,
 }) async {
-  
+  if (_razorpayKey.isEmpty) {
+    _paymentErrorCallback('Razorpay key is not configured');
+    return;
+  }
+
   final prefill = <String, dynamic>{
     'email': email,
     'contact': '9999999999', 
@@ -54,7 +60,7 @@ Future<void> openRazorpayCheckout(
   }
 
   final options = {
-    'key': 'rzp_test_SlvgRUZCtwvlVA',
+    'key': _razorpayKey,
     'amount': razorpayOrder['amount'],
     'currency': razorpayOrder['currency'] ?? 'INR',
     'name': 'Food App Lunchtime',

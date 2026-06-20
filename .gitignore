@@ -1,0 +1,11 @@
+Backend/.env
+Backend/node_modules/
+Demo_FoodApp/.dart_tool/
+Demo_FoodApp/build/
+Demo_FoodApp/android/local.properties
+Demo_FoodApp/android/build/
+Demo_FoodApp/ios/Flutter/ephemeral/
+Demo_FoodApp/linux/flutter/ephemeral/
+Demo_FoodApp/macos/Flutter/ephemeral/
+Demo_FoodApp/windows/flutter/ephemeral/
+*.log

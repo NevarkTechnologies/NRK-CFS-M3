@@ -1,6 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
+const admin = require('firebase-admin');
 require('dotenv').config();
 
 const Cafe = require('./models/cafe');
@@ -12,6 +15,8 @@ const Notification = require('./models/notification');
 
 const app = express();
 const allowedStatuses = ['Pending', 'Preparing', 'Ready', 'Completed', 'Rejected'];
+let razorpayClient;
+let firebaseInitialized = false;
 
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || '*' }));
 app.use(express.json({ limit: '50mb' }));
@@ -26,6 +31,173 @@ function makeOrderId() {
 
 function toMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
+}
+
+function toPaise(value) {
+  return Math.round(toMoney(value) * 100);
+}
+
+function getRazorpayClient() {
+  if (razorpayClient) return razorpayClient;
+
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) {
+    const error = new Error('Razorpay credentials are not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  razorpayClient = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret,
+  });
+  return razorpayClient;
+}
+
+function initializeFirebaseAdmin() {
+  if (firebaseInitialized || admin.apps.length) {
+    firebaseInitialized = true;
+    return admin;
+  }
+
+  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (serviceAccount) {
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(serviceAccount)),
+    });
+  } else {
+    admin.initializeApp();
+  }
+
+  firebaseInitialized = true;
+  return admin;
+}
+
+function shouldEnforceFirebaseAuth() {
+  return process.env.REQUIRE_FIREBASE_AUTH === 'true' || process.env.NODE_ENV === 'production';
+}
+
+async function resolveRoleFromFirebase(email, fallbackRole) {
+  try {
+    const firebase = initializeFirebaseAdmin();
+    const snapshot = await firebase
+      .firestore()
+      .collection('users')
+      .where('email', 'array-contains', email)
+      .limit(1)
+      .get();
+
+    if (!snapshot.empty) {
+      return snapshot.docs[0].data().role || fallbackRole || 'customer';
+    }
+  } catch (err) {
+    if (shouldEnforceFirebaseAuth()) {
+      throw err;
+    }
+    console.warn('Firebase role lookup skipped:', err.message);
+  }
+
+  if (shouldEnforceFirebaseAuth()) {
+    const error = new Error('Email is not authorized to access this app');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  return fallbackRole || 'customer';
+}
+
+async function verifyFirebaseIdentity(idToken) {
+  if (!idToken) return null;
+  try {
+    const firebase = initializeFirebaseAdmin();
+    return await firebase.auth().verifyIdToken(idToken);
+  } catch (err) {
+    if (shouldEnforceFirebaseAuth()) {
+      throw err;
+    }
+    console.warn('Firebase token verification skipped:', err.message);
+    return null;
+  }
+}
+
+function isOnlinePayment(payment) {
+  return payment?.provider === 'Razorpay' || payment?.method === 'Online';
+}
+
+async function createRazorpayOrder(orderId, amount) {
+  const client = getRazorpayClient();
+  return client.orders.create({
+    amount: toPaise(amount),
+    currency: 'INR',
+    receipt: orderId,
+    notes: { orderId },
+  });
+}
+
+async function sendPushNotification(userIds, title, message, data = {}) {
+  try {
+    const users = await User.find({ _id: { $in: userIds } }).select('fcmTokens');
+    const tokens = users.flatMap(user => user.fcmTokens || []).filter(Boolean);
+    if (tokens.length === 0) return;
+
+    const firebase = initializeFirebaseAdmin();
+    await firebase.messaging().sendEachForMulticast({
+      tokens,
+      notification: { title, body: message },
+      data: Object.fromEntries(
+        Object.entries(data).map(([key, value]) => [key, String(value)])
+      ),
+    });
+  } catch (err) {
+    console.warn('Push notification failed:', err.message);
+  }
+}
+
+function verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature }) {
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return false;
+  }
+  if (!process.env.RAZORPAY_KEY_SECRET) {
+    const error = new Error('Razorpay credentials are not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+    .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+    .digest('hex');
+
+  if (expectedSignature.length !== razorpay_signature.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedSignature),
+    Buffer.from(razorpay_signature)
+  );
+}
+
+async function requireFirebaseAuth(req, res, next) {
+  try {
+    const authHeader = req.get('Authorization') || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!token) {
+      if (shouldEnforceFirebaseAuth()) {
+        return res.status(401).json({ message: 'Firebase auth token is required' });
+      }
+      return next();
+    }
+
+    req.firebaseUser = await verifyFirebaseIdentity(token);
+    if (!req.firebaseUser && shouldEnforceFirebaseAuth()) {
+      return res.status(401).json({ message: 'Invalid Firebase auth token' });
+    }
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 }
 
 function buildCafeQuery(req) {
@@ -80,9 +252,17 @@ async function createOrder(req, res) {
 
   const itemTotal = toMoney(normalizedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
   const total = toMoney(itemTotal + Number(platformFee) - Number(discount));
+  if (total <= 0) {
+    return res.status(400).json({ message: 'Order total must be greater than zero' });
+  }
+
+  const orderId = makeOrderId();
+  const razorpayOrder = isOnlinePayment(payment)
+    ? await createRazorpayOrder(orderId, total)
+    : null;
 
   const order = await Order.create({
-    orderId: makeOrderId(),
+    orderId,
     userId,
     customerName,
     customerEmail,
@@ -93,12 +273,16 @@ async function createOrder(req, res) {
     platformFee,
     discount,
     total,
-    payment,
+    payment: {
+      ...payment,
+      providerOrderId: razorpayOrder?.id || payment.providerOrderId || '',
+      status: razorpayOrder ? 'Pending' : payment.status || 'Paid',
+    },
     location,
     notes,
   });
 
-  res.status(201).json(order);
+  res.status(201).json({ order, razorpayOrder });
 }
 
 function getMongoOptions() {
@@ -150,15 +334,29 @@ app.get('/api/health', (req, res) => {
 });
 
 app.post('/api/auth/google', asyncHandler(async (req, res) => {
-  const { googleId, name, email, avatar, role } = req.body;
+  const { googleId, name, email, avatar, role, idToken, fcmToken } = req.body;
   if (!name || !email) {
     return res.status(400).json({ message: 'name and email are required' });
   }
 
+  const normalizedEmail = email.toLowerCase();
+  const decodedToken = await verifyFirebaseIdentity(idToken);
+  if (decodedToken && decodedToken.email?.toLowerCase() !== normalizedEmail) {
+    return res.status(403).json({ message: 'Firebase token email does not match request email' });
+  }
+
+  const resolvedRole = await resolveRoleFromFirebase(normalizedEmail, role);
+
   let user = await User.findOneAndUpdate(
-    { email: email.toLowerCase() },
+    { email: normalizedEmail },
     {
-      $set: { googleId, name, avatar, role },
+      $set: {
+        googleId: decodedToken?.uid || googleId,
+        name,
+        avatar,
+        role: resolvedRole,
+      },
+      ...(fcmToken ? { $addToSet: { fcmTokens: fcmToken } } : {}),
     },
     { returnDocument: 'after', upsert: true, runValidators: true }
   ).populate('cafeId');
@@ -207,7 +405,7 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   res.status(200).json(user);
 }));
 
-app.patch('/api/users/:id', asyncHandler(async (req, res) => {
+app.patch('/api/users/:id', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const allowed = {};
   for (const key of ['name', 'email', 'avatar', 'phone', 'paymentLabel']) {
     if (req.body[key] !== undefined) allowed[key] = req.body[key];
@@ -222,6 +420,22 @@ app.patch('/api/users/:id', asyncHandler(async (req, res) => {
   res.json(user);
 }));
 
+app.post('/api/users/:id/fcm-token', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ message: 'token is required' });
+  }
+
+  const user = await User.findByIdAndUpdate(
+    req.params.id,
+    { $addToSet: { fcmTokens: token.trim() } },
+    { new: true }
+  ).select('_id');
+
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.status(204).send();
+}));
+
 app.get('/api/cafes', asyncHandler(async (req, res) => {
   const cafes = await Cafe.find(buildCafeQuery(req)).sort({ rating: -1, name: 1 });
   res.json(cafes);
@@ -233,12 +447,12 @@ app.get('/api/cafes/:id', asyncHandler(async (req, res) => {
   res.json(cafe);
 }));
 
-app.post('/api/cafes', asyncHandler(async (req, res) => {
+app.post('/api/cafes', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const cafe = await Cafe.create(req.body);
   res.status(201).json(cafe);
 }));
 
-app.patch('/api/cafes/:id', asyncHandler(async (req, res) => {
+app.patch('/api/cafes/:id', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const cafe = await Cafe.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
@@ -263,17 +477,17 @@ app.get('/api/cafes/:id/menu', asyncHandler(async (req, res) => {
   res.json(items);
 }));
 
-app.post('/api/menu', asyncHandler(async (req, res) => {
+app.post('/api/menu', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const item = await MenuItem.create(req.body);
   res.status(201).json(item);
 }));
 
-app.post('/api/menu/add', asyncHandler(async (req, res) => {
+app.post('/api/menu/add', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const item = await MenuItem.create(req.body);
   res.status(201).json(item);
 }));
 
-app.patch('/api/menu/:id', asyncHandler(async (req, res) => {
+app.patch('/api/menu/:id', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const item = await MenuItem.findByIdAndUpdate(req.params.id, req.body, {
     new: true,
     runValidators: true,
@@ -282,16 +496,16 @@ app.patch('/api/menu/:id', asyncHandler(async (req, res) => {
   res.json(item);
 }));
 
-app.delete('/api/menu/:id', asyncHandler(async (req, res) => {
+app.delete('/api/menu/:id', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const item = await MenuItem.findByIdAndDelete(req.params.id);
   if (!item) return res.status(404).json({ message: 'Menu item not found' });
   res.status(204).send();
 }));
 
-app.post('/api/orders', asyncHandler(createOrder));
-app.post('/api/orders/place', asyncHandler(createOrder));
+app.post('/api/orders', requireFirebaseAuth, asyncHandler(createOrder));
+app.post('/api/orders/place', requireFirebaseAuth, asyncHandler(createOrder));
 
-app.get('/api/orders', asyncHandler(async (req, res) => {
+app.get('/api/orders', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const query = {};
   if (req.query.cafeId) query.cafeId = req.query.cafeId;
   if (req.query.customerEmail) query.customerEmail = req.query.customerEmail.toLowerCase();
@@ -301,13 +515,13 @@ app.get('/api/orders', asyncHandler(async (req, res) => {
   res.json(orders);
 }));
 
-app.get('/api/orders/:orderId', asyncHandler(async (req, res) => {
+app.get('/api/orders/:orderId', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const order = await Order.findOne({ orderId: req.params.orderId });
   if (!order) return res.status(404).json({ message: 'Order not found' });
   res.json(order);
 }));
 
-app.patch('/api/orders/:orderId/status', asyncHandler(async (req, res) => {
+app.patch('/api/orders/:orderId/status', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const { status } = req.body;
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({ message: `status must be one of: ${allowedStatuses.join(', ')}` });
@@ -320,10 +534,131 @@ app.patch('/api/orders/:orderId/status', asyncHandler(async (req, res) => {
   );
 
   if (!order) return res.status(404).json({ message: 'Order not found' });
+  if (order.userId) {
+    await Notification.create({
+      userId: order.userId,
+      title: 'Order status updated',
+      message: `Your order ${order.orderId} is now ${order.status}.`,
+      type: 'order',
+      orderId: order._id,
+      items: order.items.map(item => item.name),
+    });
+    await sendPushNotification(
+      [order.userId],
+      'Order status updated',
+      `Your order ${order.orderId} is now ${order.status}.`,
+      { type: 'order', orderId: order.orderId }
+    );
+  }
   res.json(order);
 }));
 
-app.get('/api/vendor/:vendorId/dashboard', asyncHandler(async (req, res) => {
+app.post('/api/payment/verify', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  if (!verifyRazorpaySignature(req.body)) {
+    return res.status(400).json({ message: 'Invalid Razorpay signature' });
+  }
+
+  res.json({ ok: true });
+}));
+
+app.patch('/api/orders/:orderId/payment', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const {
+    transactionId,
+    status,
+    providerOrderId,
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+  } = req.body;
+  const allowedPaymentStatuses = ['Pending', 'Paid', 'Failed', 'Refunded'];
+  if (status && !allowedPaymentStatuses.includes(status)) {
+    return res.status(400).json({ message: `status must be one of: ${allowedPaymentStatuses.join(', ')}` });
+  }
+
+  const existingOrder = await Order.findOne({ orderId: req.params.orderId });
+  if (!existingOrder) return res.status(404).json({ message: 'Order not found' });
+
+  if (status === 'Paid') {
+    const signedOrderId = razorpay_order_id || existingOrder.payment.providerOrderId;
+    const signedPaymentId = razorpay_payment_id || transactionId;
+    if (signedOrderId !== existingOrder.payment.providerOrderId) {
+      return res.status(400).json({ message: 'Razorpay order id does not match this order' });
+    }
+
+    const isValid = verifyRazorpaySignature({
+      razorpay_order_id: signedOrderId,
+      razorpay_payment_id: signedPaymentId,
+      razorpay_signature,
+    });
+    if (!isValid) {
+      return res.status(400).json({ message: 'Invalid Razorpay signature' });
+    }
+  }
+
+  const update = {};
+  if (transactionId !== undefined) update['payment.transactionId'] = transactionId;
+  if (providerOrderId !== undefined) update['payment.providerOrderId'] = providerOrderId;
+  if (status !== undefined) update['payment.status'] = status;
+
+  const order = await Order.findOneAndUpdate(
+    { orderId: req.params.orderId },
+    { $set: update },
+    { returnDocument: 'after', runValidators: true }
+  );
+
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+  res.json(order);
+}));
+
+app.get('/api/notifications/:userId', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const notifications = await Notification.find({ userId: req.params.userId })
+    .sort({ createdAt: -1 })
+    .limit(100);
+  res.json(notifications);
+}));
+
+app.post('/api/notifications/send', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { title, message, targetUserIds } = req.body;
+  if (!title || !message) {
+    return res.status(400).json({ message: 'title and message are required' });
+  }
+
+  const users = Array.isArray(targetUserIds) && targetUserIds.length > 0
+    ? await User.find({ _id: { $in: targetUserIds } }).select('_id')
+    : await User.find({ role: 'customer' }).select('_id');
+  const userIds = users.map(user => user._id);
+
+  const notifications = await Notification.insertMany(
+    userIds.map(userId => ({
+      userId,
+      title,
+      message,
+      type: 'promotion',
+    }))
+  );
+
+  await sendPushNotification(userIds, title, message, { type: 'promotion' });
+  res.status(201).json({ sent: notifications.length });
+}));
+
+app.patch('/api/notifications/:notificationId/read', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const notification = await Notification.findByIdAndUpdate(
+    req.params.notificationId,
+    { isRead: true },
+    { returnDocument: 'after' }
+  );
+
+  if (!notification) return res.status(404).json({ message: 'Notification not found' });
+  res.json(notification);
+}));
+
+app.delete('/api/notifications/:notificationId', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const notification = await Notification.findByIdAndDelete(req.params.notificationId);
+  if (!notification) return res.status(404).json({ message: 'Notification not found' });
+  res.status(204).send();
+}));
+
+app.get('/api/vendor/:vendorId/dashboard', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const cafes = await Cafe.find({ vendorId: req.params.vendorId }).select('_id');
   const cafeIds = cafes.map(cafe => cafe._id);
   const orderQuery = cafeIds.length ? { cafeId: { $in: cafeIds } } : {};
@@ -364,6 +699,9 @@ app.use((err, req, res, next) => {
   }
   if (err.code === 11000) {
     return res.status(409).json({ message: 'Duplicate value', fields: err.keyValue });
+  }
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({ message: err.message });
   }
   res.status(500).json({ message: 'Internal server error' });
 });

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
@@ -15,6 +16,7 @@ class ApiService {
     required String role,
     String avatar = '',
     String? fcmToken,
+    String? idToken,
   }) async {
     final body = {
       'googleId': googleId,
@@ -23,11 +25,12 @@ class ApiService {
       'role': role,
       'avatar': avatar,
       'fcmToken': fcmToken,
+      'idToken': idToken,
     };
 
     final response = await http.post(
       Uri.parse('$baseUrl/auth/google'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(includeAuth: false),
       body: jsonEncode(body),
     );
 
@@ -40,7 +43,7 @@ class ApiService {
   ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/users/$userId'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode(data),
     );
 
@@ -60,7 +63,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/orders'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode({
         'customerName': customerName,
         'customerEmail': customerEmail,
@@ -77,7 +80,10 @@ class ApiService {
       }),
     );
 
-    return _decodeObject(response);
+    final decoded = _decodeObject(response);
+    final order = decoded['order'];
+    if (order is Map) return Map<String, dynamic>.from(order);
+    return decoded;
   }
 
   static Future<List<Map<String, dynamic>>> getOrders({
@@ -94,7 +100,7 @@ class ApiService {
       },
     );
 
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _jsonHeaders());
     return _decodeList(response);
   }
 
@@ -131,7 +137,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/menu'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode({
         'name': name,
         'price': price,
@@ -154,14 +160,17 @@ class ApiService {
   ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/menu/$itemId'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode(data),
     );
     return _decodeObject(response);
   }
 
   static Future<void> deleteMenuItem(String itemId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/menu/$itemId'));
+    final response = await http.delete(
+      Uri.parse('$baseUrl/menu/$itemId'),
+      headers: await _jsonHeaders(),
+    );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Request failed with status ${response.statusCode}';
       if (response.body.isNotEmpty) {
@@ -180,7 +189,7 @@ class ApiService {
   ) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/orders/$orderId/status'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode({'status': status}),
     );
 
@@ -192,7 +201,78 @@ class ApiService {
   ) async {
     final response = await http.get(
       Uri.parse('$baseUrl/vendor/$vendorId/dashboard'),
+      headers: await _jsonHeaders(),
     );
+    return _decodeObject(response);
+  }
+
+  static Future<Map<String, dynamic>> createOrderForPayment({
+    required String customerName,
+    required String customerEmail,
+    required String cafeteriaName,
+    String? userId,
+    String? cafeId,
+    required List<Map<String, dynamic>> items,
+    String location = 'Pickup counter',
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/orders'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({
+        'customerName': customerName,
+        'customerEmail': customerEmail,
+        'userId': userId,
+        'cafeId': cafeId,
+        'cafeteriaName': cafeteriaName,
+        'items': items,
+        'payment': {
+          'method': 'Online',
+          'provider': 'Razorpay',
+          'status': 'Pending',
+        },
+        'location': location,
+      }),
+    );
+
+    return _decodeObject(response);
+  }
+
+  static Future<void> verifyRazorpayPayment({
+    required String orderId,
+    required String paymentId,
+    required String signature,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/payment/verify'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({
+        'razorpay_order_id': orderId,
+        'razorpay_payment_id': paymentId,
+        'razorpay_signature': signature,
+      }),
+    );
+    _decodeObject(response);
+  }
+
+  static Future<Map<String, dynamic>> updateOrderPayment({
+    required String orderId,
+    required String transactionId,
+    required String status,
+    required String razorpayOrderId,
+    required String razorpaySignature,
+  }) async {
+    final response = await http.patch(
+      Uri.parse('$baseUrl/orders/$orderId/payment'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({
+        'transactionId': transactionId,
+        'status': status,
+        'razorpay_order_id': razorpayOrderId,
+        'razorpay_payment_id': transactionId,
+        'razorpay_signature': razorpaySignature,
+      }),
+    );
+
     return _decodeObject(response);
   }
 
@@ -201,6 +281,7 @@ class ApiService {
   ) async {
     final response = await http.get(
       Uri.parse('$baseUrl/notifications/$userId'),
+      headers: await _jsonHeaders(),
     );
     return _decodeList(response);
   }
@@ -208,7 +289,7 @@ class ApiService {
   static Future<void> registerFcmToken(String userId, String token) async {
     final response = await http.post(
       Uri.parse('$baseUrl/users/$userId/fcm-token'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode({'token': token}),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -227,11 +308,11 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/notifications/send'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
       body: jsonEncode({
         'title': title,
         'message': message,
-        'targetUserIds': ?targetUserIds,
+        if (targetUserIds != null) 'targetUserIds': targetUserIds,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -246,7 +327,7 @@ class ApiService {
   static Future<void> markNotificationAsRead(String notificationId) async {
     final response = await http.patch(
       Uri.parse('$baseUrl/notifications/$notificationId/read'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _jsonHeaders(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final decoded = jsonDecode(response.body);
@@ -260,6 +341,7 @@ class ApiService {
   static Future<void> deleteNotification(String notificationId) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/notifications/$notificationId'),
+      headers: await _jsonHeaders(),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final decoded = jsonDecode(response.body);
@@ -279,6 +361,19 @@ class ApiService {
       throw Exception(message);
     }
     return Map<String, dynamic>.from(decoded as Map);
+  }
+
+  static Future<Map<String, String>> _jsonHeaders({
+    bool includeAuth = true,
+  }) async {
+    final headers = {'Content-Type': 'application/json'};
+    if (!includeAuth) return headers;
+
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token != null && token.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $token';
+    }
+    return headers;
   }
 
   static List<Map<String, dynamic>> _decodeList(http.Response response) {
