@@ -1,13 +1,17 @@
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../firebase_options.dart';
 import 'api_service.dart';
 import 'session.dart';
 
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
+const MethodChannel _settingsChannel = MethodChannel('nevark_foods/settings');
 
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _initializeLocalNotifications();
@@ -131,6 +135,67 @@ class NotificationService {
         badge: true,
         sound: true,
       );
+    }
+  }
+
+  Future<bool> ensurePermissionRequired(BuildContext context) async {
+    try {
+      if (!_initialized) {
+        await init();
+      }
+    } catch (error) {
+      debugPrint('Notification setup failed: $error');
+      return true;
+    }
+
+    while (context.mounted) {
+      final settings = await _messaging.getNotificationSettings();
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        return true;
+      }
+
+      final retry = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text('Notifications Required'),
+          content: const Text(
+            'Please allow notifications to continue. Order updates and pickup alerts depend on them.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Allow Notifications'),
+            ),
+          ],
+        ),
+      );
+
+      if (retry != true || !context.mounted) return false;
+
+      await _requestPermission();
+      final updated = await _messaging.getNotificationSettings();
+      if (updated.authorizationStatus == AuthorizationStatus.authorized ||
+          updated.authorizationStatus == AuthorizationStatus.provisional) {
+        return true;
+      }
+
+      await _openNotificationSettings();
+      await Future<void>.delayed(const Duration(seconds: 1));
+    }
+    return false;
+  }
+
+  Future<void> _openNotificationSettings() async {
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      await _settingsChannel.invokeMethod<void>('openNotificationSettings');
+      return;
+    }
+
+    final settingsUri = Uri.parse('app-settings:');
+    if (await canLaunchUrl(settingsUri)) {
+      await launchUrl(settingsUri, mode: LaunchMode.externalApplication);
     }
   }
 

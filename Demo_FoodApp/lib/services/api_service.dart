@@ -312,7 +312,7 @@ class ApiService {
       body: jsonEncode({
         'title': title,
         'message': message,
-        if (targetUserIds != null) 'targetUserIds': targetUserIds,
+        'targetUserIds': ?targetUserIds,
       }),
     );
     if (response.statusCode < 200 || response.statusCode >= 300) {

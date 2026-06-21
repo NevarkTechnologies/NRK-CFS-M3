@@ -279,7 +279,7 @@ class _HomePageState extends State<HomePage> {
                                       const SizedBox(height: 20),
                                       _buildSectionHeader(isDark),
                                       _buildMenuCategories(isDark, isDesktop, isTablet),
-                                      const SizedBox(height: 200),
+                                      const SizedBox(height: 280),
                                     ],
                                   ),
                                 ),
@@ -294,7 +294,7 @@ class _HomePageState extends State<HomePage> {
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.fastLinearToSlowEaseIn,
-                    bottom: _isMenuVisible ? (totalCartItems > 0 ? 150.0 : 90.0) : -100.0,
+                    bottom: _isMenuVisible ? (totalCartItems > 0 ? 215.0 : 145.0) : -100.0,
                     left: 0,
                     right: 0,
                     child: AnimatedOpacity(
@@ -328,7 +328,7 @@ class _HomePageState extends State<HomePage> {
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 500),
                     curve: Curves.fastLinearToSlowEaseIn,
-                    bottom: _isCartVisible && totalCartItems > 0 ? 80.0 : -150.0,
+                    bottom: _isCartVisible && totalCartItems > 0 ? 145.0 : -150.0,
                     left: 0,
                     right: 0,
                     child: AnimatedOpacity(

@@ -528,12 +528,8 @@ class _LoginPageState extends State<LoginPage> {
                 const SizedBox(height: 20),
 
                 _AnimatedName(isMobile: true, appBlue: appBlue),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: _FadeSlide(delay: 600, child: _buildWatermark()),
-                ),
+                const SizedBox(height: 16),
+                _FadeSlide(delay: 600, child: _buildWatermark()),
               ],
             ),
           ),

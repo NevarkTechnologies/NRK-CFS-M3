@@ -13,14 +13,18 @@ import 'screens/splash_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  if (Firebase.apps.isEmpty) {
+  try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
+
+    await AppSession.init();
+
+    NotificationService.instance.init();
+  } catch (e) {
+    print("Startup Error: $e");
   }
 
-  await NotificationService.instance.init();
-  await AppSession.init(); // Load persisted session
   runApp(const MyApp());
 }
 

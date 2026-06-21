@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/notification_service.dart';
 
 class SplashPage extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -19,9 +20,12 @@ class _SplashPageState extends State<SplashPage> {
   }
 
   void _navigate() async {
-    await Future.delayed(const Duration(seconds: 3));
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final allowed = await NotificationService.instance.ensurePermissionRequired(context);
+    if (!allowed || !mounted) return;
 
-    bool isLoggedIn = false;
+    await Future.delayed(const Duration(seconds: 3));
 
       Navigator.pushReplacementNamed(context, '/login');
   }
