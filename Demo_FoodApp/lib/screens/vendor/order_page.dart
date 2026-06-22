@@ -232,36 +232,8 @@ class _OrdersPageState extends State<OrdersPage> {
                   () => _setOrderStatus(order, "Preparing"))),
           const SizedBox(width: 12),
           Expanded(
-            child: _actionBtn("Reject", Colors.redAccent, () {
-              bool undoPressed = false;
-              setState(() {
-                order["status"] = "Rejected";
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text("Order Rejected"),
-                  action: SnackBarAction(
-                    label: "UNDO",
-                    onPressed: () {
-                      undoPressed = true;
-                      setState(() {
-                        order["status"] = "Pending";
-                      });
-                    },
-                  ),
-                ),
-              );
-              ApiService.updateOrderStatus(order["orderId"] ?? order["id"], "Rejected");
-              /// AUTO REMOVE
-              Future.delayed(const Duration(seconds: 5), () {
-                if (!undoPressed && mounted) {
-                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
-                  setState(() {
-                    orders.remove(order);
-                  });
-                }
-              });
-            }),
+            child: _actionBtn("Reject", Colors.redAccent,
+                () => _setOrderStatus(order, "Rejected")),
           ),
         ],
       );
@@ -324,7 +296,8 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() => order["status"] = status);
 
     try {
-      await ApiService.updateOrderStatus(order["orderId"] ?? order["id"], status);
+      final updated = await ApiService.updateOrderStatus(order["id"], status);
+      order["status"] = updated["status"] ?? status;
       await loadOrders();
     } catch (error) {
       if (!mounted) return;

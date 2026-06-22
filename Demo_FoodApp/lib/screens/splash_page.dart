@@ -1,6 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
+import '../services/session.dart';
+import 'cafeteria_page.dart';
+import 'vendor/vendor_home_page.dart';
 
 class SplashPage extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -27,7 +30,20 @@ class _SplashPageState extends State<SplashPage> {
 
     await Future.delayed(const Duration(seconds: 3));
 
-      Navigator.pushReplacementNamed(context, '/login');
+    if (!mounted) return;
+    if (AppSession.isLoggedIn) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AppSession.isVendor
+              ? VendorHomePage(toggleTheme: widget.toggleTheme)
+              : CafeteriaPage(toggleTheme: widget.toggleTheme),
+        ),
+      );
+      return;
+    }
+
+    Navigator.pushReplacementNamed(context, '/login');
   }
 
   @override

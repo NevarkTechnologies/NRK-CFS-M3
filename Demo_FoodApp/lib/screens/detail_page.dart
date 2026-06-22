@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../model/favorite_model.dart';
 import 'checkout_page.dart';
@@ -30,6 +32,7 @@ class _DetailPageState extends State<DetailPage> {
   bool isOrderLoading = false;
   String? orderLoadingError;
   List<Map<String, dynamic>> orders = [];
+  Timer? _ordersRefreshTimer;
 
   late final TextEditingController name;
   late final TextEditingController email;
@@ -61,14 +64,20 @@ class _DetailPageState extends State<DetailPage> {
 
     if (widget.title == "Order Details") {
       _loadUserOrders();
+      _ordersRefreshTimer = Timer.periodic(
+        const Duration(seconds: 10),
+        (_) => _loadUserOrders(showLoader: false),
+      );
     }
   }
 
-  Future<void> _loadUserOrders() async {
-    setState(() {
-      isOrderLoading = true;
-      orderLoadingError = null;
-    });
+  Future<void> _loadUserOrders({bool showLoader = true}) async {
+    if (showLoader) {
+      setState(() {
+        isOrderLoading = true;
+        orderLoadingError = null;
+      });
+    }
 
     try {
       final data = await ApiService.getOrders(customerEmail: AppSession.email);
@@ -83,14 +92,17 @@ class _DetailPageState extends State<DetailPage> {
       });
     } finally {
       if (!mounted) return;
-      setState(() {
-        isOrderLoading = false;
-      });
+      if (showLoader) {
+        setState(() {
+          isOrderLoading = false;
+        });
+      }
     }
   }
 
   @override
   void dispose() {
+    _ordersRefreshTimer?.cancel();
     name.dispose();
     email.dispose();
     street1.dispose();
