@@ -31,6 +31,8 @@ class AppSession {
     return cafeData?.toString() ?? "";
   }
 
+  static String get phone => currentUser?["phone"]?.toString() ?? "";
+
   static String get paymentLabel =>
       currentUser?["paymentLabel"]?.toString() ?? "UPI";
 

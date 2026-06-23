@@ -1,9 +1,43 @@
 import 'package:flutter/material.dart';
 import '../model/notification_model.dart';
+import '../services/session.dart';
 import 'cafeteria_page.dart'; // Import to use CustomFloatingNavBar
 
-class NotificationPage extends StatelessWidget {
+class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
+
+  @override
+  State<NotificationPage> createState() => _NotificationPageState();
+}
+
+class _NotificationPageState extends State<NotificationPage> {
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+    NotificationModel.refreshSignal.addListener(_onRefresh);
+  }
+
+  @override
+  void dispose() {
+    NotificationModel.refreshSignal.removeListener(_onRefresh);
+    super.dispose();
+  }
+
+  void _onRefresh() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _fetch() async {
+    if (!AppSession.isLoggedIn) return;
+    setState(() => _loading = true);
+    try {
+      await NotificationModel.fetchNotifications(AppSession.userId);
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,30 +46,35 @@ class NotificationPage extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: background,
-      extendBody: true, // Allows content to scroll behind the floating nav bar
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 1180), // Matched width constraints
+              constraints: const BoxConstraints(maxWidth: 1180),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildTopBar(context, isDark, "Notifications"),
                   const SizedBox(height: 24),
                   Expanded(
-                    child: NotificationModel.notifications.isEmpty
-                        ? _buildEmptyState(isDark)
-                        : ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 120), // Avoid clipping with NavBar
-                            itemCount: NotificationModel.notifications.length,
-                            itemBuilder: (context, index) {
-                              var notif = NotificationModel.notifications[index];
-                              return _buildNotificationCard(context, notif, isDark);
-                            },
-                          ),
+                    child: _loading
+                        ? const Center(child: CircularProgressIndicator())
+                        : NotificationModel.notifications.isEmpty
+                            ? _buildEmptyState(isDark)
+                            : RefreshIndicator(
+                                onRefresh: _fetch,
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.only(bottom: 120),
+                                  itemCount: NotificationModel.notifications.length,
+                                  itemBuilder: (context, index) {
+                                    final notif = NotificationModel.notifications[index];
+                                    return _buildNotificationCard(context, notif, isDark);
+                                  },
+                                ),
+                              ),
                   ),
                 ],
               ),
@@ -44,9 +83,9 @@ class NotificationPage extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: CustomFloatingNavBar(
-        currentIndex: 0, 
+        currentIndex: 0,
         isDark: isDark,
-        toggleTheme: () {}, 
+        toggleTheme: () {},
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../firebase_options.dart';
+import '../model/notification_model.dart';
 import 'api_service.dart';
 import 'session.dart';
 
@@ -66,14 +67,20 @@ Future<void> _showNotification(RemoteMessage message) async {
         'orders',
         'Order Notifications',
         channelDescription: 'Notifications for order status and offers',
-        importance: Importance.high,
-        priority: Priority.high,
-        icon: android?.smallIcon,
+        importance: Importance.max,
+        priority: Priority.max,
+        playSound: true,
+        enableVibration: true,
+        fullScreenIntent: true,
+        ticker: title,
+        styleInformation: BigTextStyleInformation(body),
+        icon: android?.smallIcon ?? '@mipmap/ic_launcher',
       ),
       iOS: const DarwinNotificationDetails(
         presentAlert: true,
         presentBadge: true,
         presentSound: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
       ),
     ),
   );
@@ -223,6 +230,9 @@ class NotificationService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     await _showNotification(message);
+    if (AppSession.isLoggedIn) {
+      NotificationModel.fetchNotifications(AppSession.userId).catchError((_) {});
+    }
   }
 
   Future<void> _handleMessageOpenedApp(RemoteMessage message) async {

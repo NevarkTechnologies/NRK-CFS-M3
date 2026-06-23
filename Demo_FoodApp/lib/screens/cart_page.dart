@@ -125,9 +125,10 @@ class _CartPageState extends State<CartPage> {
     return globalCartItems.fold(0, (sum, item) => sum + ((item["price"] as int) * (item["qty"] as int)));
   }
 
+  int get _platformFee => (getTotal() * 0.03).round();
+
   int getFinalTotal() {
-    int total = getTotal() + 3;
-    return total - _discountAmount;
+    return getTotal() + _platformFee - _discountAmount;
   }
 
   void updateQty(Map<String, dynamic> item, int delta) {
@@ -554,7 +555,7 @@ class _CartPageState extends State<CartPage> {
           Text("Bill Details", style: TextStyle(fontFamily: 'Nunito', color: textColor, fontSize: 18, fontWeight: FontWeight.w900)),
           const SizedBox(height: 16),
           _billRow("Item Total", getTotal(), subTextColor, textColor),
-          _billRow("Platform Fee", 3, subTextColor, textColor),
+          _billRow("Platform Fee (3%)", _platformFee, subTextColor, textColor),
           if (_appliedCoupon != null) _billRow("Discount", -_discountAmount, Colors.green, Colors.green),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),

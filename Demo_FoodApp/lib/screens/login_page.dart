@@ -22,6 +22,39 @@ class _LoginPageState extends State<LoginPage> {
   final Color appBlue = const Color(0xFF2563EB);
   bool isSigningIn = false;
 
+  Future<void> _askPhoneNumber(String userId) async {
+    final ctrl = TextEditingController();
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Enter your phone number'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.phone,
+          maxLength: 10,
+          decoration: const InputDecoration(hintText: '10-digit mobile number'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Skip')),
+          TextButton(
+            onPressed: () async {
+              final phone = ctrl.text.trim();
+              if (phone.length >= 10) {
+                try {
+                  await ApiService.updateUser(userId, {'phone': phone});
+                  await AppSession.setUser({...AppSession.currentUser!, 'phone': phone});
+                } catch (_) {}
+                if (ctx.mounted) Navigator.pop(ctx);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _signInWithGoogle() async {
     if (isSigningIn) return;
     setState(() => isSigningIn = true);
@@ -89,6 +122,10 @@ class _LoginPageState extends State<LoginPage> {
 
       await AppSession.setUser(backendUser);
       await NotificationService.instance.registerFcmToken(AppSession.userId);
+
+      if ((backendUser['phone'] ?? '').toString().isEmpty) {
+        await _askPhoneNumber(AppSession.userId);
+      }
 
       if (!mounted) return;
 

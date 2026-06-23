@@ -5,7 +5,6 @@ import 'cart_page.dart';
 import '../services/api_service.dart';
 import '../services/session.dart';
 import '../services/razorpay_helper.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<OrderItem>? items; 
@@ -29,40 +28,28 @@ class _CheckoutPageState extends State<CheckoutPage> {
   final Color primaryColor = const Color(0xFF0F4CFF);
 
   String selectedMethod = "";
-  String selectedUPIApp = "";
-  String selectedWallet = "";
-  String selectedBank = "";
   bool isSubmitting = false;
-  Future<void> launchUPIApp({
-  required String upiId,
-  required String name,
-  required double amount,
-}) async {
-
-  Uri uri = Uri.parse(
-    "upi://pay?pa=$upiId&pn=$name&am=$amount&cu=INR"
-  );
-
-  if (await canLaunchUrl(uri)) {
-    await launchUrl(
-      uri,
-      mode: LaunchMode.externalApplication,
-    );
-  } else {
-    _showError("UPI app not found");
-  }
-}
-
   final TextEditingController upiController = TextEditingController();
 
   Map<String, dynamic>? _currentOrder;
   Map<String, dynamic>? _razorpayOrder;
+
+  double get _itemTotal {
+    if (widget.isReorder && widget.items != null) {
+      return widget.items!.fold(0.0, (s, i) => s + i.price * i.quantity);
+    }
+    return globalCartItems.fold(0.0, (s, i) => s + (i["price"] as num) * (i["qty"] as int));
+  }
+
+  double get _platformFee => double.parse((_itemTotal * 0.03).toStringAsFixed(2));
+  double get _grandTotal => _itemTotal + _platformFee;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
   @override
   void initState() {
     super.initState();
+    selectedMethod = "upi";
     initRazorpay(_handleRazorpaySuccess, _handleRazorpayError);
   }
 
@@ -127,9 +114,9 @@ Container(
           ),
         ),
     ],
-                  _section("UPI", "upi", _upiUI(), cardColor, textColor, isAvailable: true),
-                  _section("Wallets", "wallet", _walletUI(), cardColor, textColor, isAvailable: false),
-                  _section("Net Banking", "bank", _bankUI(), cardColor, textColor, isAvailable: false),
+                  _orderSummaryCard(cardColor, textColor),
+                  _couponsCard(cardColor, textColor),
+                  _section("UPI", "upi", _upiUI(), cardColor, textColor),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -164,8 +151,8 @@ Container(
                     ),
                     onPressed: isSubmitting ? null : _handlePayment,
                     child: Text(
-                      isSubmitting ? "Placing Order..." : "Pay Now",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      isSubmitting ? "Placing Order..." : "Pay  ₹${_grandTotal.toStringAsFixed(2)}",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -177,9 +164,7 @@ Container(
     );
   }
 
-  Widget _section(String title, String value, Widget child, Color cardColor, Color textColor, {bool isAvailable = true}) {
-    bool isSelected = selectedMethod == value;
-
+  Widget _section(String title, String value, Widget child, Color cardColor, Color textColor) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -197,163 +182,90 @@ Container(
           ListTile(
             title: Text(
               title,
-              style: TextStyle(
-                color: isAvailable ? textColor : Colors.grey,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-              ),
+              style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
             ),
-            subtitle: isAvailable 
-                ? null 
-                : const Text("Currently unavailable", style: TextStyle(color: Colors.grey, fontSize: 12)),
-            trailing: isAvailable 
-                ? Icon(
-                    isSelected ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    color: textColor,
-                  ) 
-                : const Icon(Icons.block, color: Colors.grey, size: 16),
-            onTap: isAvailable ? () {
-              setState(() {
-                selectedMethod = isSelected ? "" : value;
-              });
-            } : null,
           ),
-          if (isSelected && isAvailable)
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: child,
-            )
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: child,
+          ),
         ],
       ),
     );
   }
 
   Widget _upiUI() {
-    final textColor = isDark ? Colors.white : Colors.black;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text("Pay using UPI Apps",
-            style: TextStyle(fontWeight: FontWeight.w600, color: textColor)),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _upiApp("GPay", "assets/gpay.jpg"),
-            _upiApp("PhonePe", "assets/phonepe.jpg"),
-            _upiApp("Paytm", "assets/paytm.jpg"),
-          ],
+        Icon(Icons.verified, color: primaryColor, size: 18),
+        const SizedBox(width: 8),
+        Text(
+          "via Razorpay",
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: isDark ? Colors.white70 : Colors.black87,
+          ),
         ),
       ],
     );
   }
 
-  Widget _upiApp(String name, String imagePath) {
-    bool isSelected = selectedUPIApp == name;
-
-    return GestureDetector(
-     onTap: () async {
-  setState(() {
-    selectedUPIApp = name;
-  });
-
-  double totalAmount = widget.items != null
-      ? widget.items!.fold(
-          0.0,
-          (sum, item) => sum + (item.price * item.quantity),
-        ).toDouble()
-      : globalCartItems.fold(
-          0.0,
-          (sum, item) =>
-              sum + ((item["price"] as num) * (item["qty"] as int)),
-        );
-
-  await launchUPIApp(
-    upiId: "yourupi@oksbi",
-    name: "LunchTime",
-    amount: totalAmount,
-  );
-},
+  Widget _orderSummaryCard(Color cardColor, Color textColor) {
+    final subColor = isDark ? Colors.white60 : Colors.black54;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isSelected ? primaryColor : Colors.transparent,
-                width: 2,
-              ),
-            ),
-            child: CircleAvatar(
-              radius: 24,
-              backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-              child: ClipOval(
-                child: Image.asset(
-                  imagePath,
-                  width: 48, // Increased to perfectly fit the CircleAvatar diameter
-                  height: 48, // Increased to perfectly fit the CircleAvatar diameter
-                  fit: BoxFit.cover, // Changed from contain to cover to eliminate whitespace
-                  errorBuilder: (context, error, stackTrace) {
-                    return Icon(Icons.account_balance_wallet, color: primaryColor);
-                  },
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(name, style: TextStyle(color: isDark ? Colors.white : Colors.black))
+          Text("Order Summary", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          const SizedBox(height: 12),
+          _summaryRow("Item Total", "₹${_itemTotal.toStringAsFixed(2)}", textColor),
+          const SizedBox(height: 8),
+          _summaryRow("Platform Fee (3%)", "₹${_platformFee.toStringAsFixed(2)}", subColor),
+          const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider()),
+          _summaryRow("Total", "₹${_grandTotal.toStringAsFixed(2)}", textColor, bold: true),
         ],
       ),
     );
   }
 
-  Widget _walletUI() {
-    return Column(
-      children: [
-        _walletTile("Paytm"),
-        _walletTile("PhonePe"),
-        _walletTile("Amazon Pay"),
-      ],
+  Widget _summaryRow(String label, String value, Color color, {bool bold = false}) {
+    final style = TextStyle(color: color, fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: bold ? 15 : 14);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [Text(label, style: style), Text(value, style: style)],
     );
   }
 
-  Widget _walletTile(String name) {
-    final textColor = isDark ? Colors.white : Colors.black;
-
-    return ListTile(
-      title: Text(name, style: TextStyle(color: textColor)),
-      trailing: Radio(
-        value: name,
-        groupValue: selectedWallet,
-        activeColor: primaryColor,
-        onChanged: (value) {
-          setState(() {
-            selectedWallet = value.toString();
-          });
-        },
+  Widget _couponsCard(Color cardColor, Color textColor) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
       ),
-    );
-  }
-
-  Widget _bankUI() {
-    return DropdownButtonFormField<String>(
-      initialValue: selectedBank.isEmpty ? null : selectedBank,
-      hint: const Text("Select Bank"),
-      items: ["HDFC", "ICICI", "SBI", "Axis"]
-        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-        .toList(),
-      onChanged: (value) {
-        setState(() {
-          selectedBank = value!;
-        });
-      },
-      decoration: InputDecoration(
-        filled: true,
-        fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF4F6F9),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          leading: Icon(Icons.local_offer_outlined, color: primaryColor),
+          title: Text("Available Coupons", style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Text(
+                "No coupons available at the moment.",
+                style: TextStyle(color: isDark ? Colors.white54 : Colors.black45, fontSize: 13),
+              ),
+            ),
+          ],
         ),
       ),
     );

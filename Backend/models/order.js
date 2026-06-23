@@ -21,7 +21,7 @@ const OrderSchema = new mongoose.Schema(
     cafeteriaName: { type: String, required: true, trim: true },
     items: { type: [OrderItemSchema], validate: v => Array.isArray(v) && v.length > 0 },
     itemTotal: { type: Number, required: true, min: 0 },
-    platformFee: { type: Number, default: 3, min: 0 },
+    platformFee: { type: Number, default: 0, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     total: { type: Number, required: true, min: 0 },
     status: {

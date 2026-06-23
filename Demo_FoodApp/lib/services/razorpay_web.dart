@@ -1,6 +1,8 @@
 import 'dart:js' as js;
 
-const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+//const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+const String _razorpayKey = 'rzp_live_T57tivYC7IK1Tk';
+
 
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
 late void Function(String) _paymentErrorCallback;
@@ -41,7 +43,7 @@ Future<void> openRazorpayCheckout(
       'key': _razorpayKey,
       'amount': razorpayOrder['amount'],
       'currency': razorpayOrder['currency'] ?? 'INR',
-      'name': 'Food App Lunchtime',
+      'name': 'Nevark\'s BenchBites',
       'order_id': razorpayOrder['id'],
       'description': 'Order Payment',
       'prefill': prefill,

@@ -1,7 +1,8 @@
 import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'session.dart';
 
-const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
-
+//const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
+const String _razorpayKey = 'rzp_live_T57tivYC7IK1Tk';
 late Razorpay _razorpay;
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
 late void Function(String) _paymentErrorCallback;
@@ -42,7 +43,7 @@ Future<void> openRazorpayCheckout(
 
   final prefill = <String, dynamic>{
     'email': email,
-    'contact': '9999999999', 
+    'contact': AppSession.phone.isNotEmpty ? AppSession.phone : '9999999999',
   };
 
   if (upiId != null && upiId.isNotEmpty) {
@@ -63,7 +64,7 @@ Future<void> openRazorpayCheckout(
     'key': _razorpayKey,
     'amount': razorpayOrder['amount'],
     'currency': razorpayOrder['currency'] ?? 'INR',
-    'name': 'Food App Lunchtime',
+    'name': 'Nevark\'s BenchBites',
     'order_id': razorpayOrder['id'],
     'description': 'Order Payment',
     'prefill': prefill,

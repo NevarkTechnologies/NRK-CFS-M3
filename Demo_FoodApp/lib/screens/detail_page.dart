@@ -187,7 +187,9 @@ class _DetailPageState extends State<DetailPage> {
           constraints: const BoxConstraints(maxWidth: 1000),
           child: Column(
             children: [
-              Container(
+              SafeArea(
+                bottom: false,
+                child: Container(
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
@@ -227,6 +229,7 @@ class _DetailPageState extends State<DetailPage> {
                     ),
                   ],
                 ),
+              ),
               ),
               Expanded(
                 child: Padding(
@@ -705,7 +708,7 @@ class _DetailPageState extends State<DetailPage> {
     final pickupTime = '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
     final itemsSummary = itemsList.map((item) => '${item.name} x ${item.quantity}').join(', ');
     final double itemTotalSum = itemsList.fold(0.0, (sum, item) => sum + item.price * item.quantity);
-    final double tax = itemTotalSum * 0.05;
+    final double tax = itemTotalSum * 0.03;
     final double billTotal = itemTotalSum + tax;
     final status = order['status']?.toString() ?? 'Pending';
 
@@ -929,8 +932,6 @@ class _DetailPageState extends State<DetailPage> {
           const SizedBox(height: 24),
           Text("Pickup Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
           const SizedBox(height: 12),
-          Text("John Doe (Employee ID: 12345)", style: TextStyle(color: subText, fontSize: 14)),
-          const SizedBox(height: 12),
           Text("Pickup By: $pickupTime, $orderDate", style: TextStyle(color: subText, fontSize: 13)),
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
@@ -943,7 +944,7 @@ class _DetailPageState extends State<DetailPage> {
           const SizedBox(height: 20),
           _billRow("Item Total", "₹ ${itemTotalSum.toStringAsFixed(2)}", textColor, isBold: true),
           const SizedBox(height: 12),
-          _billRow("Taxes (5% GST)", "₹ ${tax.toStringAsFixed(2)}", subText),
+          _billRow("Platform Fee (3%)", "₹ ${tax.toStringAsFixed(2)}", subText),
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 20),

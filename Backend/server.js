@@ -145,6 +145,19 @@ async function sendPushNotification(userIds, title, message, data = {}) {
     await firebase.messaging().sendEachForMulticast({
       tokens,
       notification: { title, body: message },
+      android: {
+        priority: 'high',
+        notification: {
+          channelId: 'orders',
+          sound: 'default',
+          priority: 'high',
+          defaultVibrateTimings: true,
+        },
+      },
+      apns: {
+        headers: { 'apns-priority': '10', 'apns-push-type': 'alert' },
+        payload: { aps: { sound: 'default', badge: 1, contentAvailable: true } },
+      },
       data: Object.fromEntries(
         Object.entries(data).map(([key, value]) => [key, String(value)])
       ),
@@ -219,7 +232,6 @@ async function createOrder(req, res) {
     cafeId,
     cafeteriaName,
     items,
-    platformFee = 3,
     discount = 0,
     payment = {},
     location,
@@ -251,7 +263,8 @@ async function createOrder(req, res) {
   }
 
   const itemTotal = toMoney(normalizedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
-  const total = toMoney(itemTotal + Number(platformFee) - Number(discount));
+  const platformFee = toMoney(itemTotal * 0.03);
+  const total = toMoney(itemTotal + platformFee - Number(discount));
   if (total <= 0) {
     return res.status(400).json({ message: 'Order total must be greater than zero' });
   }
@@ -535,19 +548,30 @@ app.patch('/api/orders/:orderId/status', requireFirebaseAuth, asyncHandler(async
 
   if (!order) return res.status(404).json({ message: 'Order not found' });
   if (order.userId) {
+    const statusContent = {
+      Pending:   { title: 'Order Received 📋',        body: `Order #${order.orderId} is pending confirmation.` },
+      Preparing: { title: 'Being Prepared 👨‍🍳',        body: `Order #${order.orderId} — the kitchen is on it!` },
+      Ready:     { title: 'Ready for Pickup! 🎉',      body: `Order #${order.orderId} — come collect your order now!` },
+      Completed: { title: 'Order Completed ✅',         body: `Order #${order.orderId} — enjoy your meal!` },
+      Rejected:  { title: 'Order Rejected ❌',          body: `Order #${order.orderId} was rejected. Please contact support.` },
+    };
+    const { title, body } = statusContent[order.status] ?? {
+      title: 'Order Update',
+      body: `Order #${order.orderId} is now ${order.status}.`,
+    };
     await Notification.create({
       userId: order.userId,
-      title: 'Order status updated',
-      message: `Your order ${order.orderId} is now ${order.status}.`,
+      title,
+      message: body,
       type: 'order',
       orderId: order._id,
       items: order.items.map(item => item.name),
     });
     await sendPushNotification(
       [order.userId],
-      'Order status updated',
-      `Your order ${order.orderId} is now ${order.status}.`,
-      { type: 'order', orderId: order.orderId }
+      title,
+      body,
+      { type: 'order', orderId: order.orderId, status: order.status }
     );
   }
   res.json(order);
