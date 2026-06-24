@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'analytics_page.dart';
 import '../login_page.dart';
+import '../about_page.dart';
 import 'menu_page.dart';
 import 'settings_page.dart';
 import 'sales_report.dart';
@@ -213,18 +215,30 @@ class _VendorHomePageState extends State<VendorHomePage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Icon(
-                    Icons.storefront_rounded,
-                    color: primaryBlue,
-                    size: 28,
-                  ),
-                ),
+                Builder(builder: (context) {
+                  final src = VendorData.displayImage;
+                  Widget imgChild;
+                  if (src.startsWith('data:image/')) {
+                    final b64 = src.split(',').last;
+                    imgChild = Image.memory(base64Decode(b64), fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
+                  } else if (src.isNotEmpty) {
+                    imgChild = Image.network(src, fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
+                  } else {
+                    imgChild = Icon(Icons.storefront_rounded, color: primaryBlue, size: 28);
+                  }
+                  return Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: primaryBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: imgChild,
+                  );
+                }),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -242,13 +256,15 @@ class _VendorHomePageState extends State<VendorHomePage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        "Vendor Portal",
+                        VendorData.displayCuisine.isNotEmpty ? VendorData.displayCuisine : 'Vendor Portal',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           color: textColor.withValues(alpha: 0.6),
                         ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
@@ -311,8 +327,32 @@ class _VendorHomePageState extends State<VendorHomePage> {
                   textColor,
                   isDark,
                 ),
-                buildMenu(Icons.logout_rounded, "Logout", 6, textColor, isDark),
+                buildMenu(Icons.info_outline_rounded, "About Us", 6, textColor, isDark),
+                buildMenu(Icons.logout_rounded, "Logout", 7, textColor, isDark),
               ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: GestureDetector(
+              onTap: widget.toggleTheme,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFF0F4CFF), size: 22),
+                    const SizedBox(width: 16),
+                    Text(isDark ? 'Light Mode' : 'Dark Mode',
+                      style: TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87)),
+                  ],
+                ),
+              ),
             ),
           ),
         ],
@@ -336,6 +376,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
   ) {
     bool isSelected = selectedIndex == index;
     bool isLogout = title == "Logout";
+    bool isAbout = title == "About Us";
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InteractiveScale(
@@ -345,6 +386,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
             _confirmLogout().then((yes) {
               if (yes == true) _logout();
             });
+            return;
+          }
+          if (isAbout) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage()));
             return;
           }
           if (_requiresBusinessDetails && title != "Settings") {
@@ -523,7 +568,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
               crossAxisCount: crossAxis,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
-              mainAxisExtent: 150,
+              childAspectRatio: isMobile ? 1.1 : 1.4,
             ),
             itemCount: 4,
             itemBuilder: (context, index) {
@@ -566,8 +611,8 @@ class _VendorHomePageState extends State<VendorHomePage> {
                     ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 16,
+                        horizontal: 16,
+                        vertical: 14,
                       ),
                       decoration: BoxDecoration(
                         color: cardColor,
@@ -582,50 +627,41 @@ class _VendorHomePageState extends State<VendorHomePage> {
                           ),
                         ],
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(12),
+                            padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: (data[index][3] as Color).withValues(
-                                alpha: 0.15,
-                              ),
+                              color: (data[index][3] as Color).withValues(alpha: 0.15),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(
-                              data[index][2] as IconData,
-                              color: data[index][3] as Color,
-                              size: 24,
-                            ),
+                            child: Icon(data[index][2] as IconData, color: data[index][3] as Color, size: 20),
                           ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  data[index][0] as String,
-                                  style: TextStyle(
-                                    fontFamily: 'Nunito',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w900,
-                                    color: textColor,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  data[index][1] as String,
-                                  style: TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: subText,
-                                  ),
-                                  softWrap: true,
-                                ),
-                              ],
+                          const SizedBox(height: 10),
+                          Text(
+                            data[index][0] as String,
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: isMobile ? 18 : 22,
+                              fontWeight: FontWeight.w900,
+                              color: textColor,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            data[index][1] as String,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: subText,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ],
                       ),
@@ -671,8 +707,8 @@ class _VendorHomePageState extends State<VendorHomePage> {
                 (order) => {
                   "id": order["orderId"] ?? "",
                   "name": order["customerName"] ?? "Not set yet",
-                  "amount": order["total"] != null
-                      ? "Rs ${order["total"]}"
+                  "amount": order["itemTotal"] != null
+                      ? "Rs ${order["itemTotal"]}"
                       : "Not set yet",
                   "status": order["status"] ?? "Not set yet",
                   "items": order["items"] ?? [],
@@ -768,7 +804,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
             ),
             child: Center(
               child: Text(
-                name[0],
+                name.isNotEmpty ? name[0].toUpperCase() : '?',
                 style: TextStyle(
                   fontFamily: 'Nunito',
                   fontSize: 18,
@@ -807,38 +843,28 @@ class _VendorHomePageState extends State<VendorHomePage> {
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 amount,
                 style: TextStyle(
                   fontFamily: 'Nunito',
-                  fontSize: 16,
+                  fontSize: 15,
                   fontWeight: FontWeight.w900,
                   color: textColor,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(8)),
+                child: Text(
+                  status.toUpperCase(),
+                  style: TextStyle(fontFamily: 'Inter', fontSize: 10, fontWeight: FontWeight.bold, color: statusColor, letterSpacing: 0.5),
                 ),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Center(
-                  child: Text(
-                    status.toUpperCase(),
-                    style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: statusColor,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ))
+              ),
             ],
           ),
         ],

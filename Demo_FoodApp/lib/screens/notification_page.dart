@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../model/notification_model.dart';
 import '../services/session.dart';
-import 'cafeteria_page.dart'; // Import to use CustomFloatingNavBar
+import 'cafeteria_page.dart';
+import 'detail_page.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -139,35 +140,41 @@ class _NotificationPageState extends State<NotificationPage> {
     final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF10254E);
     final subTextColor = isDark ? Colors.white70 : const Color(0xFF6B7280);
+    final isUnread = notif['isRead'] != true;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
+        border: isUnread
+            ? Border.all(color: const Color(0xFF0F4CFF).withValues(alpha: 0.35), width: 1.5)
+            : null,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06),
-            blurRadius: 20, 
+            blurRadius: 20,
             offset: const Offset(0, 10)
           )
         ],
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
-        onTap: () {
+        onTap: () async {
+          final id = notif['_id']?.toString() ?? '';
+          if (isUnread && id.isNotEmpty) {
+            await NotificationModel.markAsRead(id);
+            if (mounted) setState(() {});
+          }
+          if (!mounted) return;
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => NotificationDetailPage(
-                title: notif["title"] ?? "",
-                items: List<String>.from(notif["items"] ?? []),
-              ),
-            ),
+            MaterialPageRoute(builder: (_) => const DetailPage(title: "Order Details")),
           );
         },
-        child: Row(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
           children: [
             Container(
               width: 50,
@@ -205,8 +212,15 @@ class _NotificationPageState extends State<NotificationPage> {
                 ],
               ),
             ),
+            if (isUnread)
+              Container(
+                width: 8, height: 8,
+                margin: const EdgeInsets.only(left: 8),
+                decoration: const BoxDecoration(color: Color(0xFF0F4CFF), shape: BoxShape.circle),
+              ),
             Icon(Icons.arrow_forward_ios_rounded, size: 16, color: subTextColor.withValues(alpha: 0.5)),
           ],
+          ),
         ),
       ),
     );

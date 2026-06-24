@@ -1,8 +1,11 @@
+import 'dart:async';
+import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'analytics_page.dart';
 import '../login_page.dart';
+import '../about_page.dart';
 import 'menu_page.dart';
 import 'settings_page.dart';
 import 'sales_report.dart';
@@ -10,6 +13,7 @@ import 'order_page.dart';
 import 'vendor_home_page.dart';
 import 'vendor_data.dart';
 import '../../services/session.dart';
+import '../../services/api_service.dart';
 
 class VendorPageWrapper extends StatefulWidget {
   final Widget child;
@@ -32,6 +36,8 @@ class VendorPageWrapper extends StatefulWidget {
 class _VendorPageWrapperState extends State<VendorPageWrapper> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
   late int selectedIndex;
+  int _pendingOrderCount = 0;
+  Timer? _orderPollTimer;
 
   bool get _requiresBusinessDetails => !VendorData.isBusinessDetailsComplete;
 
@@ -44,6 +50,23 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
         _promptCompleteBusinessDetails();
       }
     });
+    _pollPendingOrders();
+    _orderPollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollPendingOrders());
+  }
+
+  @override
+  void dispose() {
+    _orderPollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _pollPendingOrders() async {
+    final cafeId = AppSession.cafe?['_id']?.toString();
+    if (cafeId == null || cafeId.isEmpty) return;
+    try {
+      final orders = await ApiService.getOrders(cafeId: cafeId, status: 'Pending');
+      if (mounted) setState(() => _pendingOrderCount = orders.length);
+    } catch (_) {}
   }
 
   void _promptCompleteBusinessDetails() {
@@ -79,25 +102,68 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
   }
 
   Future<bool?> _confirmLogout() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF081F47);
+    final subText = isDark ? Colors.white60 : const Color(0xFF6B7280);
+
     return showDialog<bool>(
       context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text('Confirm Logout'),
-          content: const Text('Do you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+      barrierColor: Colors.black54,
+      builder: (_) => AlertDialog(
+        backgroundColor: cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56, height: 56,
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Logout'),
-            ),
+            const SizedBox(height: 16),
+            Text('Confirm Logout',
+                style: TextStyle(fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
+            const SizedBox(height: 8),
+            Text('Are you sure you want to log out?\nYour session data will be cleared.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: subText)),
+            const SizedBox(height: 24),
+            Row(children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: primaryBlue,
+                    side: BorderSide(color: primaryBlue.withValues(alpha: 0.4)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Cancel', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Logout', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ]),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -143,13 +209,31 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: Icon(
-                    isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                    color: primaryBlue,
+                if (_pendingOrderCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IconButton(
+                          icon: Icon(Icons.notifications_active_rounded, color: primaryBlue),
+                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrdersPage(toggleTheme: widget.toggleTheme))),
+                          tooltip: '$_pendingOrderCount pending order${_pendingOrderCount > 1 ? 's' : ''}',
+                        ),
+                        Positioned(
+                          top: 8, right: 8,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                            child: Text('$_pendingOrderCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, height: 1)),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                IconButton(
+                  icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: primaryBlue),
                   onPressed: widget.toggleTheme,
-                  tooltip: 'Toggle dark mode',
                 ),
               ],
             )
@@ -195,21 +279,19 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                     color: primaryBlue.withValues(alpha: 0.1),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: VendorData.displayImage.isNotEmpty
-                      ? Image.network(
-                          VendorData.displayImage,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            Icons.storefront_rounded,
-                            color: primaryBlue,
-                            size: 28,
-                          ),
-                        )
-                      : Icon(
-                          Icons.storefront_rounded,
-                          color: primaryBlue,
-                          size: 28,
-                        ),
+                  child: Builder(builder: (context) {
+                    final src = VendorData.displayImage;
+                    if (src.startsWith('data:image/')) {
+                      final b64 = src.split(',').last;
+                      return Image.memory(base64Decode(b64), fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
+                    }
+                    if (src.isNotEmpty) {
+                      return Image.network(src, fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
+                    }
+                    return Icon(Icons.storefront_rounded, color: primaryBlue, size: 28);
+                  }),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -228,14 +310,14 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        VendorData.displayCuisine,
+                        VendorData.displayCuisine.isNotEmpty ? VendorData.displayCuisine : 'Vendor Portal',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           color: textColor.withValues(alpha: 0.6),
                         ),
-                        maxLines: 1,
+                        maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -299,12 +381,34 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                   textColor,
                   isDark,
                 ),
-                buildMenu(Icons.logout_rounded, "Logout", 6, textColor, isDark),
+                buildMenu(Icons.list, "About Us", 6, textColor, isDark),
+                buildMenu(Icons.logout_rounded, "Logout", 7, textColor, isDark),
               ],
             ),
           ),
-          // Toggle Theme button removed from sidebar per request.
-          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: GestureDetector(
+              onTap: widget.toggleTheme,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: primaryBlue, size: 22),
+                    const SizedBox(width: 16),
+                    Text(isDark ? 'Light Mode' : 'Dark Mode',
+                      style: TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87)),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -326,6 +430,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
   ) {
     bool isSelected = selectedIndex == index;
     final isLogout = title == "Logout";
+    final isAbout = title == "About Us";
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: InteractiveScale(
@@ -335,6 +440,10 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             _confirmLogout().then((yes) {
               if (yes == true) _logout();
             });
+            return;
+          }
+          if (isAbout) {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage()));
             return;
           }
           if (_requiresBusinessDetails && title != "Settings") {
@@ -402,19 +511,34 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                 size: 22,
               ),
               const SizedBox(width: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  color: isSelected
-                      ? Colors.white
-                      : isLogout
-                      ? Colors.redAccent
-                      : (isDark ? Colors.white70 : Colors.black87),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                    color: isSelected
+                        ? Colors.white
+                        : isLogout
+                        ? Colors.redAccent
+                        : (isDark ? Colors.white70 : Colors.black87),
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              if (title == "Orders" && _pendingOrderCount > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white.withValues(alpha: 0.3) : Colors.redAccent,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '$_pendingOrderCount',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
             ],
           ),
         ),

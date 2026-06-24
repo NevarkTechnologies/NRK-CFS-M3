@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import '../model/favorite_model.dart';
@@ -26,6 +27,8 @@ class DetailPage extends StatefulWidget {
 }
 
 class _DetailPageState extends State<DetailPage> {
+  static const double _convenienceFee = 1.5;
+
   bool isEdit = false;
   bool isSaving = false;
   Map<String, int> cartItems = {};
@@ -56,9 +59,13 @@ class _DetailPageState extends State<DetailPage> {
     email = TextEditingController(text: AppSession.email);
     street1 = TextEditingController(text: address["street1"]?.toString() ?? "");
     street2 = TextEditingController(text: address["street2"]?.toString() ?? "");
-    district = TextEditingController(text: address["district"]?.toString() ?? "");
+    district = TextEditingController(
+      text: address["district"]?.toString() ?? "",
+    );
     state = TextEditingController(text: address["state"]?.toString() ?? "");
-    country = TextEditingController(text: address["country"]?.toString() ?? "India");
+    country = TextEditingController(
+      text: address["country"]?.toString() ?? "India",
+    );
     pincode = TextEditingController(text: address["pincode"]?.toString() ?? "");
     card = TextEditingController(text: AppSession.paymentLabel);
 
@@ -115,7 +122,11 @@ class _DetailPageState extends State<DetailPage> {
     super.dispose();
   }
 
-  void _handleReorder(BuildContext context, List<OrderItem> items, String cafeteriaName) {
+  void _handleReorder(
+    BuildContext context,
+    List<OrderItem> items,
+    String cafeteriaName,
+  ) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -157,9 +168,9 @@ class _DetailPageState extends State<DetailPage> {
       await AppSession.setUser(updated);
       if (!mounted) return;
       setState(() => isEdit = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile updated")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Profile updated")));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -173,15 +184,34 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
+  bool get _isFullPage =>
+      widget.title == "Order Details" || widget.title == "Favorite Items";
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF020617) : const Color(0xFFF4F6F9);
     final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final cartCount = globalCartItems.fold<int>(0, (s, i) => s + (i["qty"] as int));
 
     return Scaffold(
       backgroundColor: bg,
       extendBody: true,
+      floatingActionButton: widget.title == "Favorite Items" && cartCount > 0
+          ? FloatingActionButton.extended(
+              backgroundColor: primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.shopping_cart_rounded),
+              label: Text(
+                'Cart ($cartCount)',
+                style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => CartPage(toggleTheme: () {})),
+              ).then((_) => setState(() {})),
+            )
+          : null,
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 1000),
@@ -190,107 +220,91 @@ class _DetailPageState extends State<DetailPage> {
               SafeArea(
                 bottom: false,
                 child: Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 10,
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.white10 : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          Icons.arrow_back,
-                          color: primary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: isDark ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Column(
+                  margin: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                  ),
+                  child: Row(
                     children: [
-                      Expanded(
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
                         child: Container(
-                          padding: const EdgeInsets.all(20),
+                          padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: cardColor,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
-                                blurRadius: 25,
-                                offset: const Offset(0, 12),
-                              ),
-                            ],
+                            color: isDark ? Colors.white10 : Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: SingleChildScrollView(
-                            child: _buildContent(),
-                          ),
+                          child: Icon(Icons.arrow_back, color: primary),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      if (_hasEditableContent())
-                        SizedBox(
-                          width: 280,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primary,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                            ),
-                            onPressed: isSaving ? null : _handleEditButton,
-                            child: Text(
-                              isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Edit"),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 120),
+                      const SizedBox(width: 12),
+                      Text(
+                        widget.title,
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
+                      ),
                     ],
                   ),
                 ),
+              ),
+              Expanded(
+                child: _isFullPage
+                    ? _buildFullPageContent(isDark)
+                    : Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Column(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  color: cardColor,
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08), blurRadius: 25, offset: const Offset(0, 12))],
+                                ),
+                                child: SingleChildScrollView(child: _buildContent()),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                            if (_hasEditableContent())
+                              SizedBox(
+                                width: 280,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: primary,
+                                    padding: const EdgeInsets.symmetric(vertical: 16),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                  ),
+                                  onPressed: isSaving ? null : _handleEditButton,
+                                  child: Text(
+                                    isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Edit"),
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                  ),
+                                ),
+                              ),
+                            const SizedBox(height: 120),
+                          ],
+                        ),
+                      ),
               ),
             ],
           ),
         ),
       ),
       bottomNavigationBar: CustomFloatingNavBar(
-        currentIndex: 2, 
+        currentIndex: 2,
         isDark: isDark,
         toggleTheme: () {},
       ),
+    );
+  }
+
+  Widget _buildFullPageContent(bool isDark) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
+      child: _buildContent(),
     );
   }
 
@@ -361,24 +375,32 @@ class _DetailPageState extends State<DetailPage> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: favorites.length,
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 400, 
+                maxCrossAxisExtent: 400,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
                 mainAxisExtent: 104, // Added more breathing room for the card
               ),
               itemBuilder: (context, index) {
                 final item = favorites[index];
-                final cartIndex = globalCartItems.indexWhere((e) => e["name"] == item["name"]);
-                final qty = cartIndex != -1 ? globalCartItems[cartIndex]["qty"] : 0;
+                final cartIndex = globalCartItems.indexWhere(
+                  (e) => e["name"] == item["name"],
+                );
+                final qty = cartIndex != -1
+                    ? globalCartItems[cartIndex]["qty"]
+                    : 0;
 
                 return Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : Colors.white, // Matched home page elevated card color
+                    color: isDark
+                        ? const Color(0xFF0F172A)
+                        : Colors.white, // Matched home page elevated card color
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.06), // Matched home page shadow
+                        color: Colors.black.withValues(
+                          alpha: isDark ? 0.3 : 0.06,
+                        ), // Matched home page shadow
                         blurRadius: 20,
                         offset: const Offset(0, 10),
                       ),
@@ -390,16 +412,36 @@ class _DetailPageState extends State<DetailPage> {
                         borderRadius: BorderRadius.circular(12),
                         child: Builder(
                           builder: (context) {
-                            final imageUrl = item["image"]?.toString().trim() ?? '';
+                            final imageUrl =
+                                item["image"]?.toString().trim() ?? '';
+
                             if (imageUrl.isEmpty) {
                               return const SizedBox(width: 65, height: 65);
                             }
+
+                            if (imageUrl.startsWith('data:image')) {
+                              try {
+                                final bytes = base64Decode(
+                                  imageUrl.split(',').last,
+                                );
+                                return Image.memory(
+                                  bytes,
+                                  width: 65,
+                                  height: 65,
+                                  fit: BoxFit.cover,
+                                );
+                              } catch (_) {
+                                return const SizedBox(width: 65, height: 65);
+                              }
+                            }
+
                             return Image.network(
                               imageUrl,
                               width: 65,
                               height: 65,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, _, _) => const SizedBox(width: 65, height: 65),
+                              errorBuilder: (_, _, _) =>
+                                  const SizedBox(width: 65, height: 65),
                             );
                           },
                         ),
@@ -425,7 +467,9 @@ class _DetailPageState extends State<DetailPage> {
                               item["category"],
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? Colors.white60 : Colors.grey.shade600,
+                                color: isDark
+                                    ? Colors.white60
+                                    : Colors.grey.shade600,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -444,7 +488,10 @@ class _DetailPageState extends State<DetailPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primary,
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
                                 minimumSize: Size.zero,
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                 shape: RoundedRectangleBorder(
@@ -453,7 +500,10 @@ class _DetailPageState extends State<DetailPage> {
                               ),
                               onPressed: () {
                                 setState(() {
-                                  final existingIndex = globalCartItems.indexWhere((e) => e["name"] == item["name"]);
+                                  final existingIndex = globalCartItems
+                                      .indexWhere(
+                                        (e) => e["name"] == item["name"],
+                                      );
                                   if (existingIndex != -1) {
                                     globalCartItems[existingIndex]["qty"] += 1;
                                   } else {
@@ -461,26 +511,45 @@ class _DetailPageState extends State<DetailPage> {
                                   }
                                 });
                               },
-                              child: const Text("ADD", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              child: const Text(
+                                "ADD",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
                             )
                           : Container(
                               decoration: BoxDecoration(
                                 color: primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: primary.withValues(alpha: 0.3)),
+                                border: Border.all(
+                                  color: primary.withValues(alpha: 0.3),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   IconButton(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
                                     constraints: const BoxConstraints(),
-                                    icon: Icon(Icons.remove, color: primary, size: 18),
+                                    icon: Icon(
+                                      Icons.remove,
+                                      color: primary,
+                                      size: 18,
+                                    ),
                                     onPressed: () {
                                       setState(() {
-                                        final index = globalCartItems.indexWhere((e) => e["name"] == item["name"]);
+                                        final index = globalCartItems
+                                            .indexWhere(
+                                              (e) => e["name"] == item["name"],
+                                            );
                                         if (index != -1) {
-                                          if (globalCartItems[index]["qty"] > 1) {
+                                          if (globalCartItems[index]["qty"] >
+                                              1) {
                                             globalCartItems[index]["qty"] -= 1;
                                           } else {
                                             globalCartItems.removeAt(index);
@@ -489,14 +558,30 @@ class _DetailPageState extends State<DetailPage> {
                                       });
                                     },
                                   ),
-                                  Text(qty.toString(), style: TextStyle(color: primary, fontWeight: FontWeight.bold)),
+                                  Text(
+                                    qty.toString(),
+                                    style: TextStyle(
+                                      color: primary,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                   IconButton(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
                                     constraints: const BoxConstraints(),
-                                    icon: Icon(Icons.add, color: primary, size: 18),
+                                    icon: Icon(
+                                      Icons.add,
+                                      color: primary,
+                                      size: 18,
+                                    ),
                                     onPressed: () {
                                       setState(() {
-                                        final index = globalCartItems.indexWhere((e) => e["name"] == item["name"]);
+                                        final index = globalCartItems
+                                            .indexWhere(
+                                              (e) => e["name"] == item["name"],
+                                            );
                                         if (index != -1) {
                                           globalCartItems[index]["qty"] += 1;
                                         }
@@ -505,7 +590,7 @@ class _DetailPageState extends State<DetailPage> {
                                   ),
                                 ],
                               ),
-                            )
+                            ),
                     ],
                   ),
                 );
@@ -530,7 +615,10 @@ class _DetailPageState extends State<DetailPage> {
               padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               child: Text(
                 orderLoadingError!,
-                style: TextStyle(color: isDark ? Colors.redAccent : Colors.red, fontSize: 16),
+                style: TextStyle(
+                  color: isDark ? Colors.redAccent : Colors.red,
+                  fontSize: 16,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -543,7 +631,10 @@ class _DetailPageState extends State<DetailPage> {
               padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               child: Text(
                 'No orders found yet. Place an order from the cafeteria to see order history here.',
-                style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 15),
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.black54,
+                  fontSize: 15,
+                ),
                 textAlign: TextAlign.center,
               ),
             ),
@@ -584,10 +675,15 @@ class _DetailPageState extends State<DetailPage> {
       style: TextStyle(color: isDark ? Colors.white : Colors.black),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: isDark ? Colors.grey.shade300 : Colors.grey.shade700),
+        labelStyle: TextStyle(
+          color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
+        ),
         filled: true,
         fillColor: isDark ? const Color(0xFF1E293B) : Colors.grey.shade100,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
       ),
     );
   }
@@ -616,7 +712,9 @@ class _DetailPageState extends State<DetailPage> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -626,18 +724,36 @@ class _DetailPageState extends State<DetailPage> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset(imageUrl, width: 70, height: 70, fit: BoxFit.cover),
+                child: Image.asset(
+                  imageUrl,
+                  width: 70,
+                  height: 70,
+                  fit: BoxFit.cover,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(cafeteriaName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
+                    Text(
+                      cafeteriaName,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: textColor,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(pickupLocation, style: TextStyle(color: greyText, fontSize: 13)),
+                    Text(
+                      pickupLocation,
+                      style: TextStyle(color: greyText, fontSize: 13),
+                    ),
                     const SizedBox(height: 6),
-                    Text("ORDER #$orderId | $orderDate", style: TextStyle(color: greyText, fontSize: 12)),
+                    Text(
+                      "ORDER #$orderId | $orderDate",
+                      style: TextStyle(color: greyText, fontSize: 12),
+                    ),
                     const SizedBox(height: 12),
                     Wrap(
                       crossAxisAlignment: WrapCrossAlignment.center,
@@ -645,15 +761,42 @@ class _DetailPageState extends State<DetailPage> {
                       runSpacing: 8,
                       children: [
                         GestureDetector(
-                          onTap: () => _openDetailsSidebar(context, imageUrl, orderId, cafeteriaName, pickupLocation, orderDate, pickupTime, itemsList, itemTotalSum, tax, billTotal, isDark),
-                          child: Text("VIEW DETAILS", style: TextStyle(color: primary, fontSize: 13, fontWeight: FontWeight.bold)),
+                          onTap: () => _openDetailsSidebar(
+                            context,
+                            imageUrl,
+                            orderId,
+                            cafeteriaName,
+                            pickupLocation,
+                            orderDate,
+                            pickupTime,
+                            itemsList,
+                            itemTotalSum,
+                            tax,
+                            billTotal,
+                            isDark,
+                          ),
+                          child: Text(
+                            "VIEW DETAILS",
+                            style: TextStyle(
+                              color: primary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
                         Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text("Ready for Pickup", style: TextStyle(color: greyText, fontSize: 13)),
+                            Text(
+                              "Ready for Pickup",
+                              style: TextStyle(color: greyText, fontSize: 13),
+                            ),
                             const SizedBox(width: 6),
-                            const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                            const Icon(
+                              Icons.check_circle,
+                              color: Colors.green,
+                              size: 18,
+                            ),
                           ],
                         ),
                       ],
@@ -665,15 +808,30 @@ class _DetailPageState extends State<DetailPage> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: isDark ? Colors.white10 : Colors.grey.shade300),
+            child: Divider(
+              height: 1,
+              color: isDark ? Colors.white10 : Colors.grey.shade300,
+            ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: Text(itemsSummary, style: TextStyle(fontSize: 14, color: textColor))),
+              Expanded(
+                child: Text(
+                  itemsSummary,
+                  style: TextStyle(fontSize: 14, color: textColor),
+                ),
+              ),
               const SizedBox(width: 16),
-              Text("Total Paid: $total", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+              Text(
+                "Total Paid: $total",
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  color: textColor,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -681,14 +839,64 @@ class _DetailPageState extends State<DetailPage> {
             style: ElevatedButton.styleFrom(
               backgroundColor: primary,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               elevation: 0,
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
             ),
             onPressed: () => _handleReorder(context, itemsList, cafeteriaName),
-            child: const Text("REORDER", style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              "REORDER",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _cafeImageWidget(String src, double size) {
+    if (src.startsWith('data:image/')) {
+      final b64 = src.split(',').last;
+      return Image.memory(
+        base64Decode(b64),
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _cafeImagePlaceholder(size),
+      );
+    }
+    if (src.contains('assets/')) {
+      return Image.asset(
+        src,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _cafeImagePlaceholder(size),
+      );
+    }
+    if (src.isNotEmpty) {
+      return Image.network(
+        src,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _cafeImagePlaceholder(size),
+      );
+    }
+    return _cafeImagePlaceholder(size);
+  }
+
+  Widget _cafeImagePlaceholder(double size) {
+    return Container(
+      width: size,
+      height: size,
+      color: const Color(0xFFE8F0FF),
+      child: const Icon(
+        Icons.storefront_rounded,
+        color: Color(0xFF0F4CFF),
+        size: 32,
       ),
     );
   }
@@ -699,17 +907,32 @@ class _DetailPageState extends State<DetailPage> {
       return OrderItem(
         name: itemMap['name']?.toString() ?? '',
         price: double.tryParse(itemMap['price']?.toString() ?? '0') ?? 0,
-        quantity: int.tryParse(itemMap['qty']?.toString() ?? itemMap['quantity']?.toString() ?? '1') ?? 1,
+        quantity:
+            int.tryParse(
+              itemMap['qty']?.toString() ??
+                  itemMap['quantity']?.toString() ??
+                  '1',
+            ) ??
+            1,
       );
     }).toList();
 
-    final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '') ?? DateTime.now();
-    final orderDate = '${createdAt.day}/${createdAt.month}/${createdAt.year}, ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
-    final pickupTime = '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
-    final itemsSummary = itemsList.map((item) => '${item.name} x ${item.quantity}').join(', ');
-    final double itemTotalSum = itemsList.fold(0.0, (sum, item) => sum + item.price * item.quantity);
+    final createdAt =
+        DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
+        DateTime.now();
+    final orderDate =
+        '${createdAt.day}/${createdAt.month}/${createdAt.year}, ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+    final pickupTime =
+        '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+    final itemsSummary = itemsList
+        .map((item) => '${item.name} x ${item.quantity}')
+        .join(', ');
+    final double itemTotalSum = itemsList.fold(
+      0.0,
+      (sum, item) => sum + item.price * item.quantity,
+    );
     final double tax = itemTotalSum * 0.03;
-    final double billTotal = itemTotalSum + tax;
+    final double billTotal = itemTotalSum + tax + _convenienceFee;
     final status = order['status']?.toString() ?? 'Pending';
 
     return Container(
@@ -718,7 +941,9 @@ class _DetailPageState extends State<DetailPage> {
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.grey.shade200),
+        border: Border.all(
+          color: isDark ? Colors.white10 : Colors.grey.shade200,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,27 +952,61 @@ class _DetailPageState extends State<DetailPage> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset('assets/cafes/cafe1.jpg', width: 70, height: 70, fit: BoxFit.cover),
+                child: Builder(
+                  builder: (_) {
+                    final cafeData = order['cafeId'] is Map
+                        ? order['cafeId'] as Map<String, dynamic>
+                        : null;
+                    final img = cafeData?['image']?.toString() ?? '';
+                    return _cafeImageWidget(img, 70);
+                  },
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(order['cafeteriaName']?.toString() ?? 'Cafeteria',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: isDark ? Colors.white : Colors.black)),
+                    Text(
+                      order['cafeteriaName']?.toString() ?? 'Cafeteria',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(order['location']?.toString() ?? 'Pickup counter',
-                        style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 13)),
+                    Text(
+                      order['location']?.toString() ?? 'Pickup counter',
+                      style: TextStyle(
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
                     const SizedBox(height: 6),
-                    Text('ORDER #${order['orderId']} • $orderDate',
-                        style: TextStyle(color: isDark ? Colors.grey.shade400 : Colors.grey.shade600, fontSize: 12)),
+                    Text(
+                      'ORDER #${order['orderId']} • $orderDate',
+                      style: TextStyle(
+                        color: isDark
+                            ? Colors.grey.shade400
+                            : Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
                         _buildOrderStatusChip(status),
                         const SizedBox(width: 12),
-                        Text(status, style: TextStyle(color: isDark ? Colors.white70 : Colors.black54, fontSize: 13)),
+                        Text(
+                          status,
+                          style: TextStyle(
+                            color: isDark ? Colors.white70 : Colors.black54,
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -757,37 +1016,62 @@ class _DetailPageState extends State<DetailPage> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(height: 1, color: isDark ? Colors.white10 : Colors.grey.shade300),
+            child: Divider(
+              height: 1,
+              color: isDark ? Colors.white10 : Colors.grey.shade300,
+            ),
           ),
-          Text(itemsSummary, style: TextStyle(fontSize: 14, color: isDark ? Colors.white : Colors.black)),
+          Text(
+            itemsSummary,
+            style: TextStyle(
+              fontSize: 14,
+              color: isDark ? Colors.white : Colors.black,
+            ),
+          ),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total: ₹${billTotal.toStringAsFixed(2)}',
-                  style: TextStyle(fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black)),
+              Text(
+                'Total: ₹${billTotal.toStringAsFixed(2)}',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+              ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
-                onPressed: () => _openDetailsSidebar(
-                  context,
-                  'assets/cafes/cafe1.jpg',
-                  order['orderId']?.toString() ?? '',
-                  order['cafeteriaName']?.toString() ?? 'Cafeteria',
-                  order['location']?.toString() ?? 'Pickup counter',
-                  orderDate,
-                  pickupTime,
-                  itemsList,
-                  itemTotalSum,
-                  tax,
-                  billTotal,
-                  isDark,
-                  status,
-                ),
+                onPressed: () {
+                  final cafeData = order['cafeId'] is Map
+                      ? order['cafeId'] as Map<String, dynamic>
+                      : null;
+                  final img = cafeData?['image']?.toString() ?? '';
+                  _openDetailsSidebar(
+                    context,
+                    img,
+                    order['orderId']?.toString() ?? '',
+                    order['cafeteriaName']?.toString() ?? 'Cafeteria',
+                    order['location']?.toString() ?? 'Pickup counter',
+                    orderDate,
+                    pickupTime,
+                    itemsList,
+                    itemTotalSum,
+                    tax,
+                    billTotal,
+                    isDark,
+                    status,
+                  );
+                },
                 child: const Text('VIEW DETAILS'),
               ),
             ],
@@ -820,12 +1104,36 @@ class _DetailPageState extends State<DetailPage> {
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
     );
   }
 
-  void _openDetailsSidebar(BuildContext context, String imageUrl, String orderId, String cafeteriaName, String pickupLocation, String orderDate, String pickupTime, List<OrderItem> itemsList, double itemTotalSum, double tax, double billTotal, bool isDark, [String status = 'Pending']) {
+  void _openDetailsSidebar(
+    BuildContext context,
+    String imageUrl,
+    String orderId,
+    String cafeteriaName,
+    String pickupLocation,
+    String orderDate,
+    String pickupTime,
+    List<OrderItem> itemsList,
+    double itemTotalSum,
+    double tax,
+    double billTotal,
+    bool isDark, [
+    String status = 'Pending',
+  ]) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -839,23 +1147,52 @@ class _DetailPageState extends State<DetailPage> {
               width: 450,
               height: double.infinity,
               color: isDark ? const Color(0xFF0F172A) : Colors.white,
-              child: _buildSidebarContent(context, imageUrl, orderId, cafeteriaName, pickupLocation, orderDate, pickupTime, itemsList, itemTotalSum, tax, billTotal, isDark, status),
+              child: _buildSidebarContent(
+                context,
+                imageUrl,
+                orderId,
+                cafeteriaName,
+                pickupLocation,
+                orderDate,
+                pickupTime,
+                itemsList,
+                itemTotalSum,
+                tax,
+                billTotal,
+                isDark,
+                status,
+              ),
             ),
           ),
         );
       },
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         return SlideTransition(
-          position: Tween(begin: const Offset(1, 0), end: Offset.zero).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOut),
-          ),
+          position: Tween(
+            begin: const Offset(1, 0),
+            end: Offset.zero,
+          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
           child: child,
         );
       },
     );
   }
 
-  Widget _buildSidebarContent(BuildContext context, String imageUrl, String orderId, String cafeteriaName, String pickupLocation, String orderDate, String pickupTime, List<OrderItem> itemsList, double itemTotalSum, double tax, double billTotal, bool isDark, String status) {
+  Widget _buildSidebarContent(
+    BuildContext context,
+    String imageUrl,
+    String orderId,
+    String cafeteriaName,
+    String pickupLocation,
+    String orderDate,
+    String pickupTime,
+    List<OrderItem> itemsList,
+    double itemTotalSum,
+    double tax,
+    double billTotal,
+    bool isDark,
+    String status,
+  ) {
     final textColor = isDark ? Colors.white : Colors.black;
     final subText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
 
@@ -866,22 +1203,45 @@ class _DetailPageState extends State<DetailPage> {
         children: [
           Row(
             children: [
-              IconButton(icon: Icon(Icons.close, color: textColor), onPressed: () => Navigator.pop(context)),
+              IconButton(
+                icon: Icon(Icons.close, color: textColor),
+                onPressed: () => Navigator.pop(context),
+              ),
               const SizedBox(width: 8),
-              Text("Order #$orderId", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor)),
+              Text(
+                "Order #$orderId",
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: textColor,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 32),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.asset(imageUrl, width: 120, height: 120, fit: BoxFit.cover)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: _cafeImageWidget(imageUrl, 120),
+              ),
               const SizedBox(width: 20),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(cafeteriaName, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
-                  Text(pickupLocation, style: TextStyle(color: subText, fontSize: 13)),
+                  Text(
+                    cafeteriaName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: textColor,
+                    ),
+                  ),
+                  Text(
+                    pickupLocation,
+                    style: TextStyle(color: subText, fontSize: 13),
+                  ),
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -890,28 +1250,31 @@ class _DetailPageState extends State<DetailPage> {
                         color: status == 'Pending'
                             ? Colors.orange
                             : status == 'Preparing'
-                                ? primary
-                                : status == 'Ready'
-                                    ? Colors.teal
-                                    : status == 'Completed'
-                                        ? Colors.green
-                                        : Colors.grey,
+                            ? primary
+                            : status == 'Ready'
+                            ? Colors.teal
+                            : status == 'Completed'
+                            ? Colors.green
+                            : Colors.grey,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
-                      Text(status,
-                          style: TextStyle(
-                              color: status == 'Pending'
-                                  ? Colors.orange
-                                  : status == 'Preparing'
-                                      ? primary
-                                      : status == 'Ready'
-                                          ? Colors.teal
-                                          : status == 'Completed'
-                                              ? Colors.green
-                                              : Colors.grey,
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold)),
+                      Text(
+                        status,
+                        style: TextStyle(
+                          color: status == 'Pending'
+                              ? Colors.orange
+                              : status == 'Preparing'
+                              ? primary
+                              : status == 'Ready'
+                              ? Colors.teal
+                              : status == 'Completed'
+                              ? Colors.green
+                              : Colors.grey,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -921,44 +1284,115 @@ class _DetailPageState extends State<DetailPage> {
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 24),
-          Text("Order Progress", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
+          Text(
+            "Order Progress",
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: textColor,
+            ),
+          ),
           const SizedBox(height: 16),
           _progress("Payment Confirmed", true, textColor),
-          _progress("Preparing Food", status == 'Preparing' || status == 'Ready' || status == 'Completed', textColor),
-          _progress("Ready to Pickup", status == 'Ready' || status == 'Completed', textColor, isLast: true),
+          _progress(
+            "Preparing Food",
+            status == 'Preparing' || status == 'Ready' || status == 'Completed',
+            textColor,
+          ),
+          _progress(
+            "Ready to Pickup",
+            status == 'Ready' || status == 'Completed',
+            textColor,
+            isLast: true,
+          ),
 
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 24),
-          Text("Pickup Details", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+          Text(
+            "Pickup Details",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+              color: textColor,
+            ),
+          ),
           const SizedBox(height: 12),
-          Text("Pickup By: $pickupTime, $orderDate", style: TextStyle(color: subText, fontSize: 13)),
+          Text(
+            "Pickup By: $pickupTime, $orderDate",
+            style: TextStyle(color: subText, fontSize: 13),
+          ),
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 24),
-          Text("${itemsList.length} ITEMS", style: TextStyle(color: subText, fontSize: 12, fontWeight: FontWeight.bold)),
+          Text(
+            "${itemsList.length} ITEMS",
+            style: TextStyle(
+              color: subText,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           const SizedBox(height: 16),
-          Column(children: itemsList.map((item) => _billRow("${item.name} x ${item.quantity}", "₹ ${item.price.toStringAsFixed(2)}", textColor)).toList()),
+          Column(
+            children: itemsList
+                .map(
+                  (item) => _billRow(
+                    "${item.name} x ${item.quantity}",
+                    "₹ ${item.price.toStringAsFixed(2)}",
+                    textColor,
+                  ),
+                )
+                .toList(),
+          ),
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 20),
-          _billRow("Item Total", "₹ ${itemTotalSum.toStringAsFixed(2)}", textColor, isBold: true),
+          _billRow(
+            "Item Total",
+            "₹ ${itemTotalSum.toStringAsFixed(2)}",
+            textColor,
+            isBold: true,
+          ),
           const SizedBox(height: 12),
           _billRow("Platform Fee (3%)", "₹ ${tax.toStringAsFixed(2)}", subText),
+          const SizedBox(height: 12),
+          _billRow(
+            "Convenience Fee",
+            "₹ ${_convenienceFee.toStringAsFixed(2)}",
+            subText,
+          ),
           const SizedBox(height: 24),
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Paid Via UPI", style: TextStyle(color: subText, fontSize: 14)),
+              Text(
+                "Paid Via UPI",
+                style: TextStyle(color: subText, fontSize: 14),
+              ),
               Row(
                 children: [
-                  Text("BILL TOTAL", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
+                  Text(
+                    "BILL TOTAL",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: textColor,
+                    ),
+                  ),
                   const SizedBox(width: 16),
-                  Text("₹ ${billTotal.toStringAsFixed(2)}", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: textColor)),
+                  Text(
+                    "₹ ${billTotal.toStringAsFixed(2)}",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: textColor,
+                    ),
+                  ),
                 ],
-              )
+              ),
             ],
           ),
         ],
@@ -966,7 +1400,12 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
-  Widget _progress(String title, bool done, Color textColor, {bool isLast = false}) {
+  Widget _progress(
+    String title,
+    bool done,
+    Color textColor, {
+    bool isLast = false,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -978,9 +1417,14 @@ class _DetailPageState extends State<DetailPage> {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: done ? primary : Colors.transparent,
-                border: Border.all(color: done ? primary : Colors.grey, width: 2),
+                border: Border.all(
+                  color: done ? primary : Colors.grey,
+                  width: 2,
+                ),
               ),
-              child: done ? const Icon(Icons.check, size: 14, color: Colors.white) : null,
+              child: done
+                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  : null,
             ),
             if (!isLast) Container(width: 2, height: 40, color: Colors.grey),
           ],
@@ -989,25 +1433,52 @@ class _DetailPageState extends State<DetailPage> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(color: textColor, fontWeight: FontWeight.w500)),
-            Text(done ? "Completed" : "Pending", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(
+              title,
+              style: TextStyle(color: textColor, fontWeight: FontWeight.w500),
+            ),
+            Text(
+              done ? "Completed" : "Pending",
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
           ],
-        )
+        ),
       ],
     );
   }
 
-  Widget _billRow(String title, String amount, Color color, {bool isBold = false}) {
+  Widget _billRow(
+    String title,
+    String amount,
+    Color color, {
+    bool isBold = false,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: TextStyle(color: color, fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-        Text(amount, style: TextStyle(color: color, fontSize: 14, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+        Text(
+          title,
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+        Text(
+          amount,
+          style: TextStyle(
+            color: color,
+            fontSize: 14,
+            fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
       ],
     );
   }
 
   bool _hasEditableContent() {
-    return widget.title == "Personal Info" || widget.title == "Saved Addresses" || widget.title == "Payment Methods";
+    return widget.title == "Personal Info" ||
+        widget.title == "Saved Addresses" ||
+        widget.title == "Payment Methods";
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import '../../services/session.dart';
 import '../../services/api_service.dart';
 import 'vendor_data.dart';
@@ -42,27 +43,57 @@ class _SettingsPageState extends State<SettingsPage> {
     'Seafood',
     'Vegetarian',
     'Vegan',
-    'Fusion'
+    'Fusion',
   ];
 
   bool orderNotif = true;
   bool emailNotif = true;
   bool smsNotif = true;
+
+  String? _pickedImageBase64;
+  String _currentImageUrl = '';
+  bool isUploadingImage = false;
+
   @override
   void initState() {
     super.initState();
-    nameCtrl = TextEditingController(text: VendorData.displayName == "Not set yet" ? "" : VendorData.displayName);
-    descCtrl = TextEditingController(text: VendorData.displayDescription == "Not set yet" ? "" : VendorData.displayDescription);
-    
+    _currentImageUrl = VendorData.displayImage;
+    nameCtrl = TextEditingController(
+      text: VendorData.displayName == "Not set yet"
+          ? ""
+          : VendorData.displayName,
+    );
+    descCtrl = TextEditingController(
+      text: VendorData.displayDescription == "Not set yet"
+          ? ""
+          : VendorData.displayDescription,
+    );
+
     // Phone field: Initialize with +91 prefix
     final phone = VendorData.displayPhone;
-    phoneCtrl = TextEditingController(text: (phone == "Not set yet" || phone.isEmpty) ? "+91" : phone);
-    
-    emailCtrl = TextEditingController(text: VendorData.displayEmail == "Not set yet" ? "" : VendorData.displayEmail);
-    addressCtrl = TextEditingController(text: VendorData.displayAddress == "Not set yet" ? "" : VendorData.displayAddress);
-    cityCtrl = TextEditingController(text: VendorData.displayCity == "Not set yet" ? "" : VendorData.displayCity);
-    pinCtrl = TextEditingController(text: VendorData.displayPin == "Not set yet" ? "" : VendorData.displayPin);
-    
+    phoneCtrl = TextEditingController(
+      text: (phone == "Not set yet" || phone.isEmpty) ? "+91" : phone,
+    );
+
+    emailCtrl = TextEditingController(
+      text: VendorData.displayEmail == "Not set yet"
+          ? ""
+          : VendorData.displayEmail,
+    );
+    addressCtrl = TextEditingController(
+      text: VendorData.displayAddress == "Not set yet"
+          ? ""
+          : VendorData.displayAddress,
+    );
+    cityCtrl = TextEditingController(
+      text: VendorData.displayCity == "Not set yet"
+          ? ""
+          : VendorData.displayCity,
+    );
+    pinCtrl = TextEditingController(
+      text: VendorData.displayPin == "Not set yet" ? "" : VendorData.displayPin,
+    );
+
     // Initialize selected cuisines
     final cuisineStr = VendorData.displayCuisine;
     if (cuisineStr != "Not set yet") {
@@ -72,13 +103,15 @@ class _SettingsPageState extends State<SettingsPage> {
 
   bool get _hasValidBusinessDetails {
     final phoneText = phoneCtrl.text.trim();
-    bool isPhoneValid = phoneText.isNotEmpty && 
+    bool isPhoneValid =
+        phoneText.isNotEmpty &&
         phoneText.startsWith('+91') &&
         phoneText.length == 13 &&
         int.tryParse(phoneText.substring(3)) != null;
 
     final pinText = pinCtrl.text.trim();
-    bool isPinValid = pinText.isNotEmpty &&
+    bool isPinValid =
+        pinText.isNotEmpty &&
         pinText.length == 6 &&
         int.tryParse(pinText) != null;
 
@@ -94,13 +127,179 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void toggleEdit() => setState(() => isEditing = !isEditing);
 
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+      maxWidth: 1200,
+    );
+    if (picked == null) return;
+    final bytes = await picked.readAsBytes();
+    final ext = picked.name.split('.').last.toLowerCase();
+    final mime = ext == 'png' ? 'image/png' : 'image/jpeg';
+    setState(() {
+      _pickedImageBase64 = 'data:$mime;base64,${base64Encode(bytes)}';
+    });
+  }
+
+  Widget _buildImageUploadSection(Color text, bool isDark) {
+    final hasImage = _pickedImageBase64 != null || _currentImageUrl.isNotEmpty;
+    final displayImage = _pickedImageBase64 ?? _currentImageUrl;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Cafeteria Photo',
+            style: TextStyle(
+              color: Colors.grey.shade500,
+              fontFamily: 'Inter',
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Container(
+            height: 160,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.05)
+                  : Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isEditing
+                    ? primaryBlue.withValues(alpha: 0.4)
+                    : Colors.grey.shade300,
+                width: 1.5,
+              ),
+            ),
+            child: Stack(
+              children: [
+                if (hasImage)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(13),
+                    child: _buildCafeImage(displayImage, double.infinity, 160),
+                  )
+                else
+                  Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.add_photo_alternate_outlined,
+                          size: 40,
+                          color: isDark ? Colors.white38 : Colors.grey.shade400,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No photo uploaded',
+                          style: TextStyle(
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade400,
+                            fontSize: 13,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (isEditing)
+                  Positioned(
+                    bottom: 10,
+                    right: 10,
+                    child: GestureDetector(
+                      onTap: _pickImage,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: primaryBlue,
+                          borderRadius: BorderRadius.circular(10),
+                          boxShadow: [
+                            BoxShadow(
+                              color: primaryBlue.withValues(alpha: 0.4),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(
+                              Icons.upload_rounded,
+                              color: Colors.white,
+                              size: 16,
+                            ),
+                            SizedBox(width: 6),
+                            Text(
+                              'Upload Photo',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCafeImage(String src, double width, double height) {
+    if (src.startsWith('data:image/')) {
+      final base64Data = src.split(',').last;
+      return Image.memory(
+        base64Decode(base64Data),
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(color: Colors.grey.shade200),
+      );
+    }
+    if (src.contains('assets/')) {
+      return Image.asset(
+        src,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(color: Colors.grey.shade200),
+      );
+    }
+    return Image.network(
+      src,
+      width: width,
+      height: height,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => Container(color: Colors.grey.shade200),
+    );
+  }
+
   Future<void> saveChanges() async {
     if (!_hasValidBusinessDetails) {
       String errorMsg = 'Please complete all fields correctly:\n';
-      if (nameCtrl.text.trim().isEmpty) errorMsg += '• Restaurant name required\n';
-      if (selectedCuisines.isEmpty) errorMsg += '• Select at least one cuisine\n';
+      if (nameCtrl.text.trim().isEmpty)
+        errorMsg += '• Restaurant name required\n';
+      if (selectedCuisines.isEmpty)
+        errorMsg += '• Select at least one cuisine\n';
       if (descCtrl.text.trim().isEmpty) errorMsg += '• Description required\n';
-      if (phoneCtrl.text.trim().isEmpty || !phoneCtrl.text.trim().startsWith('+91') || phoneCtrl.text.trim().length != 13) {
+      if (phoneCtrl.text.trim().isEmpty ||
+          !phoneCtrl.text.trim().startsWith('+91') ||
+          phoneCtrl.text.trim().length != 13) {
         errorMsg += '• Valid phone with +91 prefix (13 chars total)\n';
       }
       if (emailCtrl.text.trim().isEmpty) errorMsg += '• Email required\n';
@@ -147,13 +346,17 @@ class _SettingsPageState extends State<SettingsPage> {
         'location': addressCtrl.text.trim(),
         'city': cityCtrl.text.trim(),
         'pin': pinCtrl.text.trim(),
+        if (_pickedImageBase64 != null) 'image': _pickedImageBase64,
+        if (_pickedImageBase64 != null) 'imageType': 'base64',
       };
 
-      final cafeResponse = await http.patch(
-        Uri.parse('${ApiService.baseUrl}/cafes/$cafeId'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(cafeUpdate),
-      ).timeout(const Duration(seconds: 10));
+      final cafeResponse = await http
+          .patch(
+            Uri.parse('${ApiService.baseUrl}/cafes/$cafeId'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(cafeUpdate),
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (cafeResponse.statusCode != 200) {
         throw Exception('Failed to update cafe: ${cafeResponse.statusCode}');
@@ -163,11 +366,13 @@ class _SettingsPageState extends State<SettingsPage> {
       final userId = AppSession.userId;
       if (userId.isNotEmpty) {
         final userUpdate = {'phone': phoneCtrl.text.trim()};
-        final userResponse = await http.patch(
-          Uri.parse('${ApiService.baseUrl}/users/$userId'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode(userUpdate),
-        ).timeout(const Duration(seconds: 10));
+        final userResponse = await http
+            .patch(
+              Uri.parse('${ApiService.baseUrl}/users/$userId'),
+              headers: {'Content-Type': 'application/json'},
+              body: jsonEncode(userUpdate),
+            )
+            .timeout(const Duration(seconds: 10));
 
         if (userResponse.statusCode != 200) {
           throw Exception('Failed to update user: ${userResponse.statusCode}');
@@ -182,7 +387,13 @@ class _SettingsPageState extends State<SettingsPage> {
       cafe['location'] = addressCtrl.text.trim();
       cafe['city'] = cityCtrl.text.trim();
       cafe['pin'] = pinCtrl.text.trim();
-      
+      if (_pickedImageBase64 != null) {
+        cafe['image'] = _pickedImageBase64;
+        cafe['imageType'] = 'base64';
+        _currentImageUrl = _pickedImageBase64!;
+        _pickedImageBase64 = null;
+      }
+
       final current = AppSession.currentUser;
       if (current != null) {
         current['cafeId'] = cafe;
@@ -193,7 +404,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
       setState(() => isEditing = false);
       if (!mounted) return;
-      
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("Settings saved successfully!"),
@@ -246,6 +457,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       Icons.store_rounded,
                       Column(
                         children: [
+                          _buildImageUploadSection(textColor, isDark),
                           buildField(
                             "Restaurant Name",
                             nameCtrl,
@@ -285,7 +497,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                       textColor,
                                       isDark,
                                     ),
-                                    buildField("PIN", pinCtrl, textColor, isDark),
+                                    buildField(
+                                      "PIN",
+                                      pinCtrl,
+                                      textColor,
+                                      isDark,
+                                    ),
                                   ],
                                 )
                               : Row(
@@ -329,16 +546,17 @@ class _SettingsPageState extends State<SettingsPage> {
                             textColor,
                           ),
                           buildSwitch(
-                            "Email Notifications",
-                            emailNotif,
-                            (v) => setState(() => emailNotif = v),
-                            textColor,
+                            "Email Notifications (Coming Soon)",
+                            false,
+                            null,
+                            Colors.grey,
                           ),
+
                           buildSwitch(
-                            "SMS Alerts",
-                            smsNotif,
-                            (v) => setState(() => smsNotif = v),
-                            textColor,
+                            "SMS Alerts (Coming Soon)",
+                            false,
+                            null,
+                            Colors.grey,
                           ),
                         ],
                       ),
@@ -366,9 +584,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 size: 16,
               ),
               label: Text(
-                isSaving
-                    ? "Saving..."
-                    : (isEditing ? "Save" : "Edit Profile"),
+                isSaving ? "Saving..." : (isEditing ? "Save" : "Edit Profile"),
                 style: const TextStyle(
                   fontFamily: 'Nunito',
                   fontWeight: FontWeight.bold,
@@ -383,7 +599,10 @@ class _SettingsPageState extends State<SettingsPage> {
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14),
                 ),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 16,
+                ),
               ),
             ),
           ),
@@ -513,10 +732,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ? Colors.white.withValues(alpha: 0.05)
                   : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: Colors.grey.shade300,
-                width: 0.5,
-              ),
+              border: Border.all(color: Colors.grey.shade300, width: 0.5),
             ),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -565,7 +781,8 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget buildPhoneField(Color text, bool isDark) {
     final phoneText = phoneCtrl.text.trim();
     final digitsOnly = phoneText.replaceFirst(RegExp(r'^\+91'), '');
-    final isPhoneValid = phoneText.isNotEmpty &&
+    final isPhoneValid =
+        phoneText.isNotEmpty &&
         phoneText.startsWith('+91') &&
         phoneText.length == 13 &&
         int.tryParse(digitsOnly) != null;
@@ -623,8 +840,8 @@ class _SettingsPageState extends State<SettingsPage> {
           counterText: '',
           suffixIcon: phoneText.length > 3
               ? (isPhoneValid
-                  ? Icon(Icons.check_circle, color: Colors.green, size: 20)
-                  : Icon(Icons.error, color: Colors.red, size: 20))
+                    ? Icon(Icons.check_circle, color: Colors.green, size: 20)
+                    : Icon(Icons.error, color: Colors.red, size: 20))
               : null,
           helperText: (phoneText.length > 3 && !isPhoneValid)
               ? 'Phone must be exactly 10 digits'
@@ -642,24 +859,27 @@ class _SettingsPageState extends State<SettingsPage> {
   Widget buildSwitch(
     String title,
     bool value,
-    Function(bool) onChanged,
+    Function(bool)? onChanged,
     Color text,
   ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8.0),
-      child: SwitchListTile(
-        activeThumbColor: primaryBlue,
-        contentPadding: EdgeInsets.zero,
-        title: Text(
-          title,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontWeight: FontWeight.w600,
-            color: text,
+      child: Material(
+        color: Colors.transparent,
+        child: SwitchListTile(
+          activeThumbColor: primaryBlue,
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+              color: text,
+            ),
           ),
+          value: value,
+          onChanged: isEditing ? onChanged : null,
         ),
-        value: value,
-        onChanged: isEditing ? onChanged : null,
       ),
     );
   }

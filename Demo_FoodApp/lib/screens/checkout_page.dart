@@ -30,9 +30,51 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String selectedMethod = "";
   bool isSubmitting = false;
   final TextEditingController upiController = TextEditingController();
+  TimeOfDay? _pickupTime;
 
-  Map<String, dynamic>? _currentOrder;
+  // No _currentOrder field — the DB order is only created after payment succeeds.
   Map<String, dynamic>? _razorpayOrder;
+
+  String get _pickupTimeLabel {
+    if (_pickupTime == null) return 'Set Pickup Time';
+    final h = _pickupTime!.hourOfPeriod == 0 ? 12 : _pickupTime!.hourOfPeriod;
+    final m = _pickupTime!.minute.toString().padLeft(2, '0');
+    final period = _pickupTime!.period == DayPeriod.am ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  /// ISO-8601 string for today's date + chosen time, sent to backend.
+  String get _pickupTimeISO {
+    if (_pickupTime == null) return '';
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day, _pickupTime!.hour, _pickupTime!.minute).toIso8601String();
+  }
+
+  Future<void> _selectPickupTime() async {
+    final now = TimeOfDay.now();
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _pickupTime ?? TimeOfDay(hour: now.hour, minute: (now.minute ~/ 15 + 1) * 15 % 60),
+      helpText: 'SELECT PICKUP TIME',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
+    );
+    if (picked == null) return;
+    // Reject times in the past (same-day only comparison).
+    final nowMinutes = now.hour * 60 + now.minute;
+    final pickedMinutes = picked.hour * 60 + picked.minute;
+    if (pickedMinutes <= nowMinutes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pickup time must be later than the current time.'), backgroundColor: Colors.redAccent),
+        );
+      }
+      return;
+    }
+    setState(() => _pickupTime = picked);
+  }
 
   double get _itemTotal {
     if (widget.isReorder && widget.items != null) {
@@ -42,7 +84,8 @@ class _CheckoutPageState extends State<CheckoutPage> {
   }
 
   double get _platformFee => double.parse((_itemTotal * 0.03).toStringAsFixed(2));
-  double get _grandTotal => _itemTotal + _platformFee;
+  double get _convenienceFee => 1.5;
+  double get _grandTotal => _itemTotal + _platformFee + _convenienceFee;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
@@ -115,7 +158,7 @@ Container(
         ),
     ],
                   _orderSummaryCard(cardColor, textColor),
-                  _couponsCard(cardColor, textColor),
+                  _pickupTimeCard(cardColor, textColor),
                   _section("UPI", "upi", _upiUI(), cardColor, textColor),
                   const SizedBox(height: 100),
                 ],
@@ -149,15 +192,69 @@ Container(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: isSubmitting ? null : _handlePayment,
+                    onPressed: (isSubmitting || _pickupTime == null) ? null : _handlePayment,
                     child: Text(
-                      isSubmitting ? "Placing Order..." : "Pay  ₹${_grandTotal.toStringAsFixed(2)}",
+                      isSubmitting ? "Placing Order..." : _pickupTime == null ? "Set Pickup Time to Continue" : "Pay  ₹${_grandTotal.toStringAsFixed(2)}",
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _pickupTimeCard(Color cardColor, Color textColor) {
+    final bool set = _pickupTime != null;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: set ? primaryColor.withValues(alpha: 0.5) : Colors.redAccent.withValues(alpha: 0.4),
+          width: 1.5,
+        ),
+        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _selectPickupTime,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (set ? primaryColor : Colors.redAccent).withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.access_time_rounded, color: set ? primaryColor : Colors.redAccent, size: 20),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Pickup Time', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Text(
+                        set ? _pickupTimeLabel : 'Required — tap to set',
+                        style: TextStyle(fontSize: 13, color: set ? primaryColor : Colors.redAccent, fontWeight: set ? FontWeight.w600 : FontWeight.normal),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right_rounded, color: set ? primaryColor : Colors.redAccent),
+              ],
+            ),
           ),
         ),
       ),
@@ -228,6 +325,8 @@ Container(
           _summaryRow("Item Total", "₹${_itemTotal.toStringAsFixed(2)}", textColor),
           const SizedBox(height: 8),
           _summaryRow("Platform Fee (3%)", "₹${_platformFee.toStringAsFixed(2)}", subColor),
+          const SizedBox(height: 8),
+          _summaryRow("Convenience Fee", "₹${_convenienceFee.toStringAsFixed(2)}", subColor),
           const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider()),
           _summaryRow("Total", "₹${_grandTotal.toStringAsFixed(2)}", textColor, bold: true),
         ],
@@ -243,39 +342,8 @@ Container(
     );
   }
 
-  Widget _couponsCard(Color cardColor, Color textColor) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
-      ),
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          leading: Icon(Icons.local_offer_outlined, color: primaryColor),
-          title: Text("Available Coupons", style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: Text(
-                "No coupons available at the moment.",
-                style: TextStyle(color: isDark ? Colors.white54 : Colors.black45, fontSize: 13),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Future<void> _handlePayment() async {
-    if (selectedMethod.isEmpty) {
-      setState(() => selectedMethod = "upi");
-    }
-
     final orderItems = _orderItems();
     if (orderItems.isEmpty) {
       _showError("Your cart is empty");
@@ -284,7 +352,9 @@ Container(
 
     setState(() => isSubmitting = true);
     try {
-      final data = await ApiService.createOrderForPayment(
+      // Step 1: server computes totals, creates Razorpay order, stashes cart.
+      // No DB order is written here.
+      final data = await ApiService.initiatePayment(
         customerName: AppSession.name,
         customerEmail: AppSession.email,
         userId: AppSession.userId.isEmpty ? null : AppSession.userId,
@@ -292,24 +362,11 @@ Container(
         cafeteriaName: _cafeteriaName(),
         items: orderItems,
         location: widget.pickupLocation ?? "Pickup counter",
+        pickupTime: _pickupTimeISO,
       );
 
-      _currentOrder = Map<String, dynamic>.from(data['order'] as Map);
-      final razorpayOrder = data['razorpayOrder'];
-      _razorpayOrder = razorpayOrder is Map
-          ? Map<String, dynamic>.from(razorpayOrder)
-          : null;
-
-      if (_razorpayOrder != null) {
-        await _openRazorpayCheckout();
-      } else {
-        if (_currentOrder != null && mounted) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
-          );
-        }
-      }
+      _razorpayOrder = Map<String, dynamic>.from(data['razorpayOrder'] as Map);
+      await _openRazorpayCheckout();
     } catch (error) {
       _showError(error.toString().replaceFirst("Exception: ", ""));
     } finally {
@@ -399,30 +456,23 @@ Container(
 
   Future<void> _handleRazorpaySuccess(Map<String, dynamic> response) async {
     try {
-      await ApiService.verifyRazorpayPayment(
-        orderId: response['orderId']?.toString() ?? '',
-        paymentId: response['paymentId']?.toString() ?? '',
-        signature: response['signature']?.toString() ?? '',
+      // Step 2: server verifies HMAC signature, retrieves server-side cart,
+      // and creates the DB order only now — after confirmed payment.
+      final order = await ApiService.confirmOrder(
+        razorpayOrderId: response['orderId']?.toString() ?? '',
+        razorpayPaymentId: response['paymentId']?.toString() ?? '',
+        razorpaySignature: response['signature']?.toString() ?? '',
       );
 
-      if (_currentOrder != null) {
-        _currentOrder = await ApiService.updateOrderPayment(
-          orderId: _currentOrder!['orderId']?.toString() ?? '',
-          transactionId: response['paymentId']?.toString() ?? '',
-          status: 'Paid',
-          razorpayOrderId: response['orderId']?.toString() ?? '',
-          razorpaySignature: response['signature']?.toString() ?? '',
-        );
-      }
-
-      if (!mounted || _currentOrder == null) return;
+      if (!mounted) return;
       await _showOrderPlacedPopup();
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => SuccessPage(order: _currentOrder!)),
+        MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
       );
     } catch (error) {
-      _showError('Payment verification error: $error');
+      _showError('Payment verification error: ${error.toString().replaceFirst("Exception: ", "")}');
     }
   }
 

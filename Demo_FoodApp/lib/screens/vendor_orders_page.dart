@@ -37,7 +37,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
             height: 60,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(8),
               children: filters.map((f) {
                 final isSelected = f == selectedFilter;
 

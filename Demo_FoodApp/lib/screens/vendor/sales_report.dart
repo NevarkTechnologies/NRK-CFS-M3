@@ -66,9 +66,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
         0,
         (sum, order) =>
             sum +
-            (order['total'] is num
-                ? (order['total'] as num).toDouble()
-                : double.tryParse(order['total']?.toString() ?? '0') ?? 0),
+            (order['itemTotal'] is num
+                ? (order['itemTotal'] as num).toDouble()
+                : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0),
       );
       averageOrderValue = totalOrders == 0 ? 0 : totalRevenue / totalOrders;
 
@@ -179,9 +179,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
       final createdAt =
           DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
           DateTime.now();
-      final total = order['total'] is num
-          ? (order['total'] as num).toDouble()
-          : double.tryParse(order['total']?.toString() ?? '0') ?? 0;
+      final total = order['itemTotal'] is num
+          ? (order['itemTotal'] as num).toDouble()
+          : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
 
       revenueSpots.add(FlSpot(i.toDouble(), total));
       revenueLabels.add(
@@ -244,7 +244,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
       rows.add([
         order['orderId'] ?? order['_id'] ?? '',
         order['customerName'] ?? '',
-        order['total']?.toString() ?? '',
+        order['itemTotal']?.toString() ?? '',
         order['status'] ?? '',
         order['createdAt'] ?? '',
       ]);
@@ -315,13 +315,13 @@ class _SalesReportPageState extends State<SalesReportPage> {
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              double availableWidth = constraints.maxWidth;
+              double availableWidth = constraints.maxWidth.clamp(0, double.infinity);
               bool isMobile = MediaQuery.of(context).size.width < 850;
-              double cardWidth = isMobile
+              double cardWidth = (isMobile
                   ? (availableWidth - 16) / 2
-                  : (availableWidth - 32) / 3;
+                  : (availableWidth - 32) / 3).clamp(120.0, 400.0);
               double halfWidth =
-                  isMobile ? availableWidth : (availableWidth - 16) / 2;
+                  isMobile ? availableWidth : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
 
               // ── Shared toolbar actions ────────────────────────────────────
               Widget dropdownWidget = Container(
@@ -441,24 +441,24 @@ class _SalesReportPageState extends State<SalesReportPage> {
           ),
         ],
       )
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        : Wrap(
+                            alignment: WrapAlignment.spaceBetween,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 10,
+                            runSpacing: 10,
                             children: [
                               Text(
                                 "Track ${VendorData.displayName}'s performance",
-                                style: TextStyle(
-                                    fontFamily: 'Inter',
-                                    color: subText,
-                                    fontSize: 14),
+                                style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 14),
                               ),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   dropdownWidget,
-                                  const SizedBox(width: 10),
                                   customTextField,
-                                  const SizedBox(width: 10),
                                   csvButton,
-                                  const SizedBox(width: 8),
                                   excelButton,
                                 ],
                               ),
@@ -698,36 +698,34 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   style: TextStyle(color: text)))
           : ListView.separated(
               padding: EdgeInsets.zero,
+              shrinkWrap: true,
               itemCount: recentOrders.length,
               separatorBuilder: (_, _) => Divider(
                 color: isDark ? Colors.white12 : Colors.grey.shade200,
               ),
               itemBuilder: (context, index) {
                 final order = recentOrders[index];
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    order['orderId']?.toString() ?? 'Unknown',
-                    style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: text),
-                  ),
-                  subtitle: Text(
-                    order['customerName']?.toString() ?? 'Customer',
-                    style: TextStyle(fontFamily: 'Inter', color: subText),
-                  ),
-                  trailing: Text(
-                    formatRupees(((order['total'] as num?) ?? 0)
-                        .toDouble()
-                        .round()
-                        .toDouble()),
-                    style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontWeight: FontWeight.w900,
-                        fontSize: 16,
-                        color: text),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(order['orderId']?.toString() ?? 'Unknown',
+                                style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 14, color: text),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(order['customerName']?.toString() ?? 'Customer',
+                                style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 12),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(formatRupees(((order['itemTotal'] as num?) ?? 0).toDouble().round().toDouble()),
+                          style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 15, color: text)),
+                    ],
                   ),
                 );
               },

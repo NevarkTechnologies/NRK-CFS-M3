@@ -206,7 +206,9 @@ class ApiService {
     return _decodeObject(response);
   }
 
-  static Future<Map<String, dynamic>> createOrderForPayment({
+  /// Step 1: compute totals server-side and create a Razorpay order.
+  /// No DB order is created yet — returns only the razorpayOrder.
+  static Future<Map<String, dynamic>> initiatePayment({
     required String customerName,
     required String customerEmail,
     required String cafeteriaName,
@@ -214,9 +216,10 @@ class ApiService {
     String? cafeId,
     required List<Map<String, dynamic>> items,
     String location = 'Pickup counter',
+    String pickupTime = '',
   }) async {
     final response = await http.post(
-      Uri.parse('$baseUrl/orders'),
+      Uri.parse('$baseUrl/payment/initiate'),
       headers: await _jsonHeaders(),
       body: jsonEncode({
         'customerName': customerName,
@@ -225,55 +228,63 @@ class ApiService {
         'cafeId': cafeId,
         'cafeteriaName': cafeteriaName,
         'items': items,
-        'payment': {
-          'method': 'Online',
-          'provider': 'Razorpay',
-          'status': 'Pending',
-        },
         'location': location,
+        'pickupTime': pickupTime,
       }),
     );
-
     return _decodeObject(response);
   }
 
-  static Future<void> verifyRazorpayPayment({
-    required String orderId,
-    required String paymentId,
-    required String signature,
-  }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/payment/verify'),
-      headers: await _jsonHeaders(),
-      body: jsonEncode({
-        'razorpay_order_id': orderId,
-        'razorpay_payment_id': paymentId,
-        'razorpay_signature': signature,
-      }),
-    );
-    _decodeObject(response);
-  }
-
-  static Future<Map<String, dynamic>> updateOrderPayment({
-    required String orderId,
-    required String transactionId,
-    required String status,
+  /// Step 2: verify Razorpay signature server-side and create the DB order.
+  /// Only called after Razorpay reports a successful payment.
+  static Future<Map<String, dynamic>> confirmOrder({
     required String razorpayOrderId,
+    required String razorpayPaymentId,
     required String razorpaySignature,
   }) async {
-    final response = await http.patch(
-      Uri.parse('$baseUrl/orders/$orderId/payment'),
+    final response = await http.post(
+      Uri.parse('$baseUrl/orders/confirm'),
       headers: await _jsonHeaders(),
       body: jsonEncode({
-        'transactionId': transactionId,
-        'status': status,
         'razorpay_order_id': razorpayOrderId,
-        'razorpay_payment_id': transactionId,
+        'razorpay_payment_id': razorpayPaymentId,
         'razorpay_signature': razorpaySignature,
       }),
     );
-
     return _decodeObject(response);
+  }
+
+  static Future<Map<String, dynamic>> rateCafe({
+    required String cafeId,
+    required String userId,
+    required int stars,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/cafes/$cafeId/review'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({'userId': userId, 'stars': stars}),
+    );
+    return _decodeObject(response);
+  }
+
+  static Future<Map<String, dynamic>> deleteRating({
+    required String cafeId,
+    required String userId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/cafes/$cafeId/review?userId=${Uri.encodeComponent(userId)}'),
+      headers: await _jsonHeaders(),
+    );
+    return _decodeObject(response);
+  }
+
+  static Future<Map<String, int>> getUserRatings(String userId) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/users/$userId/ratings'),
+      headers: await _jsonHeaders(),
+    );
+    final raw = _decodeObject(response);
+    return raw.map((k, v) => MapEntry(k, (v as num).toInt()));
   }
 
   static Future<List<Map<String, dynamic>>> getNotifications(

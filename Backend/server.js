@@ -11,6 +11,7 @@ const MenuItem = require('./models/menuitems');
 const Order = require('./models/order');
 const User = require('./models/user');
 const Notification = require('./models/notification');
+const CafeCounter = require('./models/cafeCounter');
 
 
 const app = express();
@@ -31,6 +32,17 @@ function makeOrderId() {
 
 function toMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
+}
+
+async function generateTokenNumber(cafeId) {
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  const key = `${cafeId}:${today}`;
+  const doc = await CafeCounter.findOneAndUpdate(
+    { key },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true }
+  );
+  return String(doc.seq).padStart(4, '0');
 }
 
 function toPaise(value) {
@@ -238,6 +250,14 @@ async function createOrder(req, res) {
     notes,
   } = req.body;
 
+  // Online/Razorpay payments must go through /payment/initiate → /orders/confirm.
+  // Allowing them here would create unverified ghost orders.
+  if (isOnlinePayment(payment)) {
+    return res.status(400).json({
+      message: 'Online payments must use POST /api/payment/initiate then POST /api/orders/confirm',
+    });
+  }
+
   if (!customerName || !cafeteriaName || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: 'customerName, cafeteriaName, and items are required' });
   }
@@ -264,18 +284,21 @@ async function createOrder(req, res) {
 
   const itemTotal = toMoney(normalizedItems.reduce((sum, item) => sum + item.price * item.qty, 0));
   const platformFee = toMoney(itemTotal * 0.03);
-  const total = toMoney(itemTotal + platformFee - Number(discount));
+  const convenienceFee = 1.5;
+  const total = toMoney(itemTotal + platformFee + convenienceFee - Number(discount));
   if (total <= 0) {
     return res.status(400).json({ message: 'Order total must be greater than zero' });
   }
 
   const orderId = makeOrderId();
+  const tokenNumber = await generateTokenNumber(resolvedCafeId);
   const razorpayOrder = isOnlinePayment(payment)
     ? await createRazorpayOrder(orderId, total)
     : null;
 
   const order = await Order.create({
     orderId,
+    tokenNumber,
     userId,
     customerName,
     customerEmail,
@@ -284,6 +307,7 @@ async function createOrder(req, res) {
     items: normalizedItems,
     itemTotal,
     platformFee,
+    convenienceFee,
     discount,
     total,
     payment: {
@@ -490,6 +514,55 @@ app.get('/api/cafes/:id/menu', asyncHandler(async (req, res) => {
   res.json(items);
 }));
 
+// POST /api/cafes/:id/review — upsert a user's star rating
+app.post('/api/cafes/:id/review', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { userId, stars } = req.body;
+  if (!userId || !stars || stars < 1 || stars > 5) {
+    return res.status(400).json({ message: 'userId and stars (1-5) are required' });
+  }
+  const cafe = await Cafe.findById(req.params.id);
+  if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
+
+  const existing = cafe.ratings.find(r => r.userId === userId);
+  if (existing) {
+    existing.stars = stars;
+  } else {
+    cafe.ratings.push({ userId, stars });
+  }
+  const total = cafe.ratings.reduce((s, r) => s + r.stars, 0);
+  cafe.rating = Math.round((total / cafe.ratings.length) * 10) / 10;
+  cafe.reviews = cafe.ratings.length;
+  await cafe.save();
+  res.json({ rating: cafe.rating, reviews: cafe.reviews });
+}));
+
+// DELETE /api/cafes/:id/review — remove a user's rating
+app.delete('/api/cafes/:id/review', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const userId = req.query.userId || req.body?.userId;
+  if (!userId) return res.status(400).json({ message: 'userId is required' });
+  const cafe = await Cafe.findById(req.params.id);
+  if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
+
+  cafe.ratings = cafe.ratings.filter(r => r.userId !== userId);
+  const total = cafe.ratings.reduce((s, r) => s + r.stars, 0);
+  cafe.rating = cafe.ratings.length ? Math.round((total / cafe.ratings.length) * 10) / 10 : 4;
+  cafe.reviews = cafe.ratings.length;
+  await cafe.save();
+  res.json({ rating: cafe.rating, reviews: cafe.reviews });
+}));
+
+// GET /api/users/:userId/ratings — get all cafe ratings by a user
+app.get('/api/users/:userId/ratings', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const cafes = await Cafe.find({ 'ratings.userId': userId }, { ratings: 1 });
+  const result = {};
+  cafes.forEach(cafe => {
+    const r = cafe.ratings.find(r => r.userId === userId);
+    if (r) result[cafe._id.toString()] = r.stars;
+  });
+  res.json(result);
+}));
+
 app.post('/api/menu', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const item = await MenuItem.create(req.body);
   res.status(201).json(item);
@@ -515,16 +588,172 @@ app.delete('/api/menu/:id', requireFirebaseAuth, asyncHandler(async (req, res) =
   res.status(204).send();
 }));
 
+// ── Server-side pending-payment store (keyed by Razorpay order ID) ────────────
+// Holds cart data between /payment/initiate and /orders/confirm so the client
+// never has a chance to tamper with items or amounts.
+const _pendingPayments = new Map();
+// Purge entries older than 30 minutes every 5 minutes.
+setInterval(() => {
+  const cutoff = Date.now() - 30 * 60 * 1000;
+  for (const [key, val] of _pendingPayments) {
+    if (val.createdAt < cutoff) _pendingPayments.delete(key);
+  }
+}, 5 * 60 * 1000);
+
+// Step 1 of payment: compute totals server-side, create Razorpay order,
+// stash cart — return ONLY the Razorpay order to the client (no DB write yet).
+app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const {
+    customerName, customerEmail, userId, cafeId, cafeteriaName,
+    items, discount = 0, location, pickupTime, notes,
+  } = req.body;
+
+  if (!customerName || !cafeteriaName || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ message: 'customerName, cafeteriaName, and items are required' });
+  }
+
+  const normalizedItems = items.map(item => ({
+    menuItemId: mongoose.Types.ObjectId.isValid(item.menuItemId || item.id)
+      ? (item.menuItemId || item.id)
+      : undefined,
+    name:  String(item.name  || '').trim(),
+    qty:   Number(item.qty   || item.quantity || 1),
+    price: Number(item.price || 0),
+    image: item.image || '',
+  }));
+
+  if (normalizedItems.some(i => !i.name || i.qty < 1 || i.price < 0)) {
+    return res.status(400).json({ message: 'Each item needs name, qty ≥ 1, and price ≥ 0' });
+  }
+
+  let resolvedCafeId = cafeId;
+  if (!resolvedCafeId && cafeteriaName) {
+    const cafe = await Cafe.findOne({ name: cafeteriaName }).select('_id');
+    resolvedCafeId = cafe?._id;
+  }
+
+  // Server-side total computation — client cannot tamper.
+  const itemTotal      = toMoney(normalizedItems.reduce((s, i) => s + i.price * i.qty, 0));
+  const platformFee    = toMoney(itemTotal * 0.03);
+  const convenienceFee = 1.5;
+  const discountAmt    = toMoney(Number(discount));
+  const total          = toMoney(itemTotal + platformFee + convenienceFee - discountAmt);
+
+  if (total <= 0) {
+    return res.status(400).json({ message: 'Order total must be greater than zero' });
+  }
+
+  const receipt = `init_${makeOrderId()}`;
+  const razorpayOrder = await createRazorpayOrder(receipt, total);
+
+  // Stash the verified cart server-side.
+  _pendingPayments.set(razorpayOrder.id, {
+    customerName, customerEmail,
+    userId:        userId   || null,
+    cafeId:        resolvedCafeId || null,
+    cafeteriaName,
+    items:         normalizedItems,
+    itemTotal, platformFee, convenienceFee,
+    discount:      discountAmt,
+    total,
+    location:      location   || 'Pickup counter',
+    pickupTime:    pickupTime || '',
+    notes:         notes      || '',
+    createdAt:     Date.now(),
+  });
+
+  res.json({ razorpayOrder });
+}));
+
+// Step 2 of payment: verify Razorpay HMAC signature, retrieve server-side cart,
+// create DB order only on success — the order NEVER exists before payment clears.
+app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ message: 'razorpay_order_id, razorpay_payment_id, and razorpay_signature are required' });
+  }
+
+  // 1. Cryptographic proof first — reject before touching anything else.
+  if (!verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+    return res.status(400).json({ message: 'Payment verification failed — invalid signature' });
+  }
+
+  // 2. Retrieve the server-side cart stashed during /initiate.
+  const cart = _pendingPayments.get(razorpay_order_id);
+  if (!cart) {
+    return res.status(400).json({ message: 'Payment session expired or already used' });
+  }
+
+  // 3. Remove immediately — one-time use.
+  _pendingPayments.delete(razorpay_order_id);
+
+  // 4. Create the DB order — only reachable after valid signature + valid session.
+  const orderId = makeOrderId();
+  const tokenNumber = await generateTokenNumber(cart.cafeId);
+  const order = await Order.create({
+    orderId,
+    tokenNumber,
+    userId:       cart.userId,
+    customerName: cart.customerName,
+    customerEmail: cart.customerEmail,
+    cafeId:       cart.cafeId,
+    cafeteriaName: cart.cafeteriaName,
+    items:        cart.items,
+    itemTotal:    cart.itemTotal,
+    platformFee:  cart.platformFee,
+    convenienceFee: cart.convenienceFee,
+    discount:     cart.discount,
+    total:        cart.total,
+    status:       'Pending',
+    payment: {
+      method:          'Online',
+      provider:        'Razorpay',
+      providerOrderId: razorpay_order_id,
+      transactionId:   razorpay_payment_id,
+      status:          'Paid',
+    },
+    location:   cart.location,
+    pickupTime: cart.pickupTime,
+    notes:      cart.notes,
+  });
+
+  // 5. Notify customer.
+  if (order.userId) {
+    await Notification.create({
+      userId:  order.userId,
+      title:   'Order Placed 🎉',
+      message: `Order #${order.orderId} confirmed — payment received.`,
+      type:    'order',
+      orderId: order._id,
+      items:   order.items.map(i => i.name),
+    });
+    await sendPushNotification(
+      [order.userId],
+      'Order Placed 🎉',
+      `Order #${order.orderId} confirmed — payment received.`,
+      { type: 'order', orderId: order.orderId, status: 'Pending' }
+    );
+  }
+
+  res.status(201).json(order);
+}));
+
 app.post('/api/orders', requireFirebaseAuth, asyncHandler(createOrder));
 app.post('/api/orders/place', requireFirebaseAuth, asyncHandler(createOrder));
 
 app.get('/api/orders', requireFirebaseAuth, asyncHandler(async (req, res) => {
-  const query = {};
+  const query = {
+    // Never surface orders whose payment hasn't cleared — hides ghost orders.
+    'payment.status': { $ne: 'Pending' },
+  };
   if (req.query.cafeId) query.cafeId = req.query.cafeId;
   if (req.query.customerEmail) query.customerEmail = req.query.customerEmail.toLowerCase();
   if (req.query.status) query.status = req.query.status;
 
-  const orders = await Order.find(query).sort({ createdAt: -1 });
+  const orders = await Order.find(query)
+    .populate('cafeId', 'name image imageType')
+    .sort({ createdAt: -1 });
   res.json(orders);
 }));
 
@@ -693,7 +922,7 @@ app.get('/api/vendor/:vendorId/dashboard', requireFirebaseAuth, asyncHandler(asy
       $group: {
         _id: null,
         totalOrders: { $sum: 1 },
-        revenue: { $sum: '$total' },
+        revenue: { $sum: '$itemTotal' },
         activeOrders: {
           $sum: { $cond: [{ $in: ['$status', ['Pending', 'Preparing', 'Ready']] }, 1, 0] },
         },

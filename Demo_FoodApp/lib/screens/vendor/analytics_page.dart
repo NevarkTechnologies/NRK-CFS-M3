@@ -55,7 +55,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           date = DateTime.now();
         }
         final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-        revenuePerDay[key] = (revenuePerDay[key] ?? 0) + (order['total'] is num ? (order['total'] as num).toDouble() : double.tryParse(order['total']?.toString() ?? '0') ?? 0);
+        final baseAmt = order['itemTotal'] is num ? (order['itemTotal'] as num).toDouble() : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
+        revenuePerDay[key] = (revenuePerDay[key] ?? 0) + baseAmt;
         ordersPerDay[key] = (ordersPerDay[key] ?? 0) + 1;
 
         final items = (order['items'] as List<dynamic>?) ?? [];
@@ -121,10 +122,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              double availableWidth = constraints.maxWidth;
+              double availableWidth = constraints.maxWidth.clamp(0, double.infinity);
               bool isMobile = MediaQuery.of(context).size.width < 850;
-              double cardWidth = isMobile ? (availableWidth - 16) / 2 : (availableWidth - 48) / 4;
-              double graphWidth = isMobile ? availableWidth : (availableWidth - 16) / 2;
+              double cardWidth = (isMobile ? (availableWidth - 16) / 2 : (availableWidth - 48) / 4).clamp(120.0, 400.0);
+              double graphWidth = isMobile ? availableWidth : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
 
               return SingleChildScrollView(
                 child: Column(
@@ -270,11 +271,23 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           else
             Column(
               children: topItems.map((item) {
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(item['name'].toString(), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 16, color: text)),
-                  subtitle: Text('${item['orders']} sold', style: TextStyle(fontFamily: 'Inter', color: sub)),
-                  trailing: Text(formatRupees((item['revenue'] as double).round()), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 16, color: text)),
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(item['name'].toString(), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 15, color: text), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text('${item['orders']} sold', style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: sub)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(formatRupees((item['revenue'] as double).round()), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 15, color: text)),
+                    ],
+                  ),
                 );
               }).toList(),
             ),

@@ -1,41 +1,11 @@
 import 'package:flutter/material.dart';
 import 'checkout_page.dart';
-import 'cafeteria_page.dart'; 
-import '../model/cart_model.dart'; 
+import 'cafeteria_page.dart';
+import '../model/cart_model.dart';
 import 'package:lottie/lottie.dart';
+import 'dart:convert';
 
 List<Map<String, dynamic>> globalCartItems = [];
-
-// ─── Coupon Model ────────────────────────────────────────────────────────────
-enum CouponType { flat, percent }
-
-class CouponDef {
-  final String code;
-  final CouponType type;
-  final double value;
-  final double minOrder;
-
-  const CouponDef({
-    required this.code,
-    required this.type,
-    required this.value,
-    required this.minOrder,
-  });
-
-  String get description {
-    String offer = type == CouponType.flat
-        ? '₹${value.toInt()} OFF'
-        : '${value.toInt()}% OFF';
-    return minOrder > 0 ? '$offer above ₹${minOrder.toInt()}' : offer;
-  }
-}
-
-const List<CouponDef> _availableCoupons = [
-  CouponDef(code: 'SAVE50',     type: CouponType.flat,    value: 50,  minOrder: 399),
-  CouponDef(code: 'FIRST20',    type: CouponType.percent, value: 20,  minOrder: 199),
-  CouponDef(code: 'WELCOME100', type: CouponType.flat,    value: 100, minOrder: 499),
-];
-// ─────────────────────────────────────────────────────────────────────────────
 
 class CartPage extends StatefulWidget {
   final List<Map<String, dynamic>>? cartItems;
@@ -49,69 +19,18 @@ class CartPage extends StatefulWidget {
 
 class _CartPageState extends State<CartPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
-  TextEditingController couponController = TextEditingController();
-
-  // ─── Coupon state (replaces old couponApplied + discount) ────────────────
-  CouponDef? _appliedCoupon;
+  final TextEditingController _couponController = TextEditingController();
   String _couponError = "";
 
-  int get _discountAmount {
-    if (_appliedCoupon == null) return 0;
-    final total = getTotal().toDouble();
-    if (total < _appliedCoupon!.minOrder) return 0;
-    if (_appliedCoupon!.type == CouponType.flat) {
-      return _appliedCoupon!.value.toInt();
-    } else {
-      return (total * _appliedCoupon!.value / 100).floor();
-    }
-  }
-
   void _applyCoupon() {
-    final code = couponController.text.trim().toUpperCase();
+    final code = _couponController.text.trim();
     if (code.isEmpty) {
       setState(() => _couponError = "Please enter a coupon code");
       return;
     }
-
-    CouponDef? found;
-    try {
-      found = _availableCoupons.firstWhere((c) => c.code == code);
-    } catch (_) {
-      found = null;
-    }
-
-    if (found == null) {
-      setState(() {
-        _couponError = "Invalid coupon code";
-        _appliedCoupon = null;
-      });
-      return;
-    }
-
-    if (getTotal() < found.minOrder) {
-      setState(() {
-        _couponError =
-            "Minimum order ₹${found!.minOrder.toInt()} required for ${found.code}";
-        _appliedCoupon = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _appliedCoupon = found;
-      _couponError = "";
-    });
+    setState(() => _couponError = "Invalid coupon code");
     FocusScope.of(context).unfocus();
   }
-
-  void _removeCoupon() {
-    setState(() {
-      _appliedCoupon = null;
-      _couponError = "";
-      couponController.clear();
-    });
-  }
-  // ─────────────────────────────────────────────────────────────────────────
 
   @override
   void initState() {
@@ -122,19 +41,24 @@ class _CartPageState extends State<CartPage> {
   }
 
   int getTotal() {
-    return globalCartItems.fold(0, (sum, item) => sum + ((item["price"] as int) * (item["qty"] as int)));
+    return globalCartItems.fold(
+      0,
+      (sum, item) => sum + ((item["price"] as int) * (item["qty"] as int)),
+    );
   }
 
-  int get _platformFee => (getTotal() * 0.03).round();
+  double get _platformFee =>
+      double.parse((getTotal() * 0.03).toStringAsFixed(2));
+  double get _convenienceFee => 1.5;
 
-  int getFinalTotal() {
-    return getTotal() + _platformFee - _discountAmount;
+  double getFinalTotal() {
+    return getTotal() + _platformFee + _convenienceFee;
   }
 
   void updateQty(Map<String, dynamic> item, int delta) {
     setState(() {
       item["qty"] += delta;
-      
+
       if (delta > 0) {
         CartModel.add(item["id"]);
       } else {
@@ -150,14 +74,16 @@ class _CartPageState extends State<CartPage> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final background = isDark ? const Color(0xFF020617) : const Color(0xFFF4F6F9);
+    final background = isDark
+        ? const Color(0xFF020617)
+        : const Color(0xFFF4F6F9);
     final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
     final textColor = isDark ? Colors.white : const Color(0xFF10254E);
     final subTextColor = isDark ? Colors.white70 : const Color(0xFF6B7280);
 
     return Scaffold(
       backgroundColor: background,
-      extendBody: true, 
+      extendBody: true,
       body: SafeArea(
         bottom: false,
         child: SingleChildScrollView(
@@ -175,31 +101,63 @@ class _CartPageState extends State<CartPage> {
                     if (globalCartItems.isEmpty)
                       _buildEmptyCart(subTextColor)
                     else ...[
-                      ...globalCartItems.map((item) => _buildCartItemCard(item, isDark, cardColor, textColor, subTextColor)),
+                      ...globalCartItems.map(
+                        (item) => _buildCartItemCard(
+                          item,
+                          isDark,
+                          cardColor,
+                          textColor,
+                          subTextColor,
+                        ),
+                      ),
                       const SizedBox(height: 16),
-                      _buildCouponSection(isDark, cardColor, textColor, subTextColor),
+                      _buildCouponSection(
+                        isDark,
+                        cardColor,
+                        textColor,
+                        subTextColor,
+                      ),
                       const SizedBox(height: 24),
-                      _buildBillDetails(isDark, cardColor, textColor, subTextColor),
+                      _buildBillDetails(
+                        isDark,
+                        cardColor,
+                        textColor,
+                        subTextColor,
+                      ),
                       const SizedBox(height: 24),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryBlue,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 58),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           elevation: 0,
                         ),
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => CheckoutPage(
-                              cafeteriaName: globalCartItems.first["cafeteriaName"]?.toString(),
-                              cafeId: globalCartItems.first["cafeId"]?.toString(),
-                              pickupLocation: globalCartItems.first["location"]?.toString(),
+                              cafeteriaName: globalCartItems
+                                  .first["cafeteriaName"]
+                                  ?.toString(),
+                              cafeId: globalCartItems.first["cafeId"]
+                                  ?.toString(),
+                              pickupLocation: globalCartItems.first["location"]
+                                  ?.toString(),
                             ),
                           ),
                         ),
-                        child: const Text("Continue to Checkout", style: TextStyle(fontFamily: 'Nunito', fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        child: const Text(
+                          "Continue to Checkout",
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                       const SizedBox(height: 120),
                     ],
@@ -211,7 +169,7 @@ class _CartPageState extends State<CartPage> {
         ),
       ),
       bottomNavigationBar: CustomFloatingNavBar(
-        currentIndex: 1, 
+        currentIndex: 1,
         isDark: isDark,
         toggleTheme: widget.toggleTheme ?? () {},
       ),
@@ -229,7 +187,7 @@ class _CartPageState extends State<CartPage> {
             color: Colors.black.withValues(alpha: isDark ? 0.18 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 10),
-          )
+          ),
         ],
       ),
       child: Stack(
@@ -246,7 +204,11 @@ class _CartPageState extends State<CartPage> {
                   } else {
                     Navigator.pushAndRemoveUntil(
                       context,
-                      MaterialPageRoute(builder: (_) => CafeteriaPage(toggleTheme: widget.toggleTheme ?? () {})),
+                      MaterialPageRoute(
+                        builder: (_) => CafeteriaPage(
+                          toggleTheme: widget.toggleTheme ?? () {},
+                        ),
+                      ),
                       (route) => false,
                     );
                   }
@@ -255,10 +217,16 @@ class _CartPageState extends State<CartPage> {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: isDark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFEAF2FF),
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : const Color(0xFFEAF2FF),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: Icon(Icons.arrow_back_ios_new_rounded, color: isDark ? Colors.white : primaryBlue, size: 20),
+                  child: Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: isDark ? Colors.white : primaryBlue,
+                    size: 20,
+                  ),
                 ),
               ),
               const SizedBox(width: 44),
@@ -266,7 +234,13 @@ class _CartPageState extends State<CartPage> {
           ),
           Text(
             "My Cart",
-            style: TextStyle(fontSize: 18, fontFamily: 'Nunito', fontWeight: FontWeight.w900, color: textColor, letterSpacing: 0.5),
+            style: TextStyle(
+              fontSize: 18,
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w900,
+              color: textColor,
+              letterSpacing: 0.5,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -274,9 +248,17 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  Widget _buildCartItemCard(Map<String, dynamic> item, bool isDark, Color cardColor, Color textColor, Color subTextColor) {
+  Widget _buildCartItemCard(
+    Map<String, dynamic> item,
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     final imageValue = item["image"]?.toString() ?? '';
+
     Widget imageWidget;
+
     if (imageValue.isEmpty) {
       imageWidget = Container(
         color: Colors.grey.shade200,
@@ -284,33 +266,79 @@ class _CartPageState extends State<CartPage> {
         width: 80,
         child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
       );
-    } else if (imageValue.startsWith('http') || imageValue.startsWith('data:')) {
-      imageWidget = Image.network(imageValue, height: 80, width: 80, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(
-        color: Colors.grey.shade200,
-        height: 80,
-        width: 80,
-        child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
-      ));
-    } else {
-      imageWidget = Image.asset(imageValue, height: 80, width: 80, fit: BoxFit.cover, errorBuilder: (_, _, _) => Container(
-        color: Colors.grey.shade200,
-        height: 80,
-        width: 80,
-        child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
-      ));
-    }
+    } else if (imageValue.startsWith('data:image')) {
+      try {
+        final bytes = base64Decode(imageValue.split(',').last);
 
+        imageWidget = Image.memory(
+          bytes,
+          height: 80,
+          width: 80,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) {
+            return Container(
+              color: Colors.grey.shade200,
+              height: 80,
+              width: 80,
+              child: const Icon(Icons.fastfood),
+            );
+          },
+        );
+      } catch (_) {
+        imageWidget = Container(
+          color: Colors.grey.shade200,
+          height: 80,
+          width: 80,
+          child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
+        );
+      }
+    } else if (imageValue.startsWith('http')) {
+      imageWidget = Image.network(
+        imageValue,
+        height: 80,
+        width: 80,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          color: Colors.grey.shade200,
+          height: 80,
+          width: 80,
+          child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
+        ),
+      );
+    } else {
+      imageWidget = Image.asset(
+        imageValue,
+        height: 80,
+        width: 80,
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(
+          color: Colors.grey.shade200,
+          height: 80,
+          width: 80,
+          child: const Icon(Icons.fastfood, color: Colors.grey, size: 32),
+        ),
+      );
+    }
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          ClipRRect(borderRadius: BorderRadius.circular(14), child: imageWidget),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: imageWidget,
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -318,12 +346,24 @@ class _CartPageState extends State<CartPage> {
               children: [
                 Text(
                   item["name"],
-                  style: TextStyle(fontFamily: 'Nunito', color: textColor, fontWeight: FontWeight.w900, fontSize: 16),
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    color: textColor,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
-                Text("₹${item["price"]}", style: TextStyle(fontFamily: 'Inter', color: subTextColor, fontWeight: FontWeight.w700)),
+                Text(
+                  "₹${item["price"]}",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    color: subTextColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 10),
                 Container(
                   height: 32,
@@ -331,14 +371,29 @@ class _CartPageState extends State<CartPage> {
                   decoration: BoxDecoration(
                     color: primaryBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: primaryBlue.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: primaryBlue.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      InkWell(onTap: () => updateQty(item, -1), child: Icon(Icons.remove, size: 16, color: primaryBlue)),
-                      Text("${item["qty"]}", style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.bold, color: primaryBlue)),
-                      InkWell(onTap: () => updateQty(item, 1), child: Icon(Icons.add, size: 16, color: primaryBlue)),
+                      InkWell(
+                        onTap: () => updateQty(item, -1),
+                        child: Icon(Icons.remove, size: 16, color: primaryBlue),
+                      ),
+                      Text(
+                        "${item["qty"]}",
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontWeight: FontWeight.bold,
+                          color: primaryBlue,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () => updateQty(item, 1),
+                        child: Icon(Icons.add, size: 16, color: primaryBlue),
+                      ),
                     ],
                   ),
                 ),
@@ -348,8 +403,15 @@ class _CartPageState extends State<CartPage> {
           IconButton(
             icon: Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
-              child: const Icon(Icons.delete_outline_rounded, color: Colors.red, size: 20),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.delete_outline_rounded,
+                color: Colors.red,
+                size: 20,
+              ),
             ),
             onPressed: () => setState(() {
               for (int i = 0; i < item["qty"]; i++) {
@@ -357,215 +419,200 @@ class _CartPageState extends State<CartPage> {
               }
               globalCartItems.remove(item);
             }),
-          )
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCouponSection(bool isDark, Color cardColor, Color textColor, Color subTextColor) {
+  Widget _buildCouponSection(
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Applied state ──────────────────────────────────────────────
-          if (_appliedCoupon != null)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.green.shade300),
-              ),
-              child: Row(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          leading: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: primaryBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.local_offer_outlined,
+              color: primaryBlue,
+              size: 20,
+            ),
+          ),
+          title: Text(
+            "Have a coupon?",
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              color: textColor,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _appliedCoupon!.code,
-                          style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontFamily: 'Nunito'),
-                        ),
-                        Text(
-                          "You save ₹$_discountAmount",
-                          style: TextStyle(color: Colors.green.shade700, fontSize: 12, fontFamily: 'Inter'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  GestureDetector(
-                    onTap: _removeCoupon,
-                    child: const Icon(Icons.close, color: Colors.green, size: 20),
-                  ),
-                ],
-              ),
-            )
-
-          // ── Input state ────────────────────────────────────────────────
-          else ...[
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: primaryBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(Icons.local_offer_outlined, color: primaryBlue, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: couponController,
-                    textCapitalization: TextCapitalization.characters,
-                    style: TextStyle(color: textColor, fontFamily: 'Inter', fontWeight: FontWeight.w600),
-                    decoration: InputDecoration(
-                      hintText: "Enter coupon code",
-                      hintStyle: TextStyle(color: subTextColor, fontFamily: 'Inter', fontWeight: FontWeight.w400),
-                      border: InputBorder.none,
-                      isDense: true,
-                    ),
-                    onSubmitted: (_) => _applyCoupon(),
-                  ),
-                ),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: primaryBlue,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                  onPressed: _applyCoupon,
-                  child: const Text("Apply", style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-
-            // Error
-            if (_couponError.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Text(
-                  _couponError,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12, fontFamily: 'Inter'),
-                ),
-              ),
-            ],
-
-            // Available coupons list
-            const SizedBox(height: 12),
-            Text(
-              "Available Coupons",
-              style: TextStyle(color: subTextColor, fontSize: 12, fontWeight: FontWeight.w600, fontFamily: 'Inter'),
-            ),
-            const SizedBox(height: 8),
-            ..._availableCoupons.map((c) {
-              final eligible = getTotal() >= c.minOrder;
-              return GestureDetector(
-                onTap: eligible
-                    ? () {
-                        couponController.text = c.code;
-                        _applyCoupon();
-                      }
-                    : null,
-                child: Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: eligible ? primaryBlue.withValues(alpha: 0.35) : Colors.grey.withValues(alpha: 0.2),
-                    ),
-                    color: eligible ? primaryBlue.withValues(alpha: 0.05) : Colors.transparent,
-                  ),
-                  child: Row(
+                  Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: eligible ? primaryBlue.withValues(alpha: 0.12) : Colors.grey.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          c.code,
+                      Expanded(
+                        child: TextField(
+                          controller: _couponController,
+                          textCapitalization: TextCapitalization.characters,
                           style: TextStyle(
-                            color: eligible ? primaryBlue : Colors.grey,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                            color: textColor,
                             fontFamily: 'Inter',
+                            fontWeight: FontWeight.w600,
                           ),
+                          decoration: InputDecoration(
+                            hintText: "Enter coupon code",
+                            hintStyle: TextStyle(
+                              color: subTextColor,
+                              fontFamily: 'Inter',
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                            isDense: true,
+                          ),
+                          onSubmitted: (_) => _applyCoupon(),
                         ),
                       ),
                       const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          c.description,
-                          style: TextStyle(
-                            color: eligible ? textColor : Colors.grey,
-                            fontSize: 12,
-                            fontFamily: 'Inter',
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryBlue,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 14,
                           ),
                         ),
-                      ),
-                      Text(
-                        eligible
-                            ? "TAP TO APPLY"
-                            : c.minOrder > 0
-                                ? "Need ₹${c.minOrder.toInt()}+"
-                                : "Not eligible",
-                        style: TextStyle(
-                          color: eligible ? primaryBlue : Colors.grey,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          fontFamily: 'Inter',
+                        onPressed: _applyCoupon,
+                        child: const Text(
+                          "Apply",
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              );
-            }),
+                  if (_couponError.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      _couponError,
+                      style: const TextStyle(
+                        color: Colors.redAccent,
+                        fontSize: 12,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildBillDetails(bool isDark, Color cardColor, Color textColor, Color subTextColor) {
+  Widget _buildBillDetails(
+    bool isDark,
+    Color cardColor,
+    Color textColor,
+    Color subTextColor,
+  ) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Bill Details", style: TextStyle(fontFamily: 'Nunito', color: textColor, fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            "Bill Details",
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              color: textColor,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
           const SizedBox(height: 16),
           _billRow("Item Total", getTotal(), subTextColor, textColor),
           _billRow("Platform Fee (3%)", _platformFee, subTextColor, textColor),
-          if (_appliedCoupon != null) _billRow("Discount", -_discountAmount, Colors.green, Colors.green),
+          _billRow("Convenience Fee", _convenienceFee, subTextColor, textColor),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(color: isDark ? Colors.white12 : Colors.grey.shade200, thickness: 1.5),
+            child: Divider(
+              color: isDark ? Colors.white12 : Colors.grey.shade200,
+              thickness: 1.5,
+            ),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Total Pay", style: TextStyle(fontFamily: 'Nunito', color: textColor, fontSize: 16, fontWeight: FontWeight.w900)),
-              Text("₹${getFinalTotal()}", style: TextStyle(fontFamily: 'Inter', color: textColor, fontSize: 18, fontWeight: FontWeight.w900)),
+              Text(
+                "Total Pay",
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  color: textColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              Text(
+                "₹${getFinalTotal().toStringAsFixed(2)}",
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  color: textColor,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ],
           ),
         ],
@@ -573,14 +620,36 @@ class _CartPageState extends State<CartPage> {
     );
   }
 
-  Widget _billRow(String title, int amount, Color titleColor, Color amountColor) {
+  Widget _billRow(
+    String title,
+    num amount,
+    Color titleColor,
+    Color amountColor,
+  ) {
+    final display = amount is int ? "$amount" : amount.toStringAsFixed(2);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(fontFamily: 'Inter', color: titleColor, fontWeight: FontWeight.w500, fontSize: 14)),
-          Text("₹$amount", style: TextStyle(fontFamily: 'Inter', color: amountColor, fontWeight: FontWeight.w700, fontSize: 14)),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: titleColor,
+              fontWeight: FontWeight.w500,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            "₹$display",
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: amountColor,
+              fontWeight: FontWeight.w700,
+              fontSize: 14,
+            ),
+          ),
         ],
       ),
     );
@@ -613,12 +682,21 @@ class _CartPageState extends State<CartPage> {
           const SizedBox(height: 20),
           Text(
             "Your cart is empty",
-            style: TextStyle(fontFamily: 'Nunito', fontSize: 20, fontWeight: FontWeight.bold, color: subTextColor),
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: subTextColor,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
             "Add items from cafeterias to see them here.",
-            style: TextStyle(fontFamily: 'Inter', fontSize: 14, color: subTextColor.withValues(alpha: 0.7)),
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 14,
+              color: subTextColor.withValues(alpha: 0.7),
+            ),
           ),
         ],
       ),

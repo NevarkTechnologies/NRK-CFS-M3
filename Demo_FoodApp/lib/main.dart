@@ -19,6 +19,7 @@ Future<void> main() async {
     );
 
     await AppSession.init();
+    await initTheme();
 
     NotificationService.instance.init();
   } catch (e) {
@@ -82,6 +83,8 @@ class MyApp extends StatelessWidget {
 
           /// 🔥 GLOBAL THEME MODE
           themeMode: currentMode,
+          themeAnimationDuration: const Duration(milliseconds: 400),
+          themeAnimationCurve: Curves.easeInOutCubic,
 
           /// ROUTES
           onGenerateRoute: (settings) {
