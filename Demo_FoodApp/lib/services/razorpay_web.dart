@@ -1,8 +1,7 @@
 import 'dart:js' as js;
 
-//const String _razorpayKey = String.fromEnvironment('RAZORPAY_KEY_ID');
-const String _razorpayKey = 'rzp_live_T57tivYC7IK1Tk';
-
+// Razorpay key is NOT stored here — it is fetched from the backend
+// at payment-initiation time and passed directly to openRazorpayCheckout().
 
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
 late void Function(String) _paymentErrorCallback;
@@ -18,62 +17,56 @@ Future<void> initRazorpay(
 Future<void> openRazorpayCheckout(
   Map<String, dynamic> razorpayOrder,
   String email, {
+  String? keyId,   // Key ID received from backend — never hardcoded
   String? upiId,
   String? selectedApp,
 }) async {
   try {
-    if (_razorpayKey.isEmpty) {
-      _paymentErrorCallback('Razorpay key is not configured');
+    if (keyId == null || keyId.isEmpty) {
+      _paymentErrorCallback('Payment configuration error: key not available');
       return;
     }
 
     final prefill = <String, dynamic>{
-      'email': email,
-      'contact': '9999999999', 
+      'email':   email,
+      'contact': '9999999999',
     };
 
     if (upiId != null && upiId.isNotEmpty) {
-      prefill['vpa'] = upiId;
+      prefill['vpa']    = upiId;
       prefill['method'] = 'upi';
     } else if (selectedApp != null && selectedApp.isNotEmpty) {
       prefill['method'] = 'upi';
     }
 
     final options = js.JsObject.jsify({
-      'key': _razorpayKey,
-      'amount': razorpayOrder['amount'],
-      'currency': razorpayOrder['currency'] ?? 'INR',
-      'name': 'Nevark\'s BenchBites',
-      'order_id': razorpayOrder['id'],
+      'key':         keyId,
+      'amount':      razorpayOrder['amount'],
+      'currency':    razorpayOrder['currency'] ?? 'INR',
+      'name':        "Nevark's BenchBites",
+      'order_id':    razorpayOrder['id'],
       'description': 'Order Payment',
-      'prefill': prefill,
+      'prefill':     prefill,
       'config': {
         'display': {
           'blocks': {
-            'upi': {
-              'name': 'UPI Payment',
-              'instruments': [{'method': 'upi'}]
-            }
+            'upi': {'name': 'UPI Payment', 'instruments': [{'method': 'upi'}]},
           },
-          'sequence': ['block.upi'],
-          'preferences': {'show_default_blocks': false}
-        }
+          'sequence':    ['block.upi'],
+          'preferences': {'show_default_blocks': false},
+        },
       },
-      'theme': {
-        'color': '#0F4CFF',
-      },
+      'theme': {'color': '#0F4CFF'},
       'handler': (response) {
         _paymentSuccessCallback({
           'paymentId': response['razorpay_payment_id'],
-          'orderId': response['razorpay_order_id'],
+          'orderId':   response['razorpay_order_id'],
           'signature': response['razorpay_signature'],
         });
       },
       'modal': {
-        'ondismiss': () {
-          _paymentErrorCallback('Payment cancelled');
-        }
-      }
+        'ondismiss': () { _paymentErrorCallback('Payment cancelled'); },
+      },
     });
 
     final razorpayConstructor = js.context['Razorpay'];

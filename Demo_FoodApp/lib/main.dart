@@ -8,8 +8,6 @@ import 'services/theme_service.dart';
 import 'screens/login_page.dart';
 import 'screens/splash_page.dart';
 
-/// 🌗 GLOBAL THEME CONTROLLER
-/// Managed from services/theme_service.dart
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +21,7 @@ Future<void> main() async {
 
     NotificationService.instance.init();
   } catch (e) {
-    print("Startup Error: $e");
+    debugPrint("Startup Error: $e");
   }
 
   runApp(const MyApp());

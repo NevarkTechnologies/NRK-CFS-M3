@@ -34,6 +34,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   // No _currentOrder field — the DB order is only created after payment succeeds.
   Map<String, dynamic>? _razorpayOrder;
+  String? _razorpayKeyId; // Received from server — never hardcoded client-side
 
   String get _pickupTimeLabel {
     if (_pickupTime == null) return 'Set Pickup Time';
@@ -366,6 +367,7 @@ Container(
       );
 
       _razorpayOrder = Map<String, dynamic>.from(data['razorpayOrder'] as Map);
+      _razorpayKeyId = data['razorpayKeyId']?.toString();
       await _openRazorpayCheckout();
     } catch (error) {
       _showError(error.toString().replaceFirst("Exception: ", ""));
@@ -488,9 +490,10 @@ Container(
 
     // Pass the upiId to the razorpay helper
     await openRazorpayCheckout(
-      _razorpayOrder!, 
+      _razorpayOrder!,
       AppSession.email,
-      upiId: enteredUpiId, 
+      keyId: _razorpayKeyId,
+      upiId: enteredUpiId,
     );
   }
 }

@@ -292,10 +292,12 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> saveChanges() async {
     if (!_hasValidBusinessDetails) {
       String errorMsg = 'Please complete all fields correctly:\n';
-      if (nameCtrl.text.trim().isEmpty)
+      if (nameCtrl.text.trim().isEmpty) {
         errorMsg += '• Restaurant name required\n';
-      if (selectedCuisines.isEmpty)
+      }
+      if (selectedCuisines.isEmpty) {
         errorMsg += '• Select at least one cuisine\n';
+      }
       if (descCtrl.text.trim().isEmpty) errorMsg += '• Description required\n';
       if (phoneCtrl.text.trim().isEmpty ||
           !phoneCtrl.text.trim().startsWith('+91') ||

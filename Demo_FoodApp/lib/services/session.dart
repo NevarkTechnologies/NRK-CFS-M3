@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AppSession {
@@ -59,7 +60,7 @@ class AppSession {
         currentUser = jsonDecode(userJson) as Map<String, dynamic>;
       }
     } catch (e) {
-      print('Error initializing session: $e');
+      debugPrint('Error initializing session: $e');
     }
   }
 
@@ -70,7 +71,7 @@ class AppSession {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_userKey, jsonEncode(user));
     } catch (e) {
-      print('Error saving user session: $e');
+      debugPrint('Error saving user session: $e');
     }
   }
 
@@ -81,7 +82,7 @@ class AppSession {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_userKey);
     } catch (e) {
-      print('Error clearing session: $e');
+      debugPrint('Error clearing session: $e');
     }
   }
 }

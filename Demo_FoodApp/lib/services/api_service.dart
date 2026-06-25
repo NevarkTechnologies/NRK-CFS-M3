@@ -6,7 +6,7 @@ import 'package:http/http.dart' as http;
 class ApiService {
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000/api', //'http://localhost:5000/api',
+    defaultValue: 'http://10.0.2.2:5000/api',
   );
 
   static Future<Map<String, dynamic>> googleSignIn({
@@ -269,10 +269,10 @@ class ApiService {
 
   static Future<Map<String, dynamic>> deleteRating({
     required String cafeId,
-    required String userId,
+    String? userId,
   }) async {
     final response = await http.delete(
-      Uri.parse('$baseUrl/cafes/$cafeId/review?userId=${Uri.encodeComponent(userId)}'),
+      Uri.parse('$baseUrl/cafes/$cafeId/review'),
       headers: await _jsonHeaders(),
     );
     return _decodeObject(response);

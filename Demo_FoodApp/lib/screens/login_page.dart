@@ -148,7 +148,7 @@ class _LoginPageState extends State<LoginPage> {
         );
       }
     } catch (e) {
-      print("Sign-in error: $e");
+      debugPrint("Sign-in error: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

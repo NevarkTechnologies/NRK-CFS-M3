@@ -98,12 +98,12 @@ class AboutPage extends StatelessWidget {
                   Text('Links', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 16, color: text)),
                   const SizedBox(height: 12),
                   _linkTile(cardColor: cardColor, isDark: isDark, icon: Icons.language_rounded,
-                    label: 'Visit our Website', sub: 'nevark.in',
+                    label: 'Visit our Website', sub: 'www.nevark.in',
                     onTap: () => _launch('https://nevark.in'), text: text, subColor: sub),
                   const SizedBox(height: 10),
                   _linkTile(cardColor: cardColor, isDark: isDark, icon: Icons.description_outlined,
                     label: 'Terms & Conditions', sub: 'Read our terms of service',
-                    onTap: () => _launch('https://nevark.in/terms'), text: text, subColor: sub),
+                    onTap: () => _launch('https://nevark.in/terms-condition'), text: text, subColor: sub),
                   const SizedBox(height: 10),
                   _linkTile(cardColor: cardColor, isDark: isDark, icon: Icons.privacy_tip_outlined,
                     label: 'Privacy Policy', sub: 'How we handle your data',
@@ -111,7 +111,7 @@ class AboutPage extends StatelessWidget {
                   const SizedBox(height: 32),
                   Center(
                     child: Text(
-                      'c 2025 Nevark Technologies\nAll rights reserved.',
+                      '© 2026 Nevark Technologies\nAll Rights Reserved.',
                       textAlign: TextAlign.center,
                       style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: sub, height: 1.8),
                     ),
