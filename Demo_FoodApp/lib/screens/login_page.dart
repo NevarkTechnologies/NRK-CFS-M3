@@ -27,31 +27,136 @@ class _LoginPageState extends State<LoginPage> {
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Enter your phone number'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.phone,
-          maxLength: 10,
-          decoration: const InputDecoration(hintText: '10-digit mobile number'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Skip')),
-          TextButton(
-            onPressed: () async {
-              final phone = ctrl.text.trim();
-              if (phone.length >= 10) {
-                try {
-                  await ApiService.updateUser(userId, {'phone': phone});
-                  await AppSession.setUser({...AppSession.currentUser!, 'phone': phone});
-                } catch (_) {}
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            child: const Text('Save'),
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
+                  blurRadius: 40,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.phone_android_rounded,
+                    color: Color(0xFF0F4CFF),
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Add Phone Number',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Add your number so vendors can reach you about your order.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: ctrl,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  decoration: InputDecoration(
+                    hintText: '10-digit mobile number',
+                    prefixIcon: const Icon(Icons.phone_rounded, color: Color(0xFF0F4CFF)),
+                    filled: true,
+                    fillColor: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFF0F4CFF).withValues(alpha: 0.06),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: const BorderSide(color: Color(0xFF0F4CFF), width: 1.5),
+                    ),
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF0F4CFF),
+                          side: const BorderSide(color: Color(0xFF0F4CFF), width: 1.5),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Skip',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F4CFF),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14)),
+                        ),
+                        onPressed: () async {
+                          final phone = ctrl.text.trim();
+                          if (phone.length >= 10) {
+                            try {
+                              await ApiService.updateUser(userId, {'phone': phone});
+                              await AppSession.setUser(
+                                  {...AppSession.currentUser!, 'phone': phone});
+                            } catch (_) {}
+                            if (ctx.mounted) Navigator.pop(ctx);
+                          }
+                        },
+                        child: const Text('Save',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 

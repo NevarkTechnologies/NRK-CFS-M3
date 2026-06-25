@@ -51,7 +51,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
       }
     });
     _pollPendingOrders();
-    _orderPollTimer = Timer.periodic(const Duration(seconds: 5), (_) => _pollPendingOrders());
+    _orderPollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _pollPendingOrders());
   }
 
   @override
@@ -211,7 +211,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
               actions: [
                 if (_pendingOrderCount > 0)
                   Padding(
-                    padding: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.only(right: 8),
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
@@ -231,10 +231,6 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                       ],
                     ),
                   ),
-                IconButton(
-                  icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: primaryBlue),
-                  onPressed: widget.toggleTheme,
-                ),
               ],
             )
           : null,
@@ -468,6 +464,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
           }
           setState(() => selectedIndex = index);
           Future.delayed(const Duration(milliseconds: 150), () {
+            if (!mounted) return;
             Widget page;
             if (title == "Orders") {
               page = OrdersPage(toggleTheme: widget.toggleTheme);

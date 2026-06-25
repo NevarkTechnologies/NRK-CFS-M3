@@ -31,7 +31,7 @@ class _OrdersPageState extends State<OrdersPage> {
   void initState() {
     super.initState();
     loadOrders();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 5), (_) => _silentRefresh());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _silentRefresh());
   }
 
   Future<void> _silentRefresh() async {

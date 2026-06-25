@@ -213,14 +213,9 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                             ),
                             Row(
                               children: [
-                                Icon(
-                                  Icons.location_on,
-                                  color: appBlue,
-                                  size: 14,
-                                ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  'CU, Kengeri Campus',
+                                  'By Nevark',
                                   style: TextStyle(
                                     fontFamily: 'Inter',
                                     color: isDark
@@ -266,7 +261,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                   const SizedBox(height: 10),
 
                   Text(
-                    'Skip the Queue.',
+                    'Skip Queues.',
                     style: TextStyle(
                       fontFamily: 'Nunito',
                       fontSize: 32,
@@ -306,8 +301,13 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                           isDark,
                         ),
                         _buildInfoChip(
-                          Icons.flash_on_rounded,
+                          Icons.compare_arrows_rounded,
                           "Zero Queue",
+                          isDark,
+                        ),
+                        _buildInfoChip(
+                          Icons.flash_on_rounded,
+                          "Order under 20 secs",
                           isDark,
                         ),
                       ],

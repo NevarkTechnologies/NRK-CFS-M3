@@ -147,9 +147,7 @@ class NotificationService {
 
   Future<bool> ensurePermissionRequired(BuildContext context) async {
     try {
-      if (!_initialized) {
-        await init();
-      }
+      if (!_initialized) await init();
     } catch (error) {
       debugPrint('Notification setup failed: $error');
       return true;
@@ -162,34 +160,103 @@ class NotificationService {
         return true;
       }
 
-      final retry = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => AlertDialog(
-          title: const Text('Notifications Required'),
-          content: const Text(
-            'Please allow notifications to continue. Order updates and pickup alerts depend on them.',
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Allow Notifications'),
-            ),
-          ],
-        ),
-      );
-
-      if (retry != true || !context.mounted) return false;
-
+      // First attempt: request permission directly
       await _requestPermission();
-      final updated = await _messaging.getNotificationSettings();
-      if (updated.authorizationStatus == AuthorizationStatus.authorized ||
-          updated.authorizationStatus == AuthorizationStatus.provisional) {
+      final afterRequest = await _messaging.getNotificationSettings();
+      if (afterRequest.authorizationStatus == AuthorizationStatus.authorized ||
+          afterRequest.authorizationStatus == AuthorizationStatus.provisional) {
         return true;
       }
 
+      // Permission denied — show branded dialog directing to settings
+      if (!context.mounted) return false;
+      final goToSettings = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          return Dialog(
+            backgroundColor: Colors.transparent,
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(28),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
+                    blurRadius: 40,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.notifications_active_rounded,
+                      color: Color(0xFF0F4CFF),
+                      size: 36,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Enable Notifications',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'BenchBites needs notifications to alert you when your order is ready for pickup. Please enable them in Settings.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F4CFF),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text(
+                        'Open Settings',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+
+      if (goToSettings != true || !context.mounted) return false;
+
       await _openNotificationSettings();
-      await Future<void>.delayed(const Duration(seconds: 1));
+      // Wait for user to return from Settings
+      await Future<void>.delayed(const Duration(seconds: 2));
     }
     return false;
   }

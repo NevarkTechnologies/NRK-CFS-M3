@@ -3,7 +3,19 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
 
+/// Thrown when the server returns 401 — triggers a global sign-out.
+class AuthException implements Exception {
+  const AuthException();
+  @override
+  String toString() => 'Session expired. Please sign in again.';
+}
+
+/// Set by main.dart — called on any 401 to sign out and go to login globally.
+void Function()? _onAuthError;
+
 class ApiService {
+  static set onAuthError(void Function() handler) => _onAuthError = handler;
+
   static const String baseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'http://10.0.2.2:5000/api',
@@ -365,6 +377,10 @@ class ApiService {
 
   static Map<String, dynamic> _decodeObject(http.Response response) {
     final decoded = jsonDecode(response.body);
+    if (response.statusCode == 401) {
+      _onAuthError?.call();
+      throw const AuthException();
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map && decoded['message'] != null
           ? decoded['message'].toString()
@@ -380,15 +396,24 @@ class ApiService {
     final headers = {'Content-Type': 'application/json'};
     if (!includeAuth) return headers;
 
-    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-    if (token != null && token.isNotEmpty) {
-      headers['Authorization'] = 'Bearer $token';
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token != null && token.isNotEmpty) {
+        headers['Authorization'] = 'Bearer $token';
+      }
+    } catch (_) {
+      // Token fetch failed (no network, expired refresh token) — request will
+      // get a 401 from the server which the UI handles as an auth error.
     }
     return headers;
   }
 
   static List<Map<String, dynamic>> _decodeList(http.Response response) {
     final decoded = jsonDecode(response.body);
+    if (response.statusCode == 401) {
+      _onAuthError?.call();
+      throw const AuthException();
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final message = decoded is Map && decoded['message'] != null
           ? decoded['message'].toString()

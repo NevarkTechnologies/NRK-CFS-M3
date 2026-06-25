@@ -41,9 +41,10 @@ Future<String> saveExcelReport(
     );
     final headers = [
       'Order ID',
+      'Token',
       'Customer',
       'Items',
-      'Amount (₹)',
+      'Item Total (₹)',
       'Status',
       'Time',
     ];
@@ -66,13 +67,14 @@ Future<String> saveExcelReport(
     double dayTotal = 0;
     for (var r = 0; r < dayOrders.length; r++) {
       final order = dayOrders[r];
-      final total = (order['total'] is num)
-          ? (order['total'] as num).toDouble()
-          : double.tryParse(order['total']?.toString() ?? '0') ?? 0;
-      dayTotal += total;
+      // Use itemTotal (base price only, no platform fee/convenience fee)
+      final itemTotal = (order['itemTotal'] is num)
+          ? (order['itemTotal'] as num).toDouble()
+          : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
+      dayTotal += itemTotal;
 
       final itemsSummary = ((order['items'] as List<dynamic>?) ?? [])
-          .map((i) => '${i['name']} x${i['qty']}')
+          .map((i) => '${i['name']} x${i['qty'] ?? 1}')
           .join(', ');
 
       final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '');
@@ -82,9 +84,10 @@ Future<String> saveExcelReport(
 
       final rowData = [
         order['orderId'] ?? order['_id'] ?? '',
+        order['tokenNumber'] ?? '',
         order['customerName'] ?? '',
         itemsSummary,
-        total.toStringAsFixed(2),
+        itemTotal.toStringAsFixed(2),
         order['status'] ?? '',
         timeStr,
       ];
@@ -121,19 +124,21 @@ Future<String> saveExcelReport(
     }
 
     summaryCell(0, 'TOTAL');
-    summaryCell(1, '${dayOrders.length} orders');
-    summaryCell(2, '');
-    summaryCell(3, dayTotal.toStringAsFixed(2));
-    summaryCell(4, '');
+    summaryCell(1, '');
+    summaryCell(2, '${dayOrders.length} orders');
+    summaryCell(3, '');
+    summaryCell(4, dayTotal.toStringAsFixed(2));
     summaryCell(5, '');
+    summaryCell(6, '');
 
     // Set column widths
-    sheet.setColumnWidth(0, 22);
-    sheet.setColumnWidth(1, 20);
-    sheet.setColumnWidth(2, 40);
-    sheet.setColumnWidth(3, 14);
-    sheet.setColumnWidth(4, 14);
-    sheet.setColumnWidth(5, 10);
+    sheet.setColumnWidth(0, 22); // Order ID
+    sheet.setColumnWidth(1, 10); // Token
+    sheet.setColumnWidth(2, 20); // Customer
+    sheet.setColumnWidth(3, 40); // Items
+    sheet.setColumnWidth(4, 16); // Item Total
+    sheet.setColumnWidth(5, 14); // Status
+    sheet.setColumnWidth(6, 10); // Time
   }
 
   final bytes = excel.encode();

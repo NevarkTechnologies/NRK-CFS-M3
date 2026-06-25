@@ -1,12 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
 import 'services/session.dart';
+import 'services/api_service.dart';
 import 'services/notification_service.dart';
 import 'services/theme_service.dart';
 import 'screens/login_page.dart';
 import 'screens/splash_page.dart';
+
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+Future<void> handleAuthError() async {
+  await FirebaseAuth.instance.signOut();
+  await AppSession.clear();
+  navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
+}
 
 
 Future<void> main() async {
@@ -19,6 +29,7 @@ Future<void> main() async {
     await AppSession.init();
     await initTheme();
 
+    ApiService.onAuthError = handleAuthError;
     NotificationService.instance.init();
   } catch (e) {
     debugPrint("Startup Error: $e");
@@ -40,6 +51,7 @@ class MyApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (context, ThemeMode currentMode, _) {
         return MaterialApp(
+          navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
           title: 'Food App',
 

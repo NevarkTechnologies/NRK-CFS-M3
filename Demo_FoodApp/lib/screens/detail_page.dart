@@ -72,7 +72,7 @@ class _DetailPageState extends State<DetailPage> {
     if (widget.title == "Order Details") {
       _loadUserOrders();
       _ordersRefreshTimer = Timer.periodic(
-        const Duration(seconds: 10),
+        const Duration(seconds: 30),
         (_) => _loadUserOrders(showLoader: false),
       );
     }
@@ -98,11 +98,8 @@ class _DetailPageState extends State<DetailPage> {
         orderLoadingError = error.toString().replaceFirst("Exception: ", "");
       });
     } finally {
-      if (!mounted) return;
-      if (showLoader) {
-        setState(() {
-          isOrderLoading = false;
-        });
+      if (mounted && showLoader) {
+        setState(() => isOrderLoading = false);
       }
     }
   }
@@ -688,6 +685,7 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
+  // ignore: unused_element
   Widget _orderCard({
     required String imageUrl,
     required String cafeteriaName,
@@ -901,6 +899,16 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
+  String _formatPickupTime(String? raw) {
+    if (raw == null || raw.isEmpty) return 'Not specified';
+    final dt = DateTime.tryParse(raw)?.toLocal();
+    if (dt == null) return raw;
+    final h = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $period';
+  }
+
   Widget _buildOrderCardFromApi(Map<String, dynamic> order, bool isDark) {
     final itemsList = ((order['items'] as List<dynamic>?) ?? []).map((item) {
       final itemMap = Map<String, dynamic>.from(item as Map);
@@ -922,8 +930,8 @@ class _DetailPageState extends State<DetailPage> {
         DateTime.now();
     final orderDate =
         '${createdAt.day}/${createdAt.month}/${createdAt.year}, ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
-    final pickupTime =
-        '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
+    final pickupTime = _formatPickupTime(order['pickupTime']?.toString());
+    final tokenNumber = order['tokenNumber']?.toString() ?? '';
     final itemsSummary = itemsList
         .map((item) => '${item.name} x ${item.quantity}')
         .join(', ');
@@ -995,6 +1003,25 @@ class _DetailPageState extends State<DetailPage> {
                         fontSize: 12,
                       ),
                     ),
+                    if (tokenNumber.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF0F4CFF),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'TOKEN #$tokenNumber',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -1070,6 +1097,7 @@ class _DetailPageState extends State<DetailPage> {
                     billTotal,
                     isDark,
                     status,
+                    tokenNumber,
                   );
                 },
                 child: const Text('VIEW DETAILS'),
@@ -1133,48 +1161,40 @@ class _DetailPageState extends State<DetailPage> {
     double billTotal,
     bool isDark, [
     String status = 'Pending',
+    String tokenNumber = '',
   ]) {
-    showGeneralDialog(
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: true,
-      barrierLabel: "Order Details",
-      pageBuilder: (context, animation, secondaryAnimation) {
-        return Align(
-          alignment: Alignment.centerRight,
-          child: Material(
-            elevation: 10,
-            child: Container(
-              width: 450,
-              height: double.infinity,
-              color: isDark ? const Color(0xFF0F172A) : Colors.white,
-              child: _buildSidebarContent(
-                context,
-                imageUrl,
-                orderId,
-                cafeteriaName,
-                pickupLocation,
-                orderDate,
-                pickupTime,
-                itemsList,
-                itemTotalSum,
-                tax,
-                billTotal,
-                isDark,
-                status,
-              ),
-            ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.92,
+        minChildSize: 0.5,
+        maxChildSize: 0.97,
+        builder: (ctx, scrollController) => Container(
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF0F172A) : Colors.white,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
-        );
-      },
-      transitionBuilder: (context, animation, secondaryAnimation, child) {
-        return SlideTransition(
-          position: Tween(
-            begin: const Offset(1, 0),
-            end: Offset.zero,
-          ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOut)),
-          child: child,
-        );
-      },
+          child: _buildSidebarContent(
+            ctx,
+            imageUrl,
+            orderId,
+            cafeteriaName,
+            pickupLocation,
+            orderDate,
+            pickupTime,
+            itemsList,
+            itemTotalSum,
+            tax,
+            billTotal,
+            isDark,
+            status,
+            tokenNumber,
+            scrollController,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1191,34 +1211,67 @@ class _DetailPageState extends State<DetailPage> {
     double tax,
     double billTotal,
     bool isDark,
-    String status,
-  ) {
+    String status, [
+    String tokenNumber = '',
+    ScrollController? scrollController,
+  ]) {
     final textColor = isDark ? Colors.white : Colors.black;
     final subText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(Icons.close, color: textColor),
-                onPressed: () => Navigator.pop(context),
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: isDark ? Colors.white24 : Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
               ),
-              const SizedBox(width: 8),
-              Text(
-                "Order #$orderId",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
+            ),
+          ),
+          // Header: token + close
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              if (tokenNumber.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F4CFF),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    'TOKEN #$tokenNumber',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                 ),
+                const SizedBox(width: 8),
+              ],
+              Expanded(
+                child: Text(
+                  'Order #$orderId',
+                  style: TextStyle(fontSize: 13, color: subText),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.close_rounded, color: textColor),
+                onPressed: () => Navigator.pop(context),
               ),
             ],
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -1319,7 +1372,12 @@ class _DetailPageState extends State<DetailPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            "Pickup By: $pickupTime, $orderDate",
+            'Ordered: $orderDate',
+            style: TextStyle(color: subText, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Pickup By: $pickupTime',
             style: TextStyle(color: subText, fontSize: 13),
           ),
           const SizedBox(height: 24),

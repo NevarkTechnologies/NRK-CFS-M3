@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const crypto = require('crypto');
 const helmet = require('helmet');
-const mongoSanitize = require('express-mongo-sanitize');
 const rateLimit = require('express-rate-limit');
 const Razorpay = require('razorpay');
 const admin = require('firebase-admin');
@@ -47,7 +46,31 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '5mb' }));
-app.use(mongoSanitize()); // Strip $ and . from user input — prevents NoSQL injection
+
+// express-mongo-sanitize is incompatible with Express 5 (req.query is read-only).
+// Inline sanitizer: strips keys starting with $ or containing . from body and query.
+function stripMongo(obj) {
+  if (!obj || typeof obj !== 'object') return;
+  for (const key of Object.keys(obj)) {
+    if (key.startsWith('$') || key.includes('.')) {
+      delete obj[key];
+    } else {
+      stripMongo(obj[key]);
+    }
+  }
+}
+app.use((req, res, next) => {
+  stripMongo(req.body);
+  // req.query is read-only in Express 5 — sanitize values in-place without reassigning
+  if (req.query && typeof req.query === 'object') {
+    for (const key of Object.keys(req.query)) {
+      if (key.startsWith('$') || key.includes('.')) {
+        delete req.query[key];
+      }
+    }
+  }
+  next();
+});
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 const generalLimiter = rateLimit({
@@ -58,10 +81,18 @@ const generalLimiter = rateLimit({
   message: { message: 'Too many requests, please try again later.' },
 });
 
+// Strict limit for order writes (place/confirm/status) — 10 per minute
 const orderLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 min
+  windowMs: 60 * 1000,
   max: 10,
   message: { message: 'Too many order requests, please slow down.' },
+});
+// Generous limit for order reads — per Firebase UID so accounts don't share a bucket
+const orderReadLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  keyGenerator: (req) => req.firebaseUser?.uid || req.ip,
+  message: { message: 'Too many requests, please slow down.' },
 });
 
 const authLimiter = rateLimit({
@@ -71,7 +102,6 @@ const authLimiter = rateLimit({
 });
 
 app.use('/api/', generalLimiter);
-app.use('/api/orders', orderLimiter);
 app.use('/api/payment', orderLimiter);
 app.use('/api/auth', authLimiter);
 
@@ -758,10 +788,10 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
   res.status(201).json(order);
 }));
 
-app.post('/api/orders', requireFirebaseAuth, asyncHandler(createOrder));
-app.post('/api/orders/place', requireFirebaseAuth, asyncHandler(createOrder));
+app.post('/api/orders', orderLimiter, requireFirebaseAuth, asyncHandler(createOrder));
+app.post('/api/orders/place', orderLimiter, requireFirebaseAuth, asyncHandler(createOrder));
 
-app.get('/api/orders', requireFirebaseAuth, asyncHandler(async (req, res) => {
+app.get('/api/orders', requireFirebaseAuth, orderReadLimiter, asyncHandler(async (req, res) => {
   const query = { 'payment.status': { $ne: 'Pending' } };
   if (req.query.cafeId) {
     if (!mongoose.Types.ObjectId.isValid(req.query.cafeId)) return res.status(400).json({ message: 'Invalid cafeId' });
@@ -776,7 +806,7 @@ app.get('/api/orders', requireFirebaseAuth, asyncHandler(async (req, res) => {
   res.json(orders);
 }));
 
-app.get('/api/orders/:orderId', requireFirebaseAuth, asyncHandler(async (req, res) => {
+app.get('/api/orders/:orderId', requireFirebaseAuth, orderReadLimiter, asyncHandler(async (req, res) => {
   const order = await Order.findOne({ orderId: req.params.orderId });
   if (!order) return res.status(404).json({ message: 'Order not found' });
   res.json(order);
@@ -798,6 +828,10 @@ app.patch('/api/orders/:orderId/status', requireFirebaseAuth, requireOrderCafeOw
   audit('order.status_changed', req.firebaseUser.uid, 'order', order.orderId, { status, cafeId: order.cafeId?.toString() });
 
   if (order.userId) {
+    // Don't notify the vendor if they are also the customer (same Firebase account — test scenario)
+    const orderUser = await User.findById(order.userId).select('googleId').lean();
+    const isVendorAlsoCustomer = orderUser?.googleId === req.firebaseUser.uid;
+
     const statusContent = {
       Pending:   { title: 'Order Received 📋',   body: `Order #${order.orderId} is pending confirmation.` },
       Preparing: { title: 'Being Prepared 👨‍🍳',   body: `Order #${order.orderId} — the kitchen is on it!` },
@@ -807,7 +841,9 @@ app.patch('/api/orders/:orderId/status', requireFirebaseAuth, requireOrderCafeOw
     };
     const { title, body } = statusContent[order.status] ?? { title: 'Order Update', body: `Order #${order.orderId} is now ${order.status}.` };
     await Notification.create({ userId: order.userId, title, message: body, type: 'order', orderId: order._id, items: order.items.map(i => i.name) });
-    await sendPushNotification([order.userId], title, body, { type: 'order', orderId: order.orderId, status: order.status });
+    if (!isVendorAlsoCustomer) {
+      await sendPushNotification([order.userId], title, body, { type: 'order', orderId: order.orderId, status: order.status });
+    }
   }
   res.json(order);
 }));

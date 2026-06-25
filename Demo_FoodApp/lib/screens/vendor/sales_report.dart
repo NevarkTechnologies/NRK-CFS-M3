@@ -25,6 +25,12 @@ class SalesReportPage extends StatefulWidget {
 
 class _SalesReportPageState extends State<SalesReportPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
+  static const _filterOptions = ['All Time', 'Today', 'Yesterday', '15 Days', '1 Month'];
+  static const _chartColors = [
+    Color(0xFF0F4CFF), Colors.teal, Colors.orange, Colors.purple,
+    Color(0xFFEC4899), Colors.green, Colors.cyan, Colors.amber,
+  ];
+
   bool isLoading = true;
   List<Map<String, dynamic>> allOrders = [];
   List<Map<String, dynamic>> filteredOrders = [];
@@ -39,10 +45,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
   List<BarChartGroupData> barGroups = [];
   List<String> barLabels = [];
   List<PieChartSectionData> pieSections = [];
-  String selectedRange = '30 Days';
-  final TextEditingController timeController = TextEditingController(
-    text: '30 Days',
-  );
+  String selectedRange = '1 Month';
   List<double> hourlyOrders = List.filled(24, 0);
   Map<String, double> pieData = {};
 
@@ -131,29 +134,37 @@ class _SalesReportPageState extends State<SalesReportPage> {
   }
 
   List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
-    final duration =
-        _parseTimeRange(timeController.text) ?? const Duration(days: 30);
     final now = DateTime.now();
-    return orders.where((order) {
-      final date = DateTime.tryParse(order['createdAt']?.toString() ?? '');
-      if (date == null) return false;
-      return date.isAfter(now.subtract(duration));
-    }).toList();
-  }
-
-  Duration? _parseTimeRange(String raw) {
-    final normalized = raw.trim().toLowerCase();
-    final match = RegExp(
-      r'^(\d+)\s*(days?|hrs?|hours?|mins?|minutes?|secs?|seconds?)$',
-    ).firstMatch(normalized);
-    if (match == null) return null;
-    final value = int.tryParse(match.group(1) ?? '') ?? 0;
-    final unit = match.group(2) ?? '';
-    if (unit.startsWith('day')) return Duration(days: value);
-    if (unit.startsWith('hr') || unit.startsWith('hour')) return Duration(hours: value);
-    if (unit.startsWith('min')) return Duration(minutes: value);
-    if (unit.startsWith('sec')) return Duration(seconds: value);
-    return null;
+    switch (selectedRange) {
+      case 'All Time':
+        return orders;
+      case 'Today':
+        final todayStart = DateTime(now.year, now.month, now.day);
+        return orders.where((o) {
+          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
+          return d != null && !d.isBefore(todayStart);
+        }).toList();
+      case 'Yesterday':
+        final yestStart = DateTime(now.year, now.month, now.day - 1);
+        final yestEnd = DateTime(now.year, now.month, now.day);
+        return orders.where((o) {
+          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
+          return d != null && !d.isBefore(yestStart) && d.isBefore(yestEnd);
+        }).toList();
+      case '15 Days':
+        final cutoff = now.subtract(const Duration(days: 15));
+        return orders.where((o) {
+          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
+          return d != null && d.isAfter(cutoff);
+        }).toList();
+      case '1 Month':
+      default:
+        final cutoff = now.subtract(const Duration(days: 30));
+        return orders.where((o) {
+          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
+          return d != null && d.isAfter(cutoff);
+        }).toList();
+    }
   }
 
   void _prepareChartData(List<Map<String, dynamic>> orders) {
@@ -203,11 +214,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
       final createdAt =
           DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
           DateTime.now();
-      final key = selectedRange.contains('Hr')
+      final key = (selectedRange == 'Today' || selectedRange == 'Yesterday')
           ? '${createdAt.hour}:00'
-          : selectedRange.contains('Min')
-              ? '${createdAt.hour}:${createdAt.minute.toString().padLeft(2, '0')}'
-              : '${createdAt.month}/${createdAt.day}';
+          : '${createdAt.month}/${createdAt.day}';
       buckets[key] = (buckets[key] ?? 0) + 1;
     }
 
@@ -228,7 +237,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }).toList();
   }
 
-  // ── CSV download (unchanged) ──────────────────────────────────────────────
+  // ── CSV download ──────────────────────────────────────────────────────────
   Future<void> _downloadCsvReport() async {
     if (filteredOrders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -238,33 +247,53 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
 
     final rows = <List<dynamic>>[
-      ['Order ID', 'Customer', 'Amount', 'Status', 'Created At'],
+      ['Order ID', 'Token', 'Customer', 'Items', 'Item Total (₹)', 'Status', 'Date', 'Time'],
     ];
     for (final order in filteredOrders) {
+      final items = ((order['items'] as List<dynamic>?) ?? [])
+          .map((i) => '${i['name']} x${i['qty'] ?? 1}')
+          .join(' | ');
+      final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '');
+      final dateStr = createdAt != null
+          ? '${createdAt.day}/${createdAt.month}/${createdAt.year}'
+          : '';
+      final timeStr = createdAt != null
+          ? '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
+          : '';
+      final amount = (order['itemTotal'] is num)
+          ? (order['itemTotal'] as num).toStringAsFixed(2)
+          : (double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0).toStringAsFixed(2);
+
       rows.add([
         order['orderId'] ?? order['_id'] ?? '',
+        order['tokenNumber'] ?? '',
         order['customerName'] ?? '',
-        order['itemTotal']?.toString() ?? '',
+        items,
+        amount,
         order['status'] ?? '',
-        order['createdAt'] ?? '',
+        dateStr,
+        timeStr,
       ]);
     }
 
     final csvData =
         rows.map((row) => row.map((cell) => '"$cell"').join(',')).join('\n');
-    final fileName = 'sales-report-${DateTime.now().millisecondsSinceEpoch}.csv';
+    final now = DateTime.now();
+    final fileName = 'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.csv';
 
     try {
       final savedPath = await saveCsvFile(fileName, csvData);
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('CSV exported: $savedPath')));
+          .showSnackBar(SnackBar(content: Text('CSV saved: $savedPath')));
     } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('CSV export failed: $error')));
     }
   }
 
-  // ── Excel download (NEW) ──────────────────────────────────────────────────
+  // ── Excel download ────────────────────────────────────────────────────────
   Future<void> _downloadExcelReport() async {
     if (filteredOrders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -273,15 +302,17 @@ class _SalesReportPageState extends State<SalesReportPage> {
       return;
     }
 
-    final fileName =
-        'sales-report-${DateTime.now().millisecondsSinceEpoch}.xlsx';
+    final now = DateTime.now();
+    final fileName = 'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
 
     try {
       final savedPath = await saveExcelReport(fileName, filteredOrders);
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Excel exported: $savedPath')),
+        SnackBar(content: Text('Excel saved: $savedPath')),
       );
     } catch (error) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Excel export failed: $error')),
       );
@@ -335,7 +366,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   value: selectedRange,
                   elevation: 4,
                   underline: const SizedBox(),
-                  items: ['30 Days', '24 Hrs', '12 Hrs', '60 Min', '30 Sec', 'Custom']
+                  items: _filterOptions
                       .map((option) => DropdownMenuItem(
                             value: option,
                             child: Text(
@@ -347,28 +378,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
                       .toList(),
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() {
-                      selectedRange = value;
-                      timeController.text = value;
-                    });
-                    loadSalesReport();
-                  },
-                ),
-              );
-
-              Widget customTextField = SizedBox(
-                width: isMobile ? availableWidth - 24 : 180,
-                child: TextField(
-                  controller: timeController,
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 14),
-                    hintText: '50 Hrs, 7 Days, 30 Min, 15 Sec',
-                    border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                  ),
-                  onSubmitted: (_) {
-                    setState(() => selectedRange = 'Custom');
+                    setState(() => selectedRange = value);
                     loadSalesReport();
                   },
                 ),
@@ -425,16 +435,12 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
           const SizedBox(height: 16),
 
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 3.6,
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               dropdownWidget,
-              customTextField,
               csvButton,
               excelButton,
             ],
@@ -457,7 +463,6 @@ class _SalesReportPageState extends State<SalesReportPage> {
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   dropdownWidget,
-                                  customTextField,
                                   csvButton,
                                   excelButton,
                                 ],
@@ -610,25 +615,72 @@ class _SalesReportPageState extends State<SalesReportPage> {
   }
 
   Widget _pieChart(Color card, Color text, bool isDark) {
+    final keys = pieData.keys.toList();
     return _box(
       'Top Selling Items',
       card,
       text,
       isDark,
-      SizedBox(
-        height: 300,
-        child: PieChart(
-          PieChartData(
-            sections: pieData.entries
-                .map((e) => PieChartSectionData(
-                      value: e.value,
-                      title: '${e.key}\n${e.value.toInt()}',
-                      radius: 90,
-                    ))
-                .toList(),
-          ),
-        ),
-      ),
+      pieData.isEmpty
+          ? Center(child: Text('No data', style: TextStyle(color: text)))
+          : Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: PieChart(
+                    PieChartData(
+                      sectionsSpace: 3,
+                      centerSpaceRadius: 28,
+                      sections: keys.asMap().entries.map((entry) {
+                        final color = _chartColors[entry.key % _chartColors.length];
+                        final val = pieData[entry.value]!;
+                        return PieChartSectionData(
+                          value: val,
+                          title: '${val.toInt()}',
+                          radius: 80,
+                          color: color,
+                          titleStyle: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: keys.asMap().entries.map((entry) {
+                        final color = _chartColors[entry.key % _chartColors.length];
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 3),
+                          child: Row(
+                            children: [
+                              Container(width: 10, height: 10,
+                                decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  entry.value,
+                                  style: TextStyle(fontSize: 11, color: text),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
     );
   }
 

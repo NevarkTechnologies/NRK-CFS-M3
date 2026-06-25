@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
 import 'cafeteria_page.dart';
@@ -28,10 +29,18 @@ class _SplashPageState extends State<SplashPage> {
     final allowed = await NotificationService.instance.ensurePermissionRequired(context);
     if (!allowed || !mounted) return;
 
-    await Future.delayed(const Duration(seconds: 3));
+    // Run splash timer and Firebase auth restore in parallel — don't navigate
+    // until Firebase confirms whether a session exists, or token calls will 401.
+    final results = await Future.wait([
+      Future.delayed(const Duration(seconds: 3)),
+      FirebaseAuth.instance.authStateChanges().first,
+    ]);
+
+    final firebaseUser = results[1] as User?;
 
     if (!mounted) return;
-    if (AppSession.isLoggedIn) {
+
+    if (AppSession.isLoggedIn && firebaseUser != null) {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -41,6 +50,12 @@ class _SplashPageState extends State<SplashPage> {
         ),
       );
       return;
+    }
+
+    // Session data exists but Firebase session is gone — clear stale data.
+    if (AppSession.isLoggedIn) {
+      await AppSession.clear();
+      if (!mounted) return;
     }
 
     Navigator.pushReplacementNamed(context, '/login');
