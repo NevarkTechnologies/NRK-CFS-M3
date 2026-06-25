@@ -9,3 +9,4 @@ Demo_FoodApp/linux/flutter/ephemeral/
 Demo_FoodApp/macos/Flutter/ephemeral/
 Demo_FoodApp/windows/flutter/ephemeral/
 *.log
+.env
