@@ -1,9 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:excel/excel.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
-import 'excel_export_web.dart' if (dart.library.io) 'excel_export_stub.dart'
+import 'excel_export_web.dart'
+    if (dart.library.io) 'excel_export_stub.dart'
     as web_helper;
 
 /// Groups [orders] by date and saves one sheet per day into an Excel file.
@@ -59,8 +62,10 @@ Future<String> saveExcelReport(
     // ── Data rows ────────────────────────────────────────────────
     final dayOrders = byDay[day]!;
     dayOrders.sort((a, b) {
-      final aD = DateTime.tryParse(a['createdAt']?.toString() ?? '') ?? DateTime(0);
-      final bD = DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime(0);
+      final aD =
+          DateTime.tryParse(a['createdAt']?.toString() ?? '') ?? DateTime(0);
+      final bD =
+          DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime(0);
       return aD.compareTo(bD);
     });
 
@@ -141,26 +146,44 @@ Future<String> saveExcelReport(
     sheet.setColumnWidth(6, 10); // Time
   }
 
-  final bytes = excel.encode();
-  if (bytes == null) throw Exception('Failed to encode Excel file');
+  final encoded = excel.encode();
+  if (encoded == null) {
+    throw Exception('Failed to encode Excel file');
+  }
+
+  final bytes = Uint8List.fromList(encoded);
 
   if (kIsWeb) {
     web_helper.downloadExcelOnWeb(fileName, bytes);
     return fileName;
   }
 
-  final dir = await _getTargetDirectory();
+  // Open system file picker so user can choose where to save
+  final String? outputPath = await FilePicker.platform.saveFile(
+    dialogTitle: 'Save Excel Report',
+    fileName: fileName,
+    type: FileType.custom,
+    allowedExtensions: ['xlsx'],
+    bytes: bytes,
+  );
+
+  if (outputPath != null) return outputPath;
+
+  // Fallback: save to external storage (visible in file manager)
+  final dir = await _getFallbackDirectory();
   final path = '${dir.path}/$fileName';
   await File(path).writeAsBytes(bytes, flush: true);
   return path;
 }
 
-Future<Directory> _getTargetDirectory() async {
-  if (Platform.isAndroid || Platform.isIOS) {
+Future<Directory> _getFallbackDirectory() async {
+  if (Platform.isAndroid) {
+    return await getExternalStorageDirectory() ??
+        await getApplicationDocumentsDirectory();
+  } else if (Platform.isIOS) {
     return await getApplicationDocumentsDirectory();
-  } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+  } else {
     return await getDownloadsDirectory() ??
         await getApplicationDocumentsDirectory();
   }
-  return await getTemporaryDirectory();
 }

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../model/favorite_model.dart';
+import '../cart_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'analytics_page.dart';
 import '../login_page.dart';
@@ -169,6 +171,8 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
 
   Future<void> _logout() async {
     try {
+      clearCart();
+      FavoriteModel.clear();
       await AppSession.clear();
       await FirebaseAuth.instance.signOut();
     } catch (_) {}
@@ -382,7 +386,11 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
               ],
             ),
           ),
-          Padding(
+          SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: GestureDetector(
               onTap: widget.toggleTheme,
@@ -404,6 +412,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                 ),
               ),
             ),
+          ),
           ),
         ],
       ),

@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
+import '../model/favorite_model.dart';
 import 'cafeteria_page.dart';
+import 'cart_page.dart';
 import 'vendor/vendor_home_page.dart';
 
 class SplashPage extends StatefulWidget {
@@ -26,8 +28,11 @@ class _SplashPageState extends State<SplashPage> {
   void _navigate() async {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
-    final allowed = await NotificationService.instance.ensurePermissionRequired(context);
-    if (!allowed || !mounted) return;
+    // Restore persisted cart and favorites before any UI runs
+    await Future.wait([loadCart(AppSession.userId), FavoriteModel.load(AppSession.userId)]);
+    if (!mounted) return;
+    await NotificationService.instance.ensurePermissionRequired(context);
+    if (!mounted) return;
 
     // Run splash timer and Firebase auth restore in parallel — don't navigate
     // until Firebase confirms whether a session exists, or token calls will 401.

@@ -104,7 +104,9 @@ class NotificationService {
       await _initializeLocalNotifications();
     }
 
-    await _requestPermission();
+    // Permission is handled exclusively in ensurePermissionRequired().
+    // Do NOT call _requestPermission() here — calling it before the branded
+    // dialog causes the system dialog to fire before we can show context.
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
     FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onMessageOpenedApp.listen(_handleMessageOpenedApp);
@@ -135,14 +137,6 @@ class NotificationService {
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
       debugPrint('Notification permissions denied');
     }
-
-    if (!kIsWeb) {
-      await _messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
   }
 
   Future<bool> ensurePermissionRequired(BuildContext context) async {
@@ -160,11 +154,17 @@ class NotificationService {
         return true;
       }
 
-      // First attempt: request permission directly
+      // Request system permission
       await _requestPermission();
       final afterRequest = await _messaging.getNotificationSettings();
       if (afterRequest.authorizationStatus == AuthorizationStatus.authorized ||
           afterRequest.authorizationStatus == AuthorizationStatus.provisional) {
+        // Set foreground options now that permission is confirmed
+        if (!kIsWeb) {
+          await _messaging.setForegroundNotificationPresentationOptions(
+            alert: true, badge: true, sound: true,
+          );
+        }
         return true;
       }
 
@@ -245,6 +245,17 @@ class NotificationService {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: Text(
+                      'Not Now',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: isDark ? Colors.white38 : Colors.grey,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -252,7 +263,10 @@ class NotificationService {
         },
       );
 
-      if (goToSettings != true || !context.mounted) return false;
+      // goToSettings == null means dialog was dismissed (shouldn't happen with barrierDismissible: false)
+      // goToSettings == false means user chose "Not Now"
+      if (!context.mounted) return false;
+      if (goToSettings != true) return false;
 
       await _openNotificationSettings();
       // Wait for user to return from Settings

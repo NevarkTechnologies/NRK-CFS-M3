@@ -18,7 +18,7 @@ Future<void> initRazorpay(
   _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (response) {
     _paymentSuccessCallback({
       'paymentId': response.paymentId,
-      'orderId':   response.orderId,
+      'orderId': response.orderId,
       'signature': response.signature,
     });
   });
@@ -33,7 +33,7 @@ Future<void> initRazorpay(
 Future<void> openRazorpayCheckout(
   Map<String, dynamic> razorpayOrder,
   String email, {
-  String? keyId,   // Key ID received from backend — never hardcoded
+  String? keyId, // Key ID received from backend — never hardcoded
   String? upiId,
   String? selectedApp,
 }) async {
@@ -43,36 +43,44 @@ Future<void> openRazorpayCheckout(
   }
 
   final prefill = <String, dynamic>{
-    'email':   email,
-    'contact': AppSession.phone.isNotEmpty ? AppSession.phone : '9999999999',
+    'email': email,
+    'contact': AppSession.phone.isNotEmpty ? AppSession.phone : '9876543210',
   };
 
   if (upiId != null && upiId.isNotEmpty) {
-    prefill['vpa']    = upiId;
+    prefill['vpa'] = upiId;
     prefill['method'] = 'upi';
   } else if (selectedApp != null && selectedApp.isNotEmpty) {
     prefill['method'] = 'upi';
     if (selectedApp == 'GPay') {
       prefill['app'] = 'com.google.android.apps.nbu.paisa.user';
-    } else if (selectedApp == 'PhonePe') prefill['app'] = 'com.phonepe.app';
-    else if (selectedApp == 'Paytm')   prefill['app'] = 'net.one97.paytm';
+    } else if (selectedApp == 'PhonePe') {
+      prefill['app'] = 'com.phonepe.app';
+    } else if (selectedApp == 'Paytm') {
+      prefill['app'] = 'net.one97.paytm';
+    }
   }
 
   final options = {
-    'key':         keyId,
-    'amount':      razorpayOrder['amount'],
-    'currency':    razorpayOrder['currency'] ?? 'INR',
-    'name':        "Nevark's BenchBites",
-    'order_id':    razorpayOrder['id'],
-    'description': 'Order Payment',
-    'prefill':     prefill,
-    'theme':       {'color': '#0F4CFF'},
+    'key': keyId,
+    'amount': razorpayOrder['amount'],
+    'currency': razorpayOrder['currency'] ?? 'INR',
+    'name': "BenchBites",
+    'order_id': razorpayOrder['id'],
+    'description': 'Food Order',
+    'prefill': prefill,
+    'theme': {'color': '#0F4CFF'},
     'config': {
       'display': {
         'blocks': {
-          'upi': {'name': 'UPI Payment', 'instruments': [{'method': 'upi'}]},
+          'upi': {
+            'name': 'UPI Payment',
+            'instruments': [
+              {'method': 'upi'},
+            ],
+          },
         },
-        'sequence':    ['block.upi'],
+        'sequence': ['block.upi'],
         'preferences': {'show_default_blocks': false},
       },
     },

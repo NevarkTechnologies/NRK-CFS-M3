@@ -1,7 +1,7 @@
 <<<<<<< HEAD
 # Demo_FoodApp
 =======
-# Nevark_Foods
+# nevark_foods
 
 A new Flutter project.
 

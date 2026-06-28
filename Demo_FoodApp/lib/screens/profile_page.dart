@@ -5,6 +5,9 @@ import 'cafeteria_page.dart';
 import 'notification_page.dart';
 import 'about_page.dart';
 import '../services/session.dart';
+import '../model/favorite_model.dart';
+import '../services/theme_service.dart';
+import 'cart_page.dart';
 
 class ProfilePage extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -16,6 +19,20 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  @override
+  void initState() {
+    super.initState();
+    themeNotifier.addListener(_onThemeChange);
+  }
+
+  void _onThemeChange() => setState(() {});
+
+  @override
+  void dispose() {
+    themeNotifier.removeListener(_onThemeChange);
+    super.dispose();
+  }
+
   // Removed _ordersFuture as it is no longer needed for this view[cite: 34]
 
   final List<Map<String, dynamic>> menuItems = [
@@ -83,9 +100,8 @@ class _ProfilePageState extends State<ProfilePage> {
                             Navigator.pushAndRemoveUntil(
                               context,
                               MaterialPageRoute(
-                                builder: (_) => CafeteriaPage(
-                                  toggleTheme: widget.toggleTheme,
-                                ),
+                                builder: (_) =>
+                                    CafeteriaPage(toggleTheme: toggleAppTheme),
                               ),
                               (route) => false,
                             );
@@ -118,25 +134,34 @@ class _ProfilePageState extends State<ProfilePage> {
                         ),
                       ),
                       const Spacer(),
-                      GestureDetector(
-                        onTap: widget.toggleTheme,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0F4CFF).withValues(alpha: 0.2)
-                                : const Color(
-                                    0xFF0F4CFF,
-                                  ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            isDark
-                                ? Icons.light_mode_rounded
-                                : Icons.dark_mode_rounded,
-                            color: const Color(0xFF0F4CFF),
-                          ),
-                        ),
+                      // ✅ Fixed — reads live notifier
+                      ValueListenableBuilder<ThemeMode>(
+                        valueListenable: themeNotifier,
+                        builder: (_, mode, _) {
+                          final isCurrentlyDark = mode == ThemeMode.dark;
+                          return GestureDetector(
+                            onTap: toggleAppTheme,
+                            child: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: isCurrentlyDark
+                                    ? const Color(
+                                        0xFF0F4CFF,
+                                      ).withValues(alpha: 0.2)
+                                    : const Color(
+                                        0xFF0F4CFF,
+                                      ).withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Icon(
+                                isCurrentlyDark
+                                    ? Icons.light_mode_rounded
+                                    : Icons.dark_mode_rounded,
+                                color: const Color(0xFF0F4CFF),
+                              ),
+                            ),
+                          );
+                        },
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
@@ -408,10 +433,7 @@ class _ProfilePageState extends State<ProfilePage> {
                               builder: (_) => const AboutPage(),
                             ),
                           ),
-                          icon: const Icon(
-                            Icons.list,
-                            size: 18,
-                          ),
+                          icon: const Icon(Icons.list, size: 18),
                           label: const Text(
                             'About Us',
                             style: TextStyle(
@@ -568,13 +590,15 @@ class _ProfilePageState extends State<ProfilePage> {
                               },
                             );
                             if (confirmed != true) return;
+                            clearCart();
+                            FavoriteModel.clear();
                             await AppSession.clear();
                             if (!context.mounted) return;
                             Navigator.pushAndRemoveUntil(
                               context,
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    LoginPage(toggleTheme: widget.toggleTheme),
+                                    LoginPage(toggleTheme: toggleAppTheme),
                               ),
                               (route) => false,
                             );
@@ -602,7 +626,7 @@ class _ProfilePageState extends State<ProfilePage> {
       bottomNavigationBar: CustomFloatingNavBar(
         currentIndex: 2,
         isDark: isDark,
-        toggleTheme: widget.toggleTheme,
+        toggleTheme: toggleAppTheme,
       ),
     );
   }

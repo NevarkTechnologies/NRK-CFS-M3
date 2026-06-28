@@ -231,14 +231,6 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         ),
                       ),
                       _iconButton(
-                        icon: isDark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                        isDark: isDark,
-                        onTap: widget.toggleTheme,
-                      ),
-                      const SizedBox(width: 10),
-                      _iconButton(
                         icon: Icons.notifications_none_rounded,
                         isDark: isDark,
                         badgeCount: NotificationModel.notifications
@@ -307,7 +299,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         ),
                         _buildInfoChip(
                           Icons.flash_on_rounded,
-                          "Order under 20 secs",
+                          "Order in 20s",
                           isDark,
                         ),
                       ],
@@ -394,7 +386,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
-          hintText: 'Search Food, Cafeteria, Cuisine...',
+          hintText: 'Search for Cafeterias and Cuisines ',
           hintStyle: TextStyle(
             fontFamily: 'Inter',
             color: isDark ? Colors.white54 : Colors.grey.shade400,
@@ -504,7 +496,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
         child: Padding(
           padding: const EdgeInsets.all(40.0),
           child: Text(
-            "No restaurants or cafeterias found",
+            "No Restaurants or Cafeterias Found",
             style: TextStyle(
               fontFamily: 'Inter',
               color: isDark ? Colors.white70 : Colors.black54,
@@ -676,7 +668,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         );
                       } catch (_) {}
                     },
-                    child: Text('Remove my rating', style: TextStyle(fontFamily: 'Nunito', color: Colors.red.shade400, fontSize: 13)),
+                    child: Text('Remove my Rating', style: TextStyle(fontFamily: 'Nunito', color: Colors.red.shade400, fontSize: 13)),
                   ),
                 ],
               ],
@@ -932,7 +924,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         color: rated ? const Color(0xFFFFC107) : appBlue, size: 16),
                       const SizedBox(width: 6),
                       Text(
-                        rated ? 'You rated $ratedStars ★ — tap to change' : 'Rate this cafeteria',
+                        rated ? ' You Rated  $ratedStars ★   |   Tap to Change' : 'Tap to Rate',
                         style: TextStyle(
                           fontFamily: 'Nunito',
                           fontWeight: FontWeight.w700,
@@ -1040,16 +1032,47 @@ class CustomFloatingNavBar extends StatelessWidget {
                           );
                         }
                       },
-                      items: const [
-                        BottomNavigationBarItem(
+                      items: [
+                        const BottomNavigationBarItem(
                           icon: Icon(Icons.home_rounded),
                           label: "Home",
                         ),
                         BottomNavigationBarItem(
-                          icon: Icon(Icons.shopping_cart_rounded),
+                          icon: ValueListenableBuilder<int>(
+                            valueListenable: cartCountNotifier,
+                            builder: (_, count, _) => Stack(
+                              clipBehavior: Clip.none,
+                              children: [
+                                const Icon(Icons.shopping_cart_rounded),
+                                if (count > 0)
+                                  Positioned(
+                                    top: -6,
+                                    right: -8,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(4),
+                                      constraints: const BoxConstraints(
+                                          minWidth: 16, minHeight: 16),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF0F4CFF),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Text(
+                                        count > 99 ? '99+' : '$count',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                           label: "Cart",
                         ),
-                        BottomNavigationBarItem(
+                        const BottomNavigationBarItem(
                           icon: Icon(Icons.person_rounded),
                           label: "Profile",
                         ),

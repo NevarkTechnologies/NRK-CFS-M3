@@ -141,7 +141,7 @@
     },
     {
       "name": "file_picker",
-      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-11.0.2",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-10.3.10",
       "packageUri": "lib/",
       "languageVersion": "3.4"
     },
@@ -294,6 +294,12 @@
       "rootUri": "file:///D:/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",
       "languageVersion": "3.10"
+    },
+    {
+      "name": "google_fonts",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/google_fonts-6.3.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.9"
     },
     {
       "name": "google_identity_services_web",
@@ -507,9 +513,9 @@
     },
     {
       "name": "path_provider_linux",
-      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_linux-2.2.1",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_linux-2.2.2",
       "packageUri": "lib/",
-      "languageVersion": "2.19"
+      "languageVersion": "3.10"
     },
     {
       "name": "path_provider_platform_interface",
@@ -758,7 +764,7 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "Nevark_Foods",
+      "name": "nevark_foods",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.11"

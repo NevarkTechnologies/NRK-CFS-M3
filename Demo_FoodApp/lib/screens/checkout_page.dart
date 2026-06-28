@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'success_page.dart';
 import 'detail_page.dart';
 import 'cart_page.dart';
@@ -55,12 +56,65 @@ class _CheckoutPageState extends State<CheckoutPage> {
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
-      initialTime: _pickupTime ?? TimeOfDay(hour: now.hour, minute: (now.minute ~/ 15 + 1) * 15 % 60),
+      initialTime: _pickupTime ??
+          TimeOfDay(hour: now.hour, minute: (now.minute ~/ 15 + 1) * 15 % 60),
       helpText: 'SELECT PICKUP TIME',
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
-        child: child!,
-      ),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF0F4CFF),
+              brightness: Theme.of(context).brightness,
+            ).copyWith(
+              primary: const Color(0xFF0F4CFF),
+              onPrimary: Colors.white,
+              surface: isDark ? const Color(0xFF0F172A) : Colors.white,
+              onSurface: isDark ? Colors.white : const Color(0xFF0F172A),
+            ),
+            timePickerTheme: TimePickerThemeData(
+              backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+              dialBackgroundColor: isDark
+                  ? const Color(0xFF1E293B)
+                  : const Color(0xFFE8F0FF),
+              dialHandColor: const Color(0xFF0F4CFF),
+              dialTextColor: WidgetStateColor.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? Colors.white
+                    : isDark
+                        ? Colors.white70
+                        : const Color(0xFF0F172A),
+              ),
+              hourMinuteColor: WidgetStateColor.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? const Color(0xFF0F4CFF)
+                    : isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFE8F0FF),
+              ),
+              hourMinuteTextColor: WidgetStateColor.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? Colors.white
+                    : isDark
+                        ? Colors.white70
+                        : const Color(0xFF0F172A),
+              ),
+              entryModeIconColor: const Color(0xFF0F4CFF),
+              helpTextStyle: const TextStyle(
+                color: Color(0xFF0F4CFF),
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+            ),
+          ),
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+            child: child!,
+          ),
+        );
+      },
     );
     if (picked == null) return;
     // Reject times in the past (same-day only comparison).
@@ -69,7 +123,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (pickedMinutes <= nowMinutes) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pickup time must be later than the current time.'), backgroundColor: Colors.redAccent),
+          const SnackBar(content: Text('Pickup Time Must Be Later Than Current Time.'), backgroundColor: Colors.redAccent),
         );
       }
       return;
@@ -247,7 +301,7 @@ Container(
                       Text('Pickup Time', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14)),
                       const SizedBox(height: 2),
                       Text(
-                        set ? _pickupTimeLabel : 'Required — tap to set',
+                        set ? _pickupTimeLabel : 'Required - Tap to Set',
                         style: TextStyle(fontSize: 13, color: set ? primaryColor : Colors.redAccent, fontWeight: set ? FontWeight.w600 : FontWeight.normal),
                       ),
                     ],
@@ -344,11 +398,49 @@ Container(
   }
 
 
+  void _showUnavailableDialog(List<String> names) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Items Unavailable'),
+        content: Text(
+          'These Items Are No Longer Available:\n\n${names.join(', ')}\n\nRemove Them From Your Cart and Try Again.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Update Cart'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handlePayment() async {
     final orderItems = _orderItems();
     if (orderItems.isEmpty) {
-      _showError("Your cart is empty");
+      _showError("Your Cart is Empty");
       return;
+    }
+
+    // Client-side guard before charging the user
+    if (!widget.isReorder) {
+      try {
+        final ids = globalCartItems.map((e) => e["id"].toString()).toList();
+        if (ids.isNotEmpty) {
+          final result = await ApiService.checkMenuAvailability(ids);
+          final unavailable = result.entries
+              .where((e) => (e.value as Map)['available'] == false)
+              .map((e) => (e.value as Map)['name']?.toString() ?? e.key)
+              .toList();
+          if (unavailable.isNotEmpty && mounted) {
+            _showUnavailableDialog(unavailable);
+            return;
+          }
+        }
+      } catch (_) {
+        // Network error — proceed; server also validates inside initiatePayment
+      }
     }
 
     setState(() => isSubmitting = true);
@@ -362,7 +454,7 @@ Container(
         cafeId: widget.cafeId,
         cafeteriaName: _cafeteriaName(),
         items: orderItems,
-        location: widget.pickupLocation ?? "Pickup counter",
+        location: widget.pickupLocation ?? "Pickup Counter",
         pickupTime: _pickupTimeISO,
       );
 
@@ -418,37 +510,7 @@ Container(
     await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-          title: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F4CFF).withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.check_circle_outline, color: Color(0xFF0F4CFF), size: 30),
-              ),
-              const SizedBox(width: 12),
-              Text('Order Confirmed', style: TextStyle(color: isDark ? Colors.white : Colors.black)),
-            ],
-          ),
-          content: Text(
-            'Your payment was successful and your order has been placed. Check notifications for updates.',
-            style: TextStyle(color: isDark ? Colors.white70 : Colors.black87),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
+      builder: (ctx) => _OrderConfirmedDialog(isDark: isDark),
     );
   }
 
@@ -468,6 +530,9 @@ Container(
 
       if (!mounted) return;
       await _showOrderPlacedPopup();
+      // Clear cart now that order is placed
+      globalCartItems.clear();
+      await saveCart();
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
@@ -494,6 +559,106 @@ Container(
       AppSession.email,
       keyId: _razorpayKeyId,
       upiId: enteredUpiId,
+    );
+  }
+}
+
+// ── Animated Order Confirmed dialog ──────────────────────────────────────────
+class _OrderConfirmedDialog extends StatelessWidget {
+  final bool isDark;
+  const _OrderConfirmedDialog({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
+              blurRadius: 40,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF0F4CFF),
+                size: 52,
+              ),
+            )
+                .animate()
+                .scale(
+                  begin: const Offset(0, 0),
+                  end: const Offset(1, 1),
+                  duration: 500.ms,
+                  curve: Curves.elasticOut,
+                ),
+            const SizedBox(height: 24),
+            Text(
+              'Order Confirmed !',
+              style: TextStyle(
+                fontSize: 24,
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w900,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 200.ms, duration: 300.ms)
+                .slideY(begin: 0.3, end: 0, delay: 200.ms, duration: 300.ms),
+            const SizedBox(height: 12),
+            Text(
+              'Payment Successful! Check Notifications for Pickup Updates.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: isDark ? Colors.white60 : const Color(0xFF64748B),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 350.ms, duration: 300.ms),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F4CFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'Continue',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 500.ms, duration: 300.ms)
+                .slideY(begin: 0.2, end: 0, delay: 500.ms, duration: 300.ms),
+          ],
+        ),
+      ),
     );
   }
 }

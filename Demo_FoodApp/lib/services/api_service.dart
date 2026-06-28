@@ -49,6 +49,16 @@ class ApiService {
     return _decodeObject(response);
   }
 
+  /// Returns { itemId: { available: bool, name: String } } for each requested id.
+  static Future<Map<String, dynamic>> checkMenuAvailability(List<String> itemIds) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/menu/availability-check'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({'itemIds': itemIds}),
+    );
+    return _decodeObject(response);
+  }
+
   static Future<Map<String, dynamic>> updateUser(
     String userId,
     Map<String, dynamic> data,

@@ -181,7 +181,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Color.fromRGBO(color.red, color.green, color.blue, 0.15), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Color.fromRGBO((color.r*255.0).round().clamp(0,255), (color.g*255.0).round().clamp(0,255), (color.b*255.0).round().clamp(0,255), 0.15), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
           const SizedBox(height: 16),
           Text(value, style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 22, color: text)),
           const SizedBox(height: 4),
@@ -202,7 +202,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Text('Weekly Revenue', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
           const SizedBox(height: 20),
           if (weeklyRevenue.every((value) => value == 0))
-            Text('No revenue data yet', style: TextStyle(color: Color.fromRGBO(text.red, text.green, text.blue, 0.7), fontFamily: 'Inter'))
+            Text('No revenue data yet', style: TextStyle(color: Color.fromRGBO((text.r*255.0).round().clamp(0,255), (text.g*255.0).round().clamp(0,255), (text.b*255.0).round().clamp(0,255), 0.7), fontFamily: 'Inter'))
           else
             SizedBox(
               height: 140,
@@ -235,7 +235,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Text('Weekly Orders', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
           const SizedBox(height: 20),
           if (weeklyOrders.every((value) => value == 0))
-            Text('No order data yet', style: TextStyle(color: Color.fromRGBO(text.red, text.green, text.blue, 0.7), fontFamily: 'Inter'))
+            Text('No order data yet', style: TextStyle(color: Color.fromRGBO((text.r*255.0).round().clamp(0,255), (text.g*255.0).round().clamp(0,255), (text.b*255.0).round().clamp(0,255), 0.7), fontFamily: 'Inter'))
           else
             SizedBox(
               height: 140,

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const crypto = require('crypto');
 const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const Razorpay = require('razorpay');
 const admin = require('firebase-admin');
 require('dotenv').config();
@@ -91,7 +91,7 @@ const orderLimiter = rateLimit({
 const orderReadLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 120,
-  keyGenerator: (req) => req.firebaseUser?.uid || req.ip,
+  keyGenerator: (req) => req.firebaseUser?.uid || ipKeyGenerator(req),
   message: { message: 'Too many requests, please slow down.' },
 });
 
@@ -444,7 +444,8 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   let user = await User.findOneAndUpdate(
     { email: normalizedEmail },
     {
-      $set: { googleId: decodedToken.uid, name, avatar, role: resolvedRole },
+      $set: { googleId: decodedToken.uid, avatar, role: resolvedRole },
+      $setOnInsert: { name },
       ...(fcmToken && /^[A-Za-z0-9_:%-]{20,300}$/.test(fcmToken)
         ? { $addToSet: { fcmTokens: fcmToken } } : {}),
     },
@@ -538,6 +539,21 @@ app.patch('/api/cafes/:id', requireFirebaseAuth, validateObjectId('id'), require
   const cafe = await Cafe.findByIdAndUpdate(req.params.id, safeBody, { new: true, runValidators: true });
   audit('cafe.updated', req.firebaseUser.uid, 'cafe', req.params.id, { fields: Object.keys(safeBody) });
   res.json(cafe);
+}));
+
+// Public: batch availability check for cart items (called pre-payment)
+app.post('/api/menu/availability-check', asyncHandler(async (req, res) => {
+  const { itemIds } = req.body;
+  if (!Array.isArray(itemIds) || itemIds.length === 0) {
+    return res.status(400).json({ message: 'itemIds array is required' });
+  }
+  const valid = itemIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+  const items = await MenuItem.find({ _id: { $in: valid } }).select('_id available name').lean();
+  const result = {};
+  for (const item of items) {
+    result[item._id.toString()] = { available: item.available, name: item.name };
+  }
+  res.json(result);
 }));
 
 // Public: menu listing
@@ -692,6 +708,16 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     resolvedCafeId = cafe?._id;
   }
 
+  // Reject if any item is currently disabled by the vendor
+  const menuItemIds = normalizedItems.map(i => i.menuItemId).filter(id => id && mongoose.Types.ObjectId.isValid(String(id)));
+  if (menuItemIds.length > 0) {
+    const unavailable = await MenuItem.find({ _id: { $in: menuItemIds }, available: false }).select('name').lean();
+    if (unavailable.length > 0) {
+      const names = unavailable.map(i => i.name).join(', ');
+      return res.status(409).json({ message: `Some items are no longer available: ${names}. Please update your cart.` });
+    }
+  }
+
   const itemTotal      = toMoney(normalizedItems.reduce((s, i) => s + i.price * i.qty, 0));
   const platformFee    = toMoney(itemTotal * 0.03);
   const convenienceFee = 1.5;
@@ -775,14 +801,27 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
   if (order.userId) {
     await Notification.create({
       userId: order.userId, title: 'Order Placed 🎉',
-      message: `Order #${order.orderId} confirmed — payment received.`,
+      message: `Token #${order.tokenNumber} confirmed — payment received.`,
       type: 'order', orderId: order._id, items: order.items.map(i => i.name),
     });
     await sendPushNotification(
       [order.userId], 'Order Placed 🎉',
-      `Order #${order.orderId} confirmed — payment received.`,
+      `Token #${order.tokenNumber} confirmed — payment received.`,
       { type: 'order', orderId: order.orderId, status: 'Pending' }
     );
+  }
+
+  // 5. Notify vendor of new order.
+  if (order.cafeId) {
+    const vendorUser = await User.findOne({ cafeId: order.cafeId, role: 'vendor' }).select('_id').lean();
+    if (vendorUser) {
+      await sendPushNotification(
+        [vendorUser._id],
+        'New Order 🛎️',
+        `Token #${order.tokenNumber} — new order from ${order.customerName || 'a customer'}`,
+        { type: 'vendor_order', orderId: order.orderId, status: 'Pending' }
+      );
+    }
   }
 
   res.status(201).json(order);
@@ -832,14 +871,15 @@ app.patch('/api/orders/:orderId/status', requireFirebaseAuth, requireOrderCafeOw
     const orderUser = await User.findById(order.userId).select('googleId').lean();
     const isVendorAlsoCustomer = orderUser?.googleId === req.firebaseUser.uid;
 
+    const t = `Token #${order.tokenNumber}`;
     const statusContent = {
-      Pending:   { title: 'Order Received 📋',   body: `Order #${order.orderId} is pending confirmation.` },
-      Preparing: { title: 'Being Prepared 👨‍🍳',   body: `Order #${order.orderId} — the kitchen is on it!` },
-      Ready:     { title: 'Ready for Pickup! 🎉', body: `Order #${order.orderId} — come collect your order now!` },
-      Completed: { title: 'Order Completed ✅',    body: `Order #${order.orderId} — enjoy your meal!` },
-      Rejected:  { title: 'Order Rejected ❌',     body: `Order #${order.orderId} was rejected. Please contact support.` },
+      Pending:   { title: 'Order Received 📋',   body: `${t} is pending confirmation.` },
+      Preparing: { title: 'Being Prepared 👨‍🍳',   body: `${t} — the kitchen is on it!` },
+      Ready:     { title: 'Ready for Pickup! 🎉', body: `${t} — come collect your order now!` },
+      Completed: { title: 'Order Completed ✅',    body: `${t} — enjoy your meal!` },
+      Rejected:  { title: 'Order Rejected ❌',     body: `${t} was rejected. Please contact support.` },
     };
-    const { title, body } = statusContent[order.status] ?? { title: 'Order Update', body: `Order #${order.orderId} is now ${order.status}.` };
+    const { title, body } = statusContent[order.status] ?? { title: 'Order Update', body: `${t} is now ${order.status}.` };
     await Notification.create({ userId: order.userId, title, message: body, type: 'order', orderId: order._id, items: order.items.map(i => i.name) });
     if (!isVendorAlsoCustomer) {
       await sendPushNotification([order.userId], title, body, { type: 'order', orderId: order.orderId, status: order.status });

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../model/favorite_model.dart';
+import '../cart_page.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'analytics_page.dart';
 import '../login_page.dart';
@@ -125,30 +127,99 @@ class _VendorHomePageState extends State<VendorHomePage> {
   }
 
   Future<bool?> _confirmLogout() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dialogCard = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final dialogText = isDark ? Colors.white : const Color(0xFF10254E);
+    final dialogSub  = isDark ? Colors.white60 : const Color(0xFF6B7280);
+
     return showDialog<bool>(
       context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text('Confirm Logout'),
-          content: const Text('Do you want to logout?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
+      barrierColor: Colors.black54,
+      builder: (_) => AlertDialog(
+        backgroundColor: dialogCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: Colors.redAccent.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Logout'),
+            const SizedBox(height: 16),
+            Text(
+              'Confirm Logout',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: dialogText,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Are you sure you want to log out?\nYour session data will be cleared.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: dialogSub),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF0F4CFF),
+                      side: BorderSide(
+                        color: const Color(0xFF0F4CFF).withValues(alpha: 0.4),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Logout',
+                      style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
   }
 
   Future<void> _logout() async {
     try {
+      clearCart();
+      FavoriteModel.clear();
       await AppSession.clear();
       await FirebaseAuth.instance.signOut();
     } catch (_) {}
@@ -181,7 +252,8 @@ class _VendorHomePageState extends State<VendorHomePage> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SettingsPage(toggleTheme: widget.toggleTheme),
+                      builder: (_) =>
+                          SettingsPage(toggleTheme: widget.toggleTheme),
                     ),
                   );
                 },
@@ -215,30 +287,50 @@ class _VendorHomePageState extends State<VendorHomePage> {
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
               children: [
-                Builder(builder: (context) {
-                  final src = VendorData.displayImage;
-                  Widget imgChild;
-                  if (src.startsWith('data:image/')) {
-                    final b64 = src.split(',').last;
-                    imgChild = Image.memory(base64Decode(b64), fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
-                  } else if (src.isNotEmpty) {
-                    imgChild = Image.network(src, fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
-                  } else {
-                    imgChild = Icon(Icons.storefront_rounded, color: primaryBlue, size: 28);
-                  }
-                  return Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: primaryBlue.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: imgChild,
-                  );
-                }),
+                Builder(
+                  builder: (context) {
+                    final src = VendorData.displayImage;
+                    Widget imgChild;
+                    if (src.startsWith('data:image/')) {
+                      final b64 = src.split(',').last;
+                      imgChild = Image.memory(
+                        base64Decode(b64),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Icon(
+                          Icons.storefront_rounded,
+                          color: primaryBlue,
+                          size: 28,
+                        ),
+                      );
+                    } else if (src.isNotEmpty) {
+                      imgChild = Image.network(
+                        src,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) => Icon(
+                          Icons.storefront_rounded,
+                          color: primaryBlue,
+                          size: 28,
+                        ),
+                      );
+                    } else {
+                      imgChild = Icon(
+                        Icons.storefront_rounded,
+                        color: primaryBlue,
+                        size: 28,
+                      );
+                    }
+                    return Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: primaryBlue.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: imgChild,
+                    );
+                  },
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -256,7 +348,9 @@ class _VendorHomePageState extends State<VendorHomePage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        VendorData.displayCuisine.isNotEmpty ? VendorData.displayCuisine : 'Vendor Portal',
+                        VendorData.displayCuisine.isNotEmpty
+                            ? VendorData.displayCuisine
+                            : 'Vendor Portal',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 13,
@@ -327,33 +421,59 @@ class _VendorHomePageState extends State<VendorHomePage> {
                   textColor,
                   isDark,
                 ),
-                buildMenu(Icons.info_outline_rounded, "About Us", 6, textColor, isDark),
+                buildMenu(
+                  Icons.info_outline_rounded,
+                  "About Us",
+                  6,
+                  textColor,
+                  isDark,
+                ),
                 buildMenu(Icons.logout_rounded, "Logout", 7, textColor, isDark),
               ],
             ),
           ),
-          Padding(
+          SafeArea(
+            top: false,
+            left: false,
+            right: false,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: GestureDetector(
               onTap: widget.toggleTheme,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 14,
+                  horizontal: 16,
+                ),
                 decoration: BoxDecoration(
                   color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Row(
                   children: [
-                    Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: const Color(0xFF0F4CFF), size: 22),
+                    Icon(
+                      isDark
+                          ? Icons.light_mode_rounded
+                          : Icons.dark_mode_rounded,
+                      color: const Color(0xFF0F4CFF),
+                      size: 22,
+                    ),
                     const SizedBox(width: 16),
-                    Text(isDark ? 'Light Mode' : 'Dark Mode',
-                      style: TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87)),
+                    Text(
+                      isDark ? 'Light Mode' : 'Dark Mode',
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white70 : Colors.black87,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ),
+          ),
           ),
         ],
       ),
@@ -389,7 +509,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
             return;
           }
           if (isAbout) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutPage()),
+            );
             return;
           }
           if (_requiresBusinessDetails && title != "Settings") {
@@ -413,6 +536,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
             return;
           }
           setState(() => selectedIndex = index);
+          final navigator = Navigator.of(context);
           Future.delayed(const Duration(milliseconds: 150), () {
             Widget page;
             if (title == "Orders") {
@@ -429,7 +553,9 @@ class _VendorHomePageState extends State<VendorHomePage> {
               page = VendorHomePage(toggleTheme: widget.toggleTheme);
             }
 
-            Navigator.push(context, MaterialPageRoute(builder: (_) => page));
+            if (!mounted) return;
+
+            navigator.push(MaterialPageRoute(builder: (_) => page));
           });
         },
         child: AnimatedContainer(
@@ -536,22 +662,6 @@ class _VendorHomePageState extends State<VendorHomePage> {
                         ],
                       ),
                     ),
-                    const SizedBox(width: 16),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.white10 : Colors.grey.shade100,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: IconButton(
-                        icon: Icon(
-                          isDark
-                              ? Icons.light_mode_rounded
-                              : Icons.dark_mode_rounded,
-                          color: primaryBlue,
-                        ),
-                        onPressed: widget.toggleTheme,
-                      ),
-                    ),
                   ],
                 ),
               )
@@ -634,10 +744,16 @@ class _VendorHomePageState extends State<VendorHomePage> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: (data[index][3] as Color).withValues(alpha: 0.15),
+                              color: (data[index][3] as Color).withValues(
+                                alpha: 0.15,
+                              ),
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(data[index][2] as IconData, color: data[index][3] as Color, size: 20),
+                            child: Icon(
+                              data[index][2] as IconData,
+                              color: data[index][3] as Color,
+                              size: 20,
+                            ),
                           ),
                           const SizedBox(height: 10),
                           Text(
@@ -859,10 +975,19 @@ class _VendorHomePageState extends State<VendorHomePage> {
               const SizedBox(height: 6),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(8)),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Text(
                   status.toUpperCase(),
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 10, fontWeight: FontWeight.bold, color: statusColor, letterSpacing: 0.5),
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: statusColor,
+                    letterSpacing: 0.5,
+                  ),
                 ),
               ),
             ],
@@ -1117,14 +1242,15 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
         child: Text(
           status.toUpperCase(),
           style: TextStyle(
-          fontFamily: 'Inter',
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.5,
+            fontFamily: 'Inter',
+            color: color,
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5,
+          ),
         ),
       ),
-    ));
+    );
   }
 
   Widget _buildActionButtons() {

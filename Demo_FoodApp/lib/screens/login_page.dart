@@ -3,12 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:ui' as ui;
-
+import 'package:google_fonts/google_fonts.dart';
 import 'vendor/vendor_home_page.dart';
 import 'cafeteria_page.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
+import '../model/favorite_model.dart';
+import 'cart_page.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback? toggleTheme;
@@ -24,137 +26,189 @@ class _LoginPageState extends State<LoginPage> {
 
   Future<void> _askPhoneNumber(String userId) async {
     final ctrl = TextEditingController();
+    bool isValidPhone = false;
     await showDialog(
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        return Dialog(
-          backgroundColor: Colors.transparent,
-          child: Container(
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF0F172A) : Colors.white,
-              borderRadius: BorderRadius.circular(28),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
-                  blurRadius: 40,
-                  offset: const Offset(0, 12),
-                ),
-              ],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.phone_android_rounded,
-                    color: Color(0xFF0F4CFF),
-                    size: 36,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Text(
-                  'Add Phone Number',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Add your number so vendors can reach you about your order.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: ctrl,
-                  keyboardType: TextInputType.phone,
-                  maxLength: 10,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '10-digit mobile number',
-                    prefixIcon: const Icon(Icons.phone_rounded, color: Color(0xFF0F4CFF)),
-                    filled: true,
-                    fillColor: isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFF0F4CFF).withValues(alpha: 0.06),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      borderSide: const BorderSide(color: Color(0xFF0F4CFF), width: 1.5),
-                    ),
-                    counterText: '',
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: const Color(0xFF0F4CFF),
-                          side: const BorderSide(color: Color(0xFF0F4CFF), width: 1.5),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Skip',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0F4CFF),
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14)),
-                        ),
-                        onPressed: () async {
-                          final phone = ctrl.text.trim();
-                          if (phone.length >= 10) {
-                            try {
-                              await ApiService.updateUser(userId, {'phone': phone});
-                              await AppSession.setUser(
-                                  {...AppSession.currentUser!, 'phone': phone});
-                            } catch (_) {}
-                            if (ctx.mounted) Navigator.pop(ctx);
-                          }
-                        },
-                        child: const Text('Save',
-                            style: TextStyle(fontWeight: FontWeight.bold)),
-                      ),
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            final isDark = Theme.of(ctx).brightness == Brightness.dark;
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              child: Container(
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
+                      blurRadius: 40,
+                      offset: const Offset(0, 12),
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.phone_android_rounded,
+                        color: Color(0xFF0F4CFF),
+                        size: 36,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Add Phone Number',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      'Add your number so that payment can be processed.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark
+                            ? Colors.white60
+                            : const Color(0xFF64748B),
+                        height: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: ctrl,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 10,
+                      onChanged: (value) {
+                        setDialogState(() {
+                          isValidPhone = RegExp(
+                            r'^\d{10}$',
+                          ).hasMatch(value.trim());
+                        });
+                      },
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Enter Number',
+                        prefixIcon: const Icon(
+                          Icons.local_phone_rounded,
+                          color: Color(0xFF0F4CFF),
+                        ),
+                        filled: true,
+                        fillColor: isDark
+                            ? const Color(0xFF1E293B)
+                            : const Color(0xFF0F4CFF).withValues(alpha: 0.06),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF0F4CFF),
+                            width: 1.5,
+                          ),
+                        ),
+                        counterText: '',
+                        errorText: ctrl.text.isEmpty || isValidPhone
+                            ? null
+                            : 'Please enter a valid 10-digit phone number',
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF0F4CFF),
+                              side: const BorderSide(
+                                color: Color(0xFF0F4CFF),
+                                width: 1.5,
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text(
+                              'Skip',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F4CFF),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            onPressed: !isValidPhone
+                                ? null
+                                : () async {
+                                    final phone = ctrl.text.trim();
+                                    if (!RegExp(r'^\d{10}$').hasMatch(phone)) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'Enter Valid 10-Digit Phone Number',
+                                          ),
+                                          backgroundColor: Colors.redAccent,
+                                          behavior: SnackBarBehavior.floating,
+                                          duration: Duration(seconds: 2),
+                                        ),
+                                      );
+                                      return;
+                                    }
+                                    try {
+                                      await ApiService.updateUser(userId, {
+                                        'phone': phone,
+                                      });
+                                      await AppSession.setUser({
+                                        ...AppSession.currentUser!,
+                                        'phone': phone,
+                                      });
+                                    } catch (_) {}
+
+                                    if (ctx.mounted) Navigator.pop(ctx);
+                                  },
+                            child: const Text(
+                              'Save',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -183,8 +237,9 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -205,15 +260,22 @@ class _LoginPageState extends State<LoginPage> {
           .where('email', arrayContains: firebaseUser.email)
           .get();
 
+      String role;
       if (querySnapshot.docs.isEmpty) {
-        // If email isn't in the Firestore array, deny access
-        await FirebaseAuth.instance.signOut();
-        throw Exception("Your email is not authorized to access this app.");
+        // New user — add email to the students document and read its role
+        final studentsRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc('students');
+        await studentsRef.update({
+          'email': FieldValue.arrayUnion([firebaseUser.email!]),
+        });
+        final studentsSnap = await studentsRef.get();
+        role = (studentsSnap.data()?['role'] as String?) ?? 'customer';
+      } else {
+        // Get the role from the matching Firestore document
+        final userData = querySnapshot.docs.first.data();
+        role = userData['role'] ?? 'customer';
       }
-
-      // 3. Get the role from the matching Firestore document
-      final userData = querySnapshot.docs.first.data();
-      final String role = userData['role'] ?? 'customer';
 
       // 4. Send the authenticated Firebase user to the backend
       final backendUser = await ApiService.googleSignIn(
@@ -221,11 +283,24 @@ class _LoginPageState extends State<LoginPage> {
         name: firebaseUser.displayName ?? '',
         email: firebaseUser.email!,
         role: role,
-        avatar: firebaseUser.photoURL ?? '',
+        avatar:
+            firebaseUser.photoURL ??
+            firebaseUser.providerData
+                .firstWhere(
+                  (p) => p.providerId == 'google.com',
+                  orElse: () => firebaseUser.providerData.first,
+                )
+                .photoURL ??
+            '',
         idToken: await firebaseUser.getIdToken(),
       );
-
+      //final b = backendUser;
+      //debugPrint(b.toString());
       await AppSession.setUser(backendUser);
+      await Future.wait([
+        loadCart(AppSession.userId),
+        FavoriteModel.load(AppSession.userId),
+      ]);
       await NotificationService.instance.registerFcmToken(AppSession.userId);
 
       if ((backendUser['phone'] ?? '').toString().isEmpty) {
@@ -235,7 +310,8 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       // 5. Navigate based on the fetched role
-      if (role == 'vendor'){
+      if (role == 'vendor') {
+        setState(() => isSigningIn = false);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -244,6 +320,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       } else {
+        setState(() => isSigningIn = false);
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -727,7 +804,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         const SizedBox(height: 12),
         Text(
-          "Delicious food,\navoid the queue",
+          "Skip Waits.\nEnjoy Bites.",
           style: TextStyle(
             fontSize: isMobile ? 14 : 20,
             height: 1.3,
@@ -735,32 +812,32 @@ class _LoginPageState extends State<LoginPage> {
             color: subTextColor,
           ),
         ),
-        SizedBox(height: isMobile ? 8 : 35),
+        SizedBox(height: isMobile ? 10 : 35),
 
         if (isMobile)
           _LoopingFeaturePoints(subTextColor: subTextColor, isMobile: isMobile)
         else ...[
           _buildFeaturePoint(
             Icons.bolt_rounded,
-            "Lightning fast delivery",
+            "Instant Food Order",
             isMobile,
             subTextColor,
           ),
           _buildFeaturePoint(
             Icons.local_offer_outlined,
-            "Exclusive app discounts",
+            "Exclusive App Discounts",
             isMobile,
             subTextColor,
           ),
           _buildFeaturePoint(
             Icons.map_outlined,
-            "Real-time order tracking",
+            "Real-Time Order Tracking",
             isMobile,
             subTextColor,
           ),
           _buildFeaturePoint(
             Icons.health_and_safety_outlined,
-            "100% contactless options",
+            "100% Contactless Options",
             isMobile,
             subTextColor,
           ),
@@ -843,22 +920,22 @@ class _LoginPageState extends State<LoginPage> {
             child: Icon(Icons.person_outline_rounded, color: appBlue, size: 30),
           ),
           const SizedBox(height: 20),
-          const Text(
-            "Welcome Back",
-            style: TextStyle(
+          Text(
+            "Welcome  Back",
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 30,
-              fontWeight: FontWeight.w900,
-              color: Color(0xFF0F172A),
-              letterSpacing: -0.5,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF0F172A),
+              letterSpacing: 0,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            "Login to continue to your account",
-            style: TextStyle(
-              color: Color(0xFF64748B),
+
+          Text(
+            "Login to Your Account",
+            style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               fontWeight: FontWeight.w500,
+              color: const Color(0xFF64748B),
             ),
           ),
           const SizedBox(height: 48),
@@ -880,23 +957,40 @@ class _LoginPageState extends State<LoginPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    'assets/google.png',
-                    height: 24,
-                    errorBuilder: (_, _, _) => const Icon(
-                      Icons.g_mobiledata,
-                      size: 28,
-                      color: Colors.blue,
+                  if (!isSigningIn) ...[
+                    Image.asset(
+                      'assets/google.png',
+                      height: 24,
+                      errorBuilder: (_, _, _) => const Icon(
+                        Icons.g_mobiledata,
+                        size: 28,
+                        color: Colors.blue,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
+                    const SizedBox(width: 14),
+                  ],
+
                   Text(
                     isSigningIn ? "Signing in..." : "Continue with Google",
-                    style: const TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
+
+                  if (isSigningIn) ...[
+                    const SizedBox(width: 12),
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Color(0xFF2563EB),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -911,21 +1005,22 @@ class _LoginPageState extends State<LoginPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text(
-          "Brought to you by ",
-          style: TextStyle(
-            color: Color.fromARGB(255, 0, 22, 52),
+        Text(
+          "Powered  by  ",
+          style: GoogleFonts.manrope(
+            color: const Color(0xFF475569),
             fontSize: 12,
+            letterSpacing: 0.5,
             fontWeight: FontWeight.w600,
           ),
         ),
         Text(
-          "Nevark",
-          style: TextStyle(
+          "© Nevark Technologies",
+          style: GoogleFonts.plusJakartaSans(
             color: appBlue,
-            fontSize: 12,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.5,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.4,
           ),
         ),
       ],
@@ -1083,11 +1178,11 @@ class _AnimatedName extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       "BenchBites",
-      style: TextStyle(
+      style: GoogleFonts.poppins(
         fontSize: isMobile ? 34 : 54,
         fontWeight: FontWeight.w900,
         color: const Color.fromARGB(255, 47, 59, 228),
-        letterSpacing: -1.5,
+        letterSpacing: 0,
         height: 1.0,
       ),
     );
@@ -1353,13 +1448,11 @@ class _LoopingFeaturePointsState extends State<_LoopingFeaturePoints>
     with TickerProviderStateMixin {
   late AnimationController _controller;
   final List<Map<String, dynamic>> _features = [
-    {'icon': Icons.bolt_rounded, 'text': 'Lightning fast delivery'},
-    {'icon': Icons.local_offer_outlined, 'text': 'Exclusive app discounts'},
-    {'icon': Icons.map_outlined, 'text': 'Real-time order tracking'},
-    {
-      'icon': Icons.health_and_safety_outlined,
-      'text': '100% contactless options',
-    },
+    {'icon': Icons.bolt_rounded, 'text': 'Instant Order'},
+    {'icon': Icons.local_offer_outlined, 'text': 'Exclusive App Discounts'},
+    {'icon': Icons.map_outlined, 'text': 'Real-Time Order Tracking'},
+    {'icon': Icons.health_and_safety_outlined, 'text': '100% Contactless'},
+    {'icon': Icons.sports_handball_rounded, 'text': 'Grab & Go'},
   ];
 
   @override

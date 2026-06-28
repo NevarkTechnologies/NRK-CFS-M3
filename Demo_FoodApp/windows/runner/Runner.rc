@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.nevark" "\0"
-            VALUE "FileDescription", "Nevark_Foods" "\0"
+            VALUE "FileDescription", "nevark_foods" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "Nevark_Foods" "\0"
+            VALUE "InternalName", "nevark_foods" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.nevark. All rights reserved." "\0"
-            VALUE "OriginalFilename", "Nevark_Foods.exe" "\0"
-            VALUE "ProductName", "Nevark_Foods" "\0"
+            VALUE "OriginalFilename", "nevark_foods.exe" "\0"
+            VALUE "ProductName", "nevark_foods" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

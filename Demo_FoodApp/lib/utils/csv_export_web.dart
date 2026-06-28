@@ -1,15 +1,16 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'package:web/web.dart';
 
 /// Triggers a CSV file download in the browser.
 void downloadCsvOnWeb(String fileName, String csvData) {
-  final bytes = csvData.codeUnits;
-  final blob = html.Blob([bytes], 'text/csv');
-  final url = html.Url.createObjectUrlFromBlob(blob);
-
-  final anchor = html.AnchorElement(href: url)
-    ..setAttribute('download', fileName)
-    ..click();
-
-  html.Url.revokeObjectUrl(url);
+  final blob = Blob(
+    <JSAny>[csvData.toJS].toJS,
+    BlobPropertyBag(type: 'text/csv;charset=utf-8'),
+  );
+  final url = URL.createObjectURL(blob);
+  final anchor = document.createElement('a') as HTMLAnchorElement;
+  anchor.href = url;
+  anchor.setAttribute('download', fileName);
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

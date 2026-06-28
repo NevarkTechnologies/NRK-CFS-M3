@@ -53,6 +53,7 @@ class _HomePageState extends State<HomePage> {
     });
 
     _scrollController = ScrollController();
+    cartCountNotifier.addListener(_onCartChanged);
 
     allFoods = [];
     filteredFoods = [];
@@ -64,6 +65,10 @@ class _HomePageState extends State<HomePage> {
           })
           .catchError((_) {});
     }
+  }
+
+  void _onCartChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _loadMenuForCafe() async {
@@ -89,6 +94,7 @@ class _HomePageState extends State<HomePage> {
             'rating': item['rating'] ?? 4.5,
             'reviews': item['reviews'] ?? 0,
             'isVeg': item['isVeg'] ?? true,
+            'available': item['available'] ?? true,
           };
         }).toList();
       } else {
@@ -113,6 +119,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
+    cartCountNotifier.removeListener(_onCartChanged);
     _searchFocusNode.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -171,6 +178,7 @@ class _HomePageState extends State<HomePage> {
         });
       }
     });
+    saveCart();
   }
 
   void _showMenuBottomSheet(bool isDark) {
@@ -524,13 +532,6 @@ class _HomePageState extends State<HomePage> {
               ],
             ),
           ),
-          if (widget.toggleTheme != null)
-            _buildIconButton(
-              icon: isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              isDark: isDark,
-              onTap: widget.toggleTheme!,
-            ),
-          const SizedBox(width: 8),
           _buildIconButton(
             icon: Icons.notifications_none_rounded,
             isDark: isDark,
@@ -728,6 +729,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildFoodCard(Map<String, dynamic> food, bool isDark) {
     final qty = CartModel.getQty(food["id"]);
+    final bool isAvailable = food['available'] as bool? ?? true;
     final cardBg = isDark
         ? const Color(0xFF0F172A).withValues(alpha: 0.95)
         : Colors.white.withValues(alpha: 0.95);
@@ -895,25 +897,6 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: food['isVeg'] == true
-                                ? Colors.green
-                                : Colors.red,
-                            width: 1.0,
-                          ),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Icon(
-                          Icons.circle,
-                          color: food['isVeg'] == true
-                              ? Colors.green
-                              : Colors.red,
-                          size: 5,
-                        ),
-                      ),
                     ],
                   ),
                   Row(
@@ -925,91 +908,109 @@ class _HomePageState extends State<HomePage> {
                           fontFamily: 'Nunito',
                           fontWeight: FontWeight.w900,
                           fontSize: 15,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF10254E),
+                          color: isAvailable
+                              ? (isDark ? Colors.white : const Color(0xFF10254E))
+                              : Colors.grey,
                         ),
                       ),
-                      qty == 0
-                          ? SizedBox(
-                              height: 30,
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: appBlue,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                  ),
-                                  elevation: 0,
-                                ),
-                                onPressed: () => _updateCart(food, 1),
-                                child: const Text(
-                                  "ADD",
-                                  style: TextStyle(
-                                    fontFamily: 'Nunito',
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 11,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ),
-                            )
-                          : Container(
-                              height: 30,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: appBlue.withValues(alpha: 0.1),
+                      if (!isAvailable)
+                        Container(
+                          height: 30,
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            "Unavailable",
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                            ),
+                          ),
+                        )
+                      else if (qty == 0)
+                        SizedBox(
+                          height: 30,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: appBlue,
+                              shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: appBlue.withValues(alpha: 0.3),
-                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  InkWell(
-                                    onTap: () => _updateCart(food, -1),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                      ),
-                                      child: Icon(
-                                        Icons.remove,
-                                        size: 14,
-                                        color: appBlue,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    "$qty",
-                                    style: TextStyle(
-                                      fontFamily: 'Inter',
-                                      fontWeight: FontWeight.bold,
-                                      color: appBlue,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                  InkWell(
-                                    onTap: () => _updateCart(food, 1),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                      ),
-                                      child: Icon(
-                                        Icons.add,
-                                        size: 14,
-                                        color: appBlue,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                              ),
+                              elevation: 0,
+                            ),
+                            onPressed: () => _updateCart(food, 1),
+                            child: const Text(
+                              "ADD",
+                              style: TextStyle(
+                                fontFamily: 'Nunito',
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                                letterSpacing: 0.5,
                               ),
                             ),
+                          ),
+                        )
+                      else
+                        Container(
+                          height: 30,
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          decoration: BoxDecoration(
+                            color: appBlue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: appBlue.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: () => _updateCart(food, -1),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.remove,
+                                    size: 14,
+                                    color: appBlue,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                "$qty",
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.bold,
+                                  color: appBlue,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              InkWell(
+                                onTap: () => _updateCart(food, 1),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  child: Icon(
+                                    Icons.add,
+                                    size: 14,
+                                    color: appBlue,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ],

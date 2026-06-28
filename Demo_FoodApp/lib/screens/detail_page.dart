@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import '../model/favorite_model.dart';
+import '../model/cart_model.dart';
 import 'checkout_page.dart';
 import 'cart_page.dart';
 import 'cafeteria_page.dart';
@@ -39,6 +40,9 @@ class _DetailPageState extends State<DetailPage> {
 
   late final TextEditingController name;
   late final TextEditingController email;
+  late final TextEditingController phone;
+
+  late final FocusNode _nameFocusNode;
 
   late final TextEditingController street1;
   late final TextEditingController street2;
@@ -49,6 +53,13 @@ class _DetailPageState extends State<DetailPage> {
 
   late final TextEditingController card;
 
+  String? _phoneError;
+
+  bool get _isPhoneValid {
+    final value = phone.text.trim();
+    return RegExp(r'^\d{10}$').hasMatch(value);
+  }
+
   final Color primary = const Color(0xFF0F4CFF);
 
   @override
@@ -57,6 +68,19 @@ class _DetailPageState extends State<DetailPage> {
     final address = AppSession.address;
     name = TextEditingController(text: AppSession.name);
     email = TextEditingController(text: AppSession.email);
+    phone = TextEditingController(text: AppSession.phone);
+    phone.addListener(() {
+      final value = phone.text.trim();
+
+      setState(() {
+        if (value.isEmpty || _isPhoneValid) {
+          _phoneError = null;
+        } else {
+          _phoneError = "Enter Valid 10-digit Phone Number";
+        }
+      });
+    });
+    _nameFocusNode = FocusNode();
     street1 = TextEditingController(text: address["street1"]?.toString() ?? "");
     street2 = TextEditingController(text: address["street2"]?.toString() ?? "");
     district = TextEditingController(
@@ -107,8 +131,10 @@ class _DetailPageState extends State<DetailPage> {
   @override
   void dispose() {
     _ordersRefreshTimer?.cancel();
+    _nameFocusNode.dispose();
     name.dispose();
     email.dispose();
+    phone.dispose();
     street1.dispose();
     street2.dispose();
     district.dispose();
@@ -139,6 +165,11 @@ class _DetailPageState extends State<DetailPage> {
   Future<void> _handleEditButton() async {
     if (!isEdit) {
       setState(() => isEdit = true);
+      if (widget.title == "Personal Info") {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _nameFocusNode.requestFocus();
+        });
+      }
       return;
     }
 
@@ -149,19 +180,27 @@ class _DetailPageState extends State<DetailPage> {
 
     setState(() => isSaving = true);
     try {
-      final updated = await ApiService.updateUser(AppSession.userId, {
-        "name": name.text.trim(),
-        "email": email.text.trim(),
-        "address": {
-          "street1": street1.text.trim(),
-          "street2": street2.text.trim(),
-          "district": district.text.trim(),
-          "state": state.text.trim(),
-          "country": country.text.trim(),
-          "pincode": pincode.text.trim(),
-        },
-        "paymentLabel": card.text.trim(),
-      });
+      final Map<String, dynamic> payload;
+      switch (widget.title) {
+        case "Personal Info":
+          payload = {"name": name.text.trim(), "phone": phone.text.trim()};
+        case "Saved Addresses":
+          payload = {
+            "address": {
+              "street1": street1.text.trim(),
+              "street2": street2.text.trim(),
+              "district": district.text.trim(),
+              "state": state.text.trim(),
+              "country": country.text.trim(),
+              "pincode": pincode.text.trim(),
+            },
+          };
+        case "Payment Methods":
+          payload = {"paymentLabel": card.text.trim()};
+        default:
+          payload = {};
+      }
+      final updated = await ApiService.updateUser(AppSession.userId, payload);
       await AppSession.setUser(updated);
       if (!mounted) return;
       setState(() => isEdit = false);
@@ -189,7 +228,10 @@ class _DetailPageState extends State<DetailPage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? const Color(0xFF020617) : const Color(0xFFF4F6F9);
     final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final cartCount = globalCartItems.fold<int>(0, (s, i) => s + (i["qty"] as int));
+    final cartCount = globalCartItems.fold<int>(
+      0,
+      (s, i) => s + (i["qty"] as int),
+    );
 
     return Scaffold(
       backgroundColor: bg,
@@ -201,7 +243,10 @@ class _DetailPageState extends State<DetailPage> {
               icon: const Icon(Icons.shopping_cart_rounded),
               label: Text(
                 'Cart ($cartCount)',
-                style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               onPressed: () => Navigator.push(
                 context,
@@ -218,11 +263,19 @@ class _DetailPageState extends State<DetailPage> {
                 bottom: false,
                 child: Container(
                   margin: const EdgeInsets.all(16),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: isDark ? const Color(0xFF0F172A) : Colors.white,
                     borderRadius: BorderRadius.circular(20),
-                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 10,
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
@@ -231,7 +284,9 @@ class _DetailPageState extends State<DetailPage> {
                         child: Container(
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
-                            color: isDark ? Colors.white10 : Colors.grey.shade100,
+                            color: isDark
+                                ? Colors.white10
+                                : Colors.grey.shade100,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Icon(Icons.arrow_back, color: primary),
@@ -240,7 +295,11 @@ class _DetailPageState extends State<DetailPage> {
                       const SizedBox(width: 12),
                       Text(
                         widget.title,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isDark ? Colors.white : Colors.black),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
                       ),
                     ],
                   ),
@@ -249,6 +308,8 @@ class _DetailPageState extends State<DetailPage> {
               Expanded(
                 child: _isFullPage
                     ? _buildFullPageContent(isDark)
+                    : widget.title == "Personal Info"
+                    ? _buildPersonalInfoScrollLayout(isDark, cardColor)
                     : Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Column(
@@ -259,9 +320,19 @@ class _DetailPageState extends State<DetailPage> {
                                 decoration: BoxDecoration(
                                   color: cardColor,
                                   borderRadius: BorderRadius.circular(24),
-                                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08), blurRadius: 25, offset: const Offset(0, 12))],
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: isDark ? 0.3 : 0.08,
+                                      ),
+                                      blurRadius: 25,
+                                      offset: const Offset(0, 12),
+                                    ),
+                                  ],
                                 ),
-                                child: SingleChildScrollView(child: _buildContent()),
+                                child: SingleChildScrollView(
+                                  child: _buildContent(),
+                                ),
                               ),
                             ),
                             const SizedBox(height: 20),
@@ -271,13 +342,25 @@ class _DetailPageState extends State<DetailPage> {
                                 child: ElevatedButton(
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: primary,
-                                    padding: const EdgeInsets.symmetric(vertical: 16),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
                                   ),
-                                  onPressed: isSaving ? null : _handleEditButton,
+                                  onPressed:
+                                      (isSaving || (isEdit && !_isPhoneValid))
+                                      ? null
+                                      : _handleEditButton,
                                   child: Text(
-                                    isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Edit"),
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                    isSaving
+                                        ? "Saving..."
+                                        : (isEdit ? "Save Changes" : "Edit"),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -298,6 +381,56 @@ class _DetailPageState extends State<DetailPage> {
     );
   }
 
+  Widget _buildPersonalInfoScrollLayout(bool isDark, Color cardColor) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 120),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.08),
+                  blurRadius: 25,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: _buildContent(),
+          ),
+          const SizedBox(height: 24),
+          SizedBox(
+            width: 280,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              onPressed: (isSaving || (isEdit && !_isPhoneValid))
+                  ? null
+                  : _handleEditButton,
+              child: Text(
+                isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Edit"),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFullPageContent(bool isDark) {
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 140),
@@ -312,7 +445,19 @@ class _DetailPageState extends State<DetailPage> {
       case "Personal Info":
         return Column(
           children: [
-            _field("Name", name),
+            _field("Name", name, focusNode: _nameFocusNode),
+
+            const SizedBox(height: 16),
+            _field(
+              "Phone",
+              phone,
+              keyboardType: TextInputType.phone,
+              errorText: _phoneError,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(10),
+              ],
+            ),
             const SizedBox(height: 16),
             _field("Email", email),
           ],
@@ -496,6 +641,7 @@ class _DetailPageState extends State<DetailPage> {
                                 ),
                               ),
                               onPressed: () {
+                                final itemId = item["id"]?.toString() ?? '';
                                 setState(() {
                                   final existingIndex = globalCartItems
                                       .indexWhere(
@@ -507,6 +653,8 @@ class _DetailPageState extends State<DetailPage> {
                                     globalCartItems.add({...item, "qty": 1});
                                   }
                                 });
+                                if (itemId.isNotEmpty) CartModel.add(itemId);
+                                saveCart();
                               },
                               child: const Text(
                                 "ADD",
@@ -539,6 +687,8 @@ class _DetailPageState extends State<DetailPage> {
                                       size: 18,
                                     ),
                                     onPressed: () {
+                                      final itemId =
+                                          item["id"]?.toString() ?? '';
                                       setState(() {
                                         final index = globalCartItems
                                             .indexWhere(
@@ -553,6 +703,10 @@ class _DetailPageState extends State<DetailPage> {
                                           }
                                         }
                                       });
+                                      if (itemId.isNotEmpty) {
+                                        CartModel.remove(itemId);
+                                      }
+                                      saveCart();
                                     },
                                   ),
                                   Text(
@@ -574,6 +728,8 @@ class _DetailPageState extends State<DetailPage> {
                                       size: 18,
                                     ),
                                     onPressed: () {
+                                      final itemId =
+                                          item["id"]?.toString() ?? '';
                                       setState(() {
                                         final index = globalCartItems
                                             .indexWhere(
@@ -583,6 +739,10 @@ class _DetailPageState extends State<DetailPage> {
                                           globalCartItems[index]["qty"] += 1;
                                         }
                                       });
+                                      if (itemId.isNotEmpty) {
+                                        CartModel.add(itemId);
+                                      }
+                                      saveCart();
                                     },
                                   ),
                                 ],
@@ -664,14 +824,30 @@ class _DetailPageState extends State<DetailPage> {
     }
   }
 
-  Widget _field(String label, TextEditingController controller) {
+  Widget _field(
+    String label,
+    TextEditingController controller, {
+    FocusNode? focusNode,
+    TextInputType? keyboardType,
+    String? errorText,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isEnabled = label == "Email" ? false : isEdit;
     return TextField(
       controller: controller,
-      enabled: (label == "Email") ? false : isEdit,
-      style: TextStyle(color: isDark ? Colors.white : Colors.black),
+      focusNode: focusNode,
+      enabled: isEnabled,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      style: TextStyle(
+        color: isEnabled
+            ? (isDark ? Colors.white : Colors.black)
+            : (isDark ? Colors.white54 : Colors.grey.shade600),
+      ),
       decoration: InputDecoration(
         labelText: label,
+        errorText: errorText,
         labelStyle: TextStyle(
           color: isDark ? Colors.grey.shade300 : Colors.grey.shade700,
         ),
@@ -926,8 +1102,9 @@ class _DetailPageState extends State<DetailPage> {
     }).toList();
 
     final createdAt =
-        DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
-        DateTime.now();
+        (DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
+                DateTime.now())
+            .toLocal();
     final orderDate =
         '${createdAt.day}/${createdAt.month}/${createdAt.year}, ${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}';
     final pickupTime = _formatPickupTime(order['pickupTime']?.toString());
@@ -942,6 +1119,11 @@ class _DetailPageState extends State<DetailPage> {
     final double tax = itemTotalSum * 0.03;
     final double billTotal = itemTotalSum + tax + _convenienceFee;
     final status = order['status']?.toString() ?? 'Pending';
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final orderDay = DateTime(createdAt.year, createdAt.month, createdAt.day);
+    final isExpired = orderDay.isBefore(today);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -1003,16 +1185,21 @@ class _DetailPageState extends State<DetailPage> {
                         fontSize: 12,
                       ),
                     ),
-                    if (tokenNumber.isNotEmpty) ...[
+                    if (tokenNumber.isNotEmpty || isExpired) ...[
                       const SizedBox(height: 6),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF0F4CFF),
+                          color: isExpired
+                              ? Colors.grey
+                              : const Color(0xFF0F4CFF),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
-                          'TOKEN #$tokenNumber',
+                          isExpired ? 'EXPIRED' : 'TOKEN #$tokenNumber',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -1098,6 +1285,7 @@ class _DetailPageState extends State<DetailPage> {
                     isDark,
                     status,
                     tokenNumber,
+                    isExpired,
                   );
                 },
                 child: const Text('VIEW DETAILS'),
@@ -1162,6 +1350,7 @@ class _DetailPageState extends State<DetailPage> {
     bool isDark, [
     String status = 'Pending',
     String tokenNumber = '',
+    bool isExpired = false,
   ]) {
     showModalBottomSheet(
       context: context,
@@ -1192,6 +1381,7 @@ class _DetailPageState extends State<DetailPage> {
             status,
             tokenNumber,
             scrollController,
+            isExpired,
           ),
         ),
       ),
@@ -1214,6 +1404,7 @@ class _DetailPageState extends State<DetailPage> {
     String status, [
     String tokenNumber = '',
     ScrollController? scrollController,
+    bool isExpired = false,
   ]) {
     final textColor = isDark ? Colors.white : Colors.black;
     final subText = isDark ? Colors.grey.shade400 : Colors.grey.shade600;
@@ -1240,15 +1431,18 @@ class _DetailPageState extends State<DetailPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (tokenNumber.isNotEmpty) ...[
+              if (tokenNumber.isNotEmpty || isExpired) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0F4CFF),
+                    color: isExpired ? Colors.grey : const Color(0xFF0F4CFF),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    'TOKEN #$tokenNumber',
+                    isExpired ? 'EXPIRED' : 'TOKEN #$tokenNumber',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -1384,7 +1578,7 @@ class _DetailPageState extends State<DetailPage> {
           Divider(color: Colors.grey.shade300),
           const SizedBox(height: 24),
           Text(
-            "${itemsList.length} ITEMS",
+            "${itemsList.length} Items Ordered",
             style: TextStyle(
               color: subText,
               fontSize: 12,

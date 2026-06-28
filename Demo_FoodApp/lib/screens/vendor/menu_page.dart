@@ -326,12 +326,16 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                 ),
                 onPressed: () async {
+                  final messenger = ScaffoldMessenger.of(context);
+
                   if (name.isEmpty || price <= 0) return;
                   Navigator.pop(context);
+
                   final cafeId = AppSession.cafeId;
                   final vendorId = AppSession.vendorId;
+
                   if (cafeId.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Vendor cafe id missing'),
                         backgroundColor: Colors.redAccent,
@@ -359,11 +363,14 @@ class _MenuPageState extends State<MenuPage> {
                           ? 'base64'
                           : 'none',
                     );
+
                     if (!mounted) return;
+
                     setState(() {
                       menu.add(MenuItemModel.fromJson(newItem));
                     });
-                    ScaffoldMessenger.of(context).showSnackBar(
+
+                    messenger.showSnackBar(
                       const SnackBar(
                         content: Text('Menu item added successfully'),
                         backgroundColor: Colors.green,
@@ -371,7 +378,8 @@ class _MenuPageState extends State<MenuPage> {
                     );
                   } catch (error) {
                     if (!mounted) return;
-                    ScaffoldMessenger.of(context).showSnackBar(
+
+                    messenger.showSnackBar(
                       SnackBar(
                         content: Text(
                           error.toString().replaceFirst('Exception: ', ''),
@@ -501,10 +509,7 @@ class _MenuPageState extends State<MenuPage> {
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: getCategoryOptions()
                           .map(
-                            (e) => DropdownMenuItem(
-                              value: e,
-                              child: Text(e),
-                            ),
+                            (e) => DropdownMenuItem(value: e, child: Text(e)),
                           )
                           .toList(),
                       onChanged: (v) {
@@ -531,7 +536,8 @@ class _MenuPageState extends State<MenuPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          if (selectedImageBytes != null || item.image.isNotEmpty) ...[
+                          if (selectedImageBytes != null ||
+                              item.image.isNotEmpty) ...[
                             ClipRRect(
                               borderRadius: BorderRadius.circular(14),
                               child: selectedImageBytes != null
@@ -550,8 +556,8 @@ class _MenuPageState extends State<MenuPage> {
                               selectedImageBytes != null
                                   ? 'Replace photo'
                                   : item.image.isNotEmpty
-                                      ? 'Change photo'
-                                      : 'Upload photo',
+                                  ? 'Change photo'
+                                  : 'Upload photo',
                               style: const TextStyle(
                                 fontFamily: 'Inter',
                                 fontWeight: FontWeight.w600,
@@ -571,7 +577,8 @@ class _MenuPageState extends State<MenuPage> {
                               );
                               if (pickedImage == null) return;
                               final bytes = await pickedImage.readAsBytes();
-                              final mimeType = pickedImage.mimeType ?? 'image/png';
+                              final mimeType =
+                                  pickedImage.mimeType ?? 'image/png';
                               setDialogState(() {
                                 selectedImageBytes = bytes;
                                 selectedImageDataUrl =
@@ -594,6 +601,8 @@ class _MenuPageState extends State<MenuPage> {
             ),
             ElevatedButton(
               onPressed: () async {
+                final navigator = Navigator.of(context);
+
                 await updateMenuItem(
                   item.id,
                   nameController.text,
@@ -604,7 +613,9 @@ class _MenuPageState extends State<MenuPage> {
                       : null,
                   imageType: selectedImageDataUrl.isNotEmpty ? 'base64' : null,
                 );
-                Navigator.pop(context);
+
+                if (!mounted) return;
+                navigator.pop();
               },
               child: const Text("Save"),
             ),
@@ -685,11 +696,8 @@ class _MenuPageState extends State<MenuPage> {
     return Image.network(
       imageUrl,
       fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => const Icon(
-        Icons.fastfood_rounded,
-        color: Colors.blueGrey,
-        size: 40,
-      ),
+      errorBuilder: (context, error, stackTrace) =>
+          const Icon(Icons.fastfood_rounded, color: Colors.blueGrey, size: 40),
     );
   }
 
@@ -847,153 +855,133 @@ class _MenuPageState extends State<MenuPage> {
           ),
           const SizedBox(height: 16),
           LayoutBuilder(
-  builder: (context, constraints) {
-    final isSmall = constraints.maxWidth < 190;
+            builder: (context, constraints) {
+              final isSmall = constraints.maxWidth < 190;
 
-    return isSmall
-        ? Column(
-            children: [
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => toggleAvailability(item),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: item.available
-                        ? primaryBlue.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.2),
-                    foregroundColor:
-                        item.available ? primaryBlue : Colors.grey,
-                    elevation: 0,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: FittedBox(
-                    child: Text(
-                      item.available ? 'Enabled' : 'Disabled',
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.edit,
-                          color: Colors.blue,
-                          size: 18,
+              return isSmall
+                  ? Column(
+                      children: [
+                        Container(
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: item.available
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            onPressed: () => toggleAvailability(item),
+                            icon: Icon(
+                              item.available
+                                  ? Icons.check_circle_rounded
+                                  : Icons.cancel_rounded,
+                              color: item.available ? Colors.green : Colors.red,
+                              size: 22,
+                            ),
+                          ),
                         ),
-                        onPressed: () => openEditDialog(item),
-                      ),
-                    ),
-                  ),
 
-                  const SizedBox(width: 8),
+                        const SizedBox(height: 8),
 
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: IconButton(
-                        icon: const Icon(
-                          Icons.delete_outline_rounded,
-                          color: Colors.redAccent,
-                          size: 18,
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.edit,
+                                    color: Colors.blue,
+                                    size: 18,
+                                  ),
+                                  onPressed: () => openEditDialog(item),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(width: 8),
+
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.red.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline_rounded,
+                                    color: Colors.redAccent,
+                                    size: 18,
+                                  ),
+                                  onPressed: () => deleteItem(item),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        onPressed: () => deleteItem(item),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          )
-        : Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => toggleAvailability(item),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: item.available
-                        ? primaryBlue.withValues(alpha: 0.1)
-                        : Colors.grey.withValues(alpha: 0.2),
-                    foregroundColor:
-                        item.available ? primaryBlue : Colors.grey,
-                    elevation: 0,
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: FittedBox(
-                    child: Text(
-                      item.available ? 'Enabled' : 'Disabled',
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Container(
+                          decoration: BoxDecoration(
+                            color: item.available
+                                ? Colors.green.withValues(alpha: 0.1)
+                                : Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            onPressed: () => toggleAvailability(item),
+                            icon: Icon(
+                              item.available
+                                  ? Icons.check_circle_rounded
+                                  : Icons.cancel_rounded,
+                              color: item.available ? Colors.green : Colors.red,
+                              size: 22,
+                            ),
+                          ),
+                        ),
 
-              const SizedBox(width: 8),
+                        const SizedBox(width: 8),
 
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.edit,
-                    color: Colors.blue,
-                    size: 18,
-                  ),
-                  onPressed: () => openEditDialog(item),
-                ),
-              ),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.edit,
+                              color: Colors.blue,
+                              size: 18,
+                            ),
+                            onPressed: () => openEditDialog(item),
+                          ),
+                        ),
 
-              const SizedBox(width: 8),
+                        const SizedBox(width: 8),
 
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: IconButton(
-                  icon: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.redAccent,
-                    size: 18,
-                  ),
-                  onPressed: () => deleteItem(item),
-                ),
-              ),
-            ],
-          );
-  },
-)
+                        Container(
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.delete_outline_rounded,
+                              color: Colors.redAccent,
+                              size: 18,
+                            ),
+                            onPressed: () => deleteItem(item),
+                          ),
+                        ),
+                      ],
+                    );
+            },
+          ),
         ],
       ),
     );

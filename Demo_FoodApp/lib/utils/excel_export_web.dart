@@ -1,14 +1,19 @@
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'dart:typed_data';
+import 'package:web/web.dart';
 
 void downloadExcelOnWeb(String fileName, List<int> bytes) {
-  final blob = html.Blob(
-    [bytes],
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  final uint8Array = Uint8List.fromList(bytes).toJS;
+  final blob = Blob(
+    <JSAny>[uint8Array].toJS,
+    BlobPropertyBag(
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ),
   );
-  final url = html.Url.createObjectUrlFromBlob(blob);
-  html.AnchorElement(href: url)
-    ..setAttribute('download', fileName)
-    ..click();
-  html.Url.revokeObjectUrl(url);
+  final url = URL.createObjectURL(blob);
+  final anchor = document.createElement('a') as HTMLAnchorElement;
+  anchor.href = url;
+  anchor.setAttribute('download', fileName);
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

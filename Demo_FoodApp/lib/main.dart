@@ -7,13 +7,17 @@ import 'services/session.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
 import 'services/theme_service.dart';
+import 'model/favorite_model.dart';
 import 'screens/login_page.dart';
 import 'screens/splash_page.dart';
+import 'screens/cart_page.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 Future<void> handleAuthError() async {
   await FirebaseAuth.instance.signOut();
+  clearCart();
+  FavoriteModel.clear();
   await AppSession.clear();
   navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
 }
@@ -30,7 +34,7 @@ Future<void> main() async {
     await initTheme();
 
     ApiService.onAuthError = handleAuthError;
-    NotificationService.instance.init();
+    await NotificationService.instance.init();
   } catch (e) {
     debugPrint("Startup Error: $e");
   }

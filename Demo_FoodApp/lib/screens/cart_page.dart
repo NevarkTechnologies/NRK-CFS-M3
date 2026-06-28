@@ -1,11 +1,64 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'checkout_page.dart';
 import 'cafeteria_page.dart';
 import '../model/cart_model.dart';
+import '../services/api_service.dart';
 import 'package:lottie/lottie.dart';
 import 'dart:convert';
 
 List<Map<String, dynamic>> globalCartItems = [];
+final ValueNotifier<int> cartCountNotifier = ValueNotifier(0);
+String _cartUserId = '';
+
+String _cartKey() => 'cart_items_$_cartUserId';
+
+Future<void> saveCart() async {
+  if (_cartUserId.isEmpty) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cartKey(), jsonEncode(globalCartItems));
+    cartCountNotifier.value =
+        globalCartItems.fold(0, (s, i) => s + (i["qty"] as int? ?? 1));
+  } catch (_) {}
+}
+
+Future<void> loadCart(String userId) async {
+  _cartUserId = userId;
+  globalCartItems = [];
+  CartModel.clear();
+  cartCountNotifier.value = 0;
+  if (userId.isEmpty) return;
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final str = prefs.getString(_cartKey());
+    if (str != null) {
+      final decoded = jsonDecode(str) as List<dynamic>;
+      globalCartItems =
+          decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      cartCountNotifier.value =
+          globalCartItems.fold(0, (s, i) => s + (i["qty"] as int? ?? 1));
+      // Sync CartModel so home page qty counters reflect persisted cart
+      CartModel.clear();
+      for (final item in globalCartItems) {
+        final id = item["id"]?.toString() ?? '';
+        final qty = item["qty"] as int? ?? 1;
+        if (id.isNotEmpty) {
+          for (int i = 0; i < qty; i++) {
+            CartModel.add(id);
+          }
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+void clearCart() {
+  globalCartItems = [];
+  CartModel.clear();
+  cartCountNotifier.value = 0;
+  _cartUserId = '';
+}
 
 class CartPage extends StatefulWidget {
   final List<Map<String, dynamic>>? cartItems;
@@ -21,6 +74,7 @@ class _CartPageState extends State<CartPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
   final TextEditingController _couponController = TextEditingController();
   String _couponError = "";
+  Set<String> _unavailableIds = {};
 
   void _applyCoupon() {
     final code = _couponController.text.trim();
@@ -38,6 +92,20 @@ class _CartPageState extends State<CartPage> {
     if (widget.cartItems != null && widget.cartItems!.isNotEmpty) {
       globalCartItems = widget.cartItems!;
     }
+    _checkAvailability();
+  }
+
+  Future<void> _checkAvailability() async {
+    if (globalCartItems.isEmpty) return;
+    try {
+      final ids = globalCartItems.map((e) => e["id"].toString()).toList();
+      final result = await ApiService.checkMenuAvailability(ids);
+      final bad = <String>{};
+      result.forEach((id, info) {
+        if ((info as Map)['available'] == false) bad.add(id);
+      });
+      if (mounted) setState(() => _unavailableIds = bad);
+    } catch (_) {}
   }
 
   int getTotal() {
@@ -69,6 +137,7 @@ class _CartPageState extends State<CartPage> {
         globalCartItems.remove(item);
       }
     });
+    saveCart();
   }
 
   @override
@@ -125,9 +194,23 @@ class _CartPageState extends State<CartPage> {
                         subTextColor,
                       ),
                       const SizedBox(height: 24),
+                      if (_unavailableIds.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: Text(
+                            "Remove unavailable items before checking out",
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontFamily: 'Inter',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryBlue,
+                          backgroundColor: _unavailableIds.isEmpty ? primaryBlue : Colors.grey,
                           foregroundColor: Colors.white,
                           minimumSize: const Size(double.infinity, 58),
                           shape: RoundedRectangleBorder(
@@ -135,20 +218,22 @@ class _CartPageState extends State<CartPage> {
                           ),
                           elevation: 0,
                         ),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CheckoutPage(
-                              cafeteriaName: globalCartItems
-                                  .first["cafeteriaName"]
-                                  ?.toString(),
-                              cafeId: globalCartItems.first["cafeId"]
-                                  ?.toString(),
-                              pickupLocation: globalCartItems.first["location"]
-                                  ?.toString(),
-                            ),
-                          ),
-                        ),
+                        onPressed: _unavailableIds.isEmpty
+                            ? () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CheckoutPage(
+                                    cafeteriaName: globalCartItems
+                                        .first["cafeteriaName"]
+                                        ?.toString(),
+                                    cafeId: globalCartItems.first["cafeId"]
+                                        ?.toString(),
+                                    pickupLocation: globalCartItems.first["location"]
+                                        ?.toString(),
+                                  ),
+                                ),
+                              )
+                            : null,
                         child: const Text(
                           "Continue to Checkout",
                           style: TextStyle(
@@ -255,6 +340,8 @@ class _CartPageState extends State<CartPage> {
     Color textColor,
     Color subTextColor,
   ) {
+    final itemId = item["id"]?.toString() ?? '';
+    final bool isUnavailable = _unavailableIds.contains(itemId);
     final imageValue = item["image"]?.toString() ?? '';
 
     Widget imageWidget;
@@ -364,6 +451,25 @@ class _CartPageState extends State<CartPage> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (isUnavailable) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      "No longer available",
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: Colors.red,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 10),
                 Container(
                   height: 32,
@@ -413,12 +519,14 @@ class _CartPageState extends State<CartPage> {
                 size: 20,
               ),
             ),
-            onPressed: () => setState(() {
-              for (int i = 0; i < item["qty"]; i++) {
-                CartModel.remove(item["id"]);
-              }
-              globalCartItems.remove(item);
-            }),
+            onPressed: () {
+              setState(() {
+                CartModel.delete(item["id"]);
+                _unavailableIds.remove(item["id"]);
+                globalCartItems.remove(item);
+              });
+              saveCart();
+            },
           ),
         ],
       ),
