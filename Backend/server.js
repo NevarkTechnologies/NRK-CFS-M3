@@ -325,70 +325,14 @@ function buildCafeQuery(req) {
   return query;
 }
 
+// Legacy direct order creation has been disabled for security: it created orders
+// marked 'Paid' from client-supplied payment data with no verification (and trusted a
+// client-supplied discount). All orders must now go through the verified payment flow:
+//   POST /api/payment/initiate  ->  POST /api/orders/confirm
 async function createOrder(req, res) {
-  const {
-    customerName, customerEmail, cafeId, cafeteriaName,
-    items, discount = 0, payment = {}, location, notes,
-  } = req.body;
-
-  if (isOnlinePayment(payment)) {
-    return res.status(400).json({
-      message: 'Online payments must use POST /api/payment/initiate then POST /api/orders/confirm',
-    });
-  }
-  if (!customerName || !cafeteriaName || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ message: 'customerName, cafeteriaName, and items are required' });
-  }
-
-  // userId always comes from the verified token — never from client body.
-  const userId = req.firebaseUser?.uid ? null : null; // resolved below via DB
-  const userRecord = req.firebaseUser?.uid
-    ? await User.findOne({ googleId: req.firebaseUser.uid }).select('_id').lean()
-    : null;
-  const resolvedUserId = userRecord?._id || null;
-
-  const normalizedItems = items.map(item => ({
-    menuItemId: mongoose.Types.ObjectId.isValid(item.menuItemId || item.id)
-      ? (item.menuItemId || item.id) : undefined,
-    name:  String(item.name || '').trim(),
-    qty:   Number(item.qty || item.quantity || 1),
-    price: Number(item.price || 0),
-    image: item.image || '',
-  }));
-
-  if (normalizedItems.some(item => !item.name || item.qty < 1 || item.price < 0)) {
-    return res.status(400).json({ message: 'Each order item needs name, qty, and price' });
-  }
-
-  let resolvedCafeId = cafeId;
-  if (!resolvedCafeId && cafeteriaName) {
-    const cafe = await Cafe.findOne({ name: cafeteriaName }).select('_id');
-    resolvedCafeId = cafe?._id;
-  }
-
-  const itemTotal      = toMoney(normalizedItems.reduce((sum, i) => sum + i.price * i.qty, 0));
-  const platformFee    = toMoney(itemTotal * 0.03);
-  const convenienceFee = 1.5;
-  const total          = toMoney(itemTotal + platformFee + convenienceFee - Number(discount));
-  if (total <= 0) {
-    return res.status(400).json({ message: 'Order total must be greater than zero' });
-  }
-
-  const orderId    = makeOrderId();
-  const tokenNumber = await generateTokenNumber(resolvedCafeId);
-
-  const order = await Order.create({
-    orderId, tokenNumber,
-    userId: resolvedUserId,
-    customerName, customerEmail,
-    cafeId: resolvedCafeId, cafeteriaName,
-    items: normalizedItems,
-    itemTotal, platformFee, convenienceFee, discount, total,
-    payment: { ...payment, status: payment.status || 'Paid' },
-    location, notes,
+  return res.status(410).json({
+    message: 'Direct order creation is disabled. Use POST /api/payment/initiate then POST /api/orders/confirm.',
   });
-
-  res.status(201).json({ order });
 }
 
 function getMongoOptions() {
@@ -416,7 +360,7 @@ app.get('/api/health', (req, res) => {
 
 // Auth — rate-limited above
 app.post('/api/auth/google', asyncHandler(async (req, res) => {
-  const { name, email, avatar, role, idToken, fcmToken } = req.body;
+  const { name, email, avatar, idToken, fcmToken } = req.body;
   if (!name || !email) return res.status(400).json({ message: 'name and email are required' });
 
   const normalizedEmail = email.toLowerCase();
@@ -428,13 +372,17 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
     return res.status(403).json({ message: 'Firebase token email does not match request email' });
   }
 
-  // Resolve role from Firestore (source of truth), fall back to request only if not found
-  let resolvedRole = role || 'customer';
+  // Resolve role from a trusted source — never from the client-supplied request body.
+  // Priority: Firestore (authoritative) -> existing DB user's role -> default 'customer'.
+  // The lookup mirrors the client's data model: a 'users' doc whose 'email' array
+  // contains this address (matched with the verified token email's original casing).
+  const existingUser = await User.findOne({ email: normalizedEmail }).select('role').lean();
+  let resolvedRole = existingUser?.role || 'customer';
   try {
     const firebase = initializeFirebaseAdmin();
     const snapshot = await firebase.firestore()
       .collection('users')
-      .where('email', '==', normalizedEmail)
+      .where('email', 'array-contains', decodedToken.email)
       .limit(1)
       .get();
     if (!snapshot.empty) resolvedRole = snapshot.docs[0].data().role || resolvedRole;
@@ -679,7 +627,7 @@ app.delete('/api/menu/:id', requireFirebaseAuth, validateObjectId('id'), require
 app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const {
     customerName, customerEmail, cafeId, cafeteriaName,
-    items, discount = 0, location, pickupTime, notes,
+    items, location, pickupTime, notes,
   } = req.body;
 
   if (!customerName || !cafeteriaName || !Array.isArray(items) || items.length === 0) {
@@ -730,8 +678,10 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   const itemTotal      = toMoney(normalizedItems.reduce((s, i) => s + i.price * i.qty, 0));
   const platformFee    = toMoney(itemTotal * 0.03);
   const convenienceFee = 1.5;
-  const discountAmt    = toMoney(Number(discount));
-  const total          = toMoney(itemTotal + platformFee + convenienceFee - discountAmt);
+  // Discounts are not accepted from the client — there is no server-validated coupon
+  // system yet. Forcing 0 prevents price manipulation via an arbitrary discount value.
+  const discountAmt    = 0;
+  const total          = toMoney(itemTotal + platformFee + convenienceFee);
   if (total <= 0) return res.status(400).json({ message: 'Order total must be greater than zero' });
 
   const receipt      = `init_${makeOrderId()}`;
@@ -841,11 +791,31 @@ app.post('/api/orders/place', orderLimiter, requireFirebaseAuth, asyncHandler(cr
 
 app.get('/api/orders', requireFirebaseAuth, orderReadLimiter, asyncHandler(async (req, res) => {
   const query = { 'payment.status': { $ne: 'Pending' } };
-  if (req.query.cafeId) {
-    if (!mongoose.Types.ObjectId.isValid(req.query.cafeId)) return res.status(400).json({ message: 'Invalid cafeId' });
-    query.cafeId = req.query.cafeId;
+
+  // Access control: scope results to what the requester is allowed to see.
+  // Vendors see only orders for cafes they own; customers see only their own orders.
+  if (req.query.cafeId && !mongoose.Types.ObjectId.isValid(req.query.cafeId)) {
+    return res.status(400).json({ message: 'Invalid cafeId' });
   }
-  if (req.query.customerEmail) query.customerEmail = req.query.customerEmail.toLowerCase();
+  const ownedCafes = await Cafe.find({ vendorId: req.firebaseUser.uid }).select('_id').lean();
+  const ownedCafeIds = ownedCafes.map(c => c._id.toString());
+
+  if (req.query.cafeId) {
+    // Explicit cafe requested — only allowed if the requester owns it.
+    if (!ownedCafeIds.includes(req.query.cafeId)) {
+      return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
+    }
+    query.cafeId = req.query.cafeId;
+  } else if (ownedCafeIds.length > 0) {
+    // Vendor with no explicit cafe — restrict to all cafes they own.
+    query.cafeId = { $in: ownedCafeIds };
+  } else {
+    // Customer — always restrict to their own verified email, ignoring any client value.
+    const email = (req.firebaseUser.email || '').toLowerCase();
+    if (!email) return res.status(403).json({ message: 'Forbidden' });
+    query.customerEmail = email;
+  }
+
   if (req.query.status) {
     if (!allowedStatuses.includes(req.query.status)) return res.status(400).json({ message: 'Invalid status' });
     query.status = req.query.status;
@@ -867,6 +837,19 @@ app.get('/api/orders', requireFirebaseAuth, orderReadLimiter, asyncHandler(async
 app.get('/api/orders/:orderId', requireFirebaseAuth, orderReadLimiter, asyncHandler(async (req, res) => {
   const order = await Order.findOne({ orderId: req.params.orderId });
   if (!order) return res.status(404).json({ message: 'Order not found' });
+
+  // Access control: only the customer who placed the order, or the vendor who
+  // owns the order's cafe, may read it.
+  const requesterEmail = (req.firebaseUser.email || '').toLowerCase();
+  const isCustomerOwner = !!order.customerEmail && order.customerEmail.toLowerCase() === requesterEmail;
+  let isVendorOwner = false;
+  if (!isCustomerOwner && order.cafeId) {
+    const cafe = await Cafe.findById(order.cafeId).select('vendorId').lean();
+    isVendorOwner = !!cafe && cafe.vendorId === req.firebaseUser.uid;
+  }
+  if (!isCustomerOwner && !isVendorOwner) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
   res.json(order);
 }));
 

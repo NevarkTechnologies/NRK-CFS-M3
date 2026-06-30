@@ -438,6 +438,7 @@ Container(
               .map((e) => (e.value as Map)['name']?.toString() ?? e.key)
               .toList();
           if (unavailable.isNotEmpty && mounted) {
+            setState(() => isSubmitting = false);
             _showUnavailableDialog(unavailable);
             return;
           }

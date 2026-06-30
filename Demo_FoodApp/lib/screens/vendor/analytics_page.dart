@@ -33,9 +33,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Future<void> loadAnalytics() async {
     try {
       final data = await ApiService.getVendorDashboard(AppSession.vendorId);
+
+      // Per-order analytics (weekly charts, top items, unique customers) need the full
+      // order history — not just the 6 most-recent orders the dashboard returns.
+      // Fall back to those 6 if the full fetch fails so the page still renders.
+      List<Map<String, dynamic>> orders;
+      try {
+        orders = await ApiService.getOrders(cafeId: AppSession.cafeId);
+      } catch (_) {
+        orders = ((data['recentOrders'] as List<dynamic>?) ?? [])
+            .map((order) => Map<String, dynamic>.from(order as Map))
+            .toList();
+      }
       if (!mounted) return;
 
-      final orders = ((data['recentOrders'] as List<dynamic>?) ?? []).map((order) => Map<String, dynamic>.from(order as Map)).toList();
       final customers = <String>{};
       final itemCounts = <String, Map<String, dynamic>>{};
       final revenuePerDay = <String, double>{};

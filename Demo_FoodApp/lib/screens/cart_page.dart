@@ -108,10 +108,10 @@ class _CartPageState extends State<CartPage> {
     } catch (_) {}
   }
 
-  int getTotal() {
-    return globalCartItems.fold(
+  num getTotal() {
+    return globalCartItems.fold<num>(
       0,
-      (sum, item) => sum + ((item["price"] as int) * (item["qty"] as int)),
+      (sum, item) => sum + ((item["price"] as num) * (item["qty"] as int)),
     );
   }
 
@@ -120,7 +120,7 @@ class _CartPageState extends State<CartPage> {
   double get _convenienceFee => 1.5;
 
   double getFinalTotal() {
-    return getTotal() + _platformFee + _convenienceFee;
+    return getTotal().toDouble() + _platformFee + _convenienceFee;
   }
 
   void updateQty(Map<String, dynamic> item, int delta) {

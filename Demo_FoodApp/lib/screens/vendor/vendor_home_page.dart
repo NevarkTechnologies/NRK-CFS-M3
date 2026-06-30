@@ -1092,11 +1092,38 @@ class VendorOrderDetailsPage extends StatefulWidget {
 class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
   late String currentStatus;
+  bool _updating = false;
 
   @override
   void initState() {
     super.initState();
     currentStatus = widget.order["status"];
+  }
+
+  // Persist the status change to the backend with an optimistic update + revert on failure.
+  Future<void> _updateStatus(String status) async {
+    if (_updating) return;
+    final prev = currentStatus;
+    setState(() {
+      currentStatus = status;
+      _updating = true;
+    });
+    try {
+      final orderId = widget.order["id"]?.toString() ?? "";
+      if (orderId.isEmpty) throw Exception("Missing order id");
+      final updated = await ApiService.updateOrderStatus(orderId, status);
+      if (!mounted) return;
+      setState(() => currentStatus = (updated["status"] as String?) ?? status);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => currentStatus = prev);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.toString().replaceFirst("Exception: ", "")),
+        backgroundColor: Colors.redAccent,
+      ));
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
   @override
@@ -1313,7 +1340,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
             child: _btn(
               "Accept",
               Colors.green,
-              () => setState(() => currentStatus = "Preparing"),
+              () => _updateStatus("Preparing"),
             ),
           ),
           const SizedBox(width: 16),
@@ -1321,7 +1348,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
             child: _btn(
               "Reject",
               Colors.redAccent,
-              () => setState(() => currentStatus = "Rejected"),
+              () => _updateStatus("Rejected"),
             ),
           ),
         ],
@@ -1332,7 +1359,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
         child: _btn(
           "Mark as Ready to Pickup",
           primaryBlue,
-          () => setState(() => currentStatus = "Ready"),
+          () => _updateStatus("Ready"),
         ),
       );
     } else if (currentStatus == "Ready") {
@@ -1341,7 +1368,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
         child: _btn(
           "Mark as Picked Up",
           Colors.teal,
-          () => setState(() => currentStatus = "Completed"),
+          () => _updateStatus("Completed"),
         ),
       );
     } else if (currentStatus == "Completed") {
