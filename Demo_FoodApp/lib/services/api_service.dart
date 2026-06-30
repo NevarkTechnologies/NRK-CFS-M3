@@ -112,6 +112,7 @@ class ApiService {
     String? cafeId,
     String? status,
     String? customerEmail,
+    String? date,
   }) async {
     final uri = Uri.parse('$baseUrl/orders').replace(
       queryParameters: {
@@ -119,6 +120,7 @@ class ApiService {
         if (status != null && status.isNotEmpty) 'status': status,
         if (customerEmail != null && customerEmail.isNotEmpty)
           'customerEmail': customerEmail,
+        if (date != null && date.isNotEmpty) 'date': date,
       },
     );
 

@@ -36,7 +36,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _silentRefresh() async {
     try {
-      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString());
+      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString(), date: _todayIst());
       if (!mounted) return;
       setState(() => orders = data.map(_mapApiOrder).toList());
     } catch (_) {}
@@ -51,7 +51,7 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> loadOrders() async {
     setState(() { isLoading = true; loadError = null; });
     try {
-      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString());
+      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString(), date: _todayIst());
       if (!mounted) return;
       setState(() {
         orders = data.map(_mapApiOrder).toList();
@@ -78,6 +78,11 @@ class _OrdersPageState extends State<OrdersPage> {
       "pickupTime": order["pickupTime"] ?? "",
       "cafeteriaName": order["cafeteriaName"] ?? "Cafeteria",
     };
+  }
+
+  String _todayIst() {
+    final ist = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    return '${ist.year.toString().padLeft(4, '0')}-${ist.month.toString().padLeft(2, '0')}-${ist.day.toString().padLeft(2, '0')}';
   }
 
   /// Parse the pickupTime ISO string for sorting. Null-safe: empty string sorts last.

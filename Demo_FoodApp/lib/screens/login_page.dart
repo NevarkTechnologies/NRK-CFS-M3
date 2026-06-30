@@ -382,7 +382,7 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Sign-in failed: $e"),
+          content: Text("Sign-in failed: Server Not Responding - Try Again Later"),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),

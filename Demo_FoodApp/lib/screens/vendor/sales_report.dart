@@ -366,14 +366,12 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   value: selectedRange,
                   elevation: 4,
                   underline: const SizedBox(),
+                  dropdownColor: cardColor,
+                  style: TextStyle(color: textColor, fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 14),
                   items: _filterOptions
                       .map((option) => DropdownMenuItem(
                             value: option,
-                            child: Text(
-                              option,
-                              style: TextStyle(
-                                  color: textColor, fontWeight: FontWeight.bold),
-                            ),
+                            child: Text(option),
                           ))
                       .toList(),
                   onChanged: (value) {

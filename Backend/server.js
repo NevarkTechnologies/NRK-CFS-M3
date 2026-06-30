@@ -119,7 +119,8 @@ function toMoney(value) {
 }
 
 async function generateTokenNumber(cafeId) {
-  const today = new Date().toISOString().slice(0, 10);
+  const ist = new Date(Date.now() + 330 * 60 * 1000);
+  const today = ist.toISOString().slice(0, 10);
   const key = `${cafeId}:${today}`;
   const doc = await CafeCounter.findOneAndUpdate(
     { key },
@@ -848,6 +849,16 @@ app.get('/api/orders', requireFirebaseAuth, orderReadLimiter, asyncHandler(async
   if (req.query.status) {
     if (!allowedStatuses.includes(req.query.status)) return res.status(400).json({ message: 'Invalid status' });
     query.status = req.query.status;
+  }
+  if (req.query.date) {
+    // date param is YYYY-MM-DD in IST; convert to UTC range for the query
+    const dateStr = req.query.date;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return res.status(400).json({ message: 'Invalid date format, expected YYYY-MM-DD' });
+    const istOffsetMs = 330 * 60 * 1000;
+    const startIst = new Date(`${dateStr}T00:00:00.000Z`);
+    const startUtc = new Date(startIst.getTime() - istOffsetMs);
+    const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000);
+    query.createdAt = { $gte: startUtc, $lt: endUtc };
   }
   const orders = await Order.find(query).populate('cafeId', 'name image imageType').sort({ createdAt: -1 });
   res.json(orders);

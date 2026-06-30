@@ -191,32 +191,86 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget buildRevenueGraph(Color card, Color text, bool isDark) {
-    final maxValue = weeklyRevenue.isNotEmpty ? weeklyRevenue.reduce((a, b) => a > b ? a : b) : 1;
+  List<String> get _last7DayLabels {
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return List.generate(7, (i) {
+      final day = DateTime.now().subtract(Duration(days: 6 - i));
+      return names[day.weekday % 7];
+    });
+  }
+
+  Widget _buildBarGraph({
+    required String title,
+    required List<double> values,
+    required String emptyMessage,
+    required Color barColor,
+    required Color card,
+    required Color text,
+    required bool isDark,
+    required String Function(double) labelFormat,
+  }) {
+    final maxValue = values.isNotEmpty ? values.reduce((a, b) => a > b ? a : b) : 0.0;
+    final dayLabels = _last7DayLabels;
+    final subText = Color.fromRGBO(
+      (text.r * 255.0).round().clamp(0, 255),
+      (text.g * 255.0).round().clamp(0, 255),
+      (text.b * 255.0).round().clamp(0, 255),
+      0.5,
+    );
+
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Weekly Revenue', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
+          Row(children: [
+            Container(width: 12, height: 12, margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(color: barColor, borderRadius: BorderRadius.circular(3))),
+            Text(title, style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
+          ]),
           const SizedBox(height: 20),
-          if (weeklyRevenue.every((value) => value == 0))
-            Text('No revenue data yet', style: TextStyle(color: Color.fromRGBO((text.r*255.0).round().clamp(0,255), (text.g*255.0).round().clamp(0,255), (text.b*255.0).round().clamp(0,255), 0.7), fontFamily: 'Inter'))
+          if (values.every((v) => v == 0))
+            Text(emptyMessage, style: TextStyle(color: subText, fontFamily: 'Inter'))
           else
             SizedBox(
-              height: 140,
+              height: 180,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: weeklyRevenue.map((value) {
+                children: List.generate(values.length, (i) {
+                  final value = values[i];
+                  final barHeight = maxValue > 0 ? (value / maxValue) * 120 : 0.0;
+                  final label = labelFormat(value);
                   return Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      height: maxValue > 0 ? (value / maxValue) * 140 : 0,
-                      decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(6)),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        if (value > 0)
+                          Text(label,
+                            style: TextStyle(fontFamily: 'Inter', fontSize: 9, fontWeight: FontWeight.w700, color: barColor),
+                            textAlign: TextAlign.center,
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 3),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 4),
+                          height: barHeight,
+                          decoration: BoxDecoration(
+                            color: barColor,
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(dayLabels[i],
+                          style: TextStyle(fontFamily: 'Inter', fontSize: 11, fontWeight: FontWeight.w600, color: subText),
+                          textAlign: TextAlign.center),
+                      ],
                     ),
                   );
-                }).toList(),
+                }),
               ),
             ),
         ],
@@ -224,36 +278,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
+  Widget buildRevenueGraph(Color card, Color text, bool isDark) {
+    return _buildBarGraph(
+      title: 'Weekly Revenue',
+      values: weeklyRevenue,
+      emptyMessage: 'No revenue data yet',
+      barColor: Colors.green,
+      card: card, text: text, isDark: isDark,
+      labelFormat: (v) => '₹${v.round()}',
+    );
+  }
+
   Widget buildOrdersGraph(Color card, Color text, bool isDark) {
-    final maxValue = weeklyOrders.isNotEmpty ? weeklyOrders.reduce((a, b) => a > b ? a : b) : 1;
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Weekly Orders', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
-          const SizedBox(height: 20),
-          if (weeklyOrders.every((value) => value == 0))
-            Text('No order data yet', style: TextStyle(color: Color.fromRGBO((text.r*255.0).round().clamp(0,255), (text.g*255.0).round().clamp(0,255), (text.b*255.0).round().clamp(0,255), 0.7), fontFamily: 'Inter'))
-          else
-            SizedBox(
-              height: 140,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: weeklyOrders.map((value) {
-                  return Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                      height: maxValue > 0 ? (value / maxValue) * 140 : 0,
-                      decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(6)),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-        ],
-      ),
+    return _buildBarGraph(
+      title: 'Weekly Orders',
+      values: weeklyOrders.map((e) => e.toDouble()).toList(),
+      emptyMessage: 'No order data yet',
+      barColor: primaryBlue,
+      card: card, text: text, isDark: isDark,
+      labelFormat: (v) => v.round().toString(),
     );
   }
 
