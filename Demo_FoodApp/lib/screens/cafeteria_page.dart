@@ -1,4 +1,5 @@
 ﻿import 'package:flutter/material.dart';
+import 'package:animated_text_kit/animated_text_kit.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../model/notification_model.dart';
@@ -110,7 +111,12 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
       extendBody: true,
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+          onRefresh: _loadCafes,
+          color: const Color(0xFF0F4CFF),
+          backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -135,6 +141,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
               ),
             ],
           ),
+        ),
         ),
       ),
       bottomNavigationBar: CustomFloatingNavBar(
@@ -188,10 +195,13 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                               : const Color(0xFFDDE6FF),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: Icon(
-                          Icons.restaurant_menu,
-                          color: appBlue,
-                          size: 28,
+                        child: Opacity(
+                          opacity: 0.7, // 0.0 to 1.0
+                          child: Image.asset(
+                            'assets/icon/icon3.png',
+                            width: 28,
+                            height: 28,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 18),
@@ -362,6 +372,9 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
   }
 
   Widget _buildSearchBar(bool isDark) {
+    final hintColor = isDark ? const Color.fromARGB(137, 178, 173, 173) : const Color.fromARGB(255, 105, 103, 103);
+    final showAnimatedHint = searchQuery.isEmpty && !_searchFocusNode.hasFocus;
+
     return Container(
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
@@ -374,42 +387,70 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           ),
         ],
       ),
-      child: TextField(
-        focusNode: _searchFocusNode,
-        onChanged: (value) {
-          searchQuery = value;
-          _filterCafes();
-        },
-        style: TextStyle(
-          fontFamily: 'Inter',
-          color: isDark ? Colors.white : Colors.black87,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Search for Cafeterias and Cuisines ',
-          hintStyle: TextStyle(
-            fontFamily: 'Inter',
-            color: isDark ? Colors.white54 : Colors.grey.shade400,
-            fontSize: 15,
-          ),
-          prefixIcon: Padding(
-            padding: const EdgeInsets.only(left: 20, right: 8, top: 4),
-            child: Icon(
-              Icons.search_rounded,
-              color: isDark ? Colors.white54 : Colors.grey.shade500,
-              size: 28,
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          TextField(
+            focusNode: _searchFocusNode,
+            onChanged: (value) {
+              searchQuery = value;
+              _filterCafes();
+            },
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: isDark ? Colors.white : Colors.black87,
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              hintText: '',
+              prefixIcon: Padding(
+                padding: const EdgeInsets.only(left: 20, right: 8, top: 4),
+                child: Icon(
+                  Icons.search_rounded,
+                  color: isDark ? Colors.white54 : Colors.grey.shade500,
+                  size: 28,
+                ),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(30),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                vertical: 20,
+                horizontal: 20,
+              ),
             ),
           ),
-          // ✨ REMOVED the suffixIcon filter button entirely
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(30),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 20,
-            horizontal: 20,
-          ),
-        ),
+          if (showAnimatedHint)
+            Padding(
+              padding: const EdgeInsets.only(left: 10),
+              child: IgnorePointer(
+                child: AnimatedTextKit(
+                  repeatForever: true,
+                  animatedTexts: [
+                    RotateAnimatedText(
+                      'Search for Restaurants',
+                      textStyle: TextStyle(
+                        fontFamily: 'Inter',
+                        color: hintColor,
+                        fontSize: 15,
+                      ),
+                      duration: const Duration(milliseconds: 3000),
+                    ),
+                    RotateAnimatedText(
+                      'Search for Cafes',
+                      textStyle: TextStyle(
+                        fontFamily: 'Inter',
+                        color: hintColor,
+                        fontSize: 15,
+                      ),
+                      duration: const Duration(milliseconds: 3000),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -551,76 +592,174 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(builder: (ctx, setS) {
-          final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
-          final textColor = isDark ? Colors.white : const Color(0xFF10254E);
-          final subColor = isDark ? Colors.white60 : const Color(0xFF6B7280);
-          return AlertDialog(
-            backgroundColor: cardColor,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 56, height: 56,
-                  decoration: BoxDecoration(color: const Color(0xFFFFC107).withValues(alpha: 0.15), shape: BoxShape.circle),
-                  child: const Icon(Icons.star_rounded, color: Color(0xFFFFC107), size: 30),
-                ),
-                const SizedBox(height: 14),
-                Text('Rate ${cafe['name'] ?? 'Cafeteria'}',
-                  style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 17, color: textColor),
-                  textAlign: TextAlign.center),
-                const SizedBox(height: 6),
-                Text('How would you rate your experience?',
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: subColor), textAlign: TextAlign.center),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (i) {
-                    final filled = i < selected;
-                    return GestureDetector(
-                      onTap: () => setS(() => selected = i + 1),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: Icon(
-                          filled ? Icons.star_rounded : Icons.star_border_rounded,
-                          color: filled ? const Color(0xFFFFC107) : Colors.grey,
-                          size: 38,
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                const SizedBox(height: 20),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(ctx),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: appBlue,
-                        side: BorderSide(color: appBlue.withValues(alpha: 0.4)),
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                      ),
-                      child: const Text('Cancel', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
+        return StatefulBuilder(
+          builder: (ctx, setS) {
+            final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
+            final textColor = isDark ? Colors.white : const Color(0xFF10254E);
+            final subColor = isDark ? Colors.white60 : const Color(0xFF6B7280);
+            return AlertDialog(
+              backgroundColor: cardColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              contentPadding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFC107).withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFFFC107),
+                      size: 30,
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: selected == 0 ? null : () async {
+                  const SizedBox(height: 14),
+                  Text(
+                    'Rate ${cafe['name'] ?? 'Cafeteria'}',
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      fontWeight: FontWeight.w900,
+                      fontSize: 17,
+                      color: textColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'How would you rate your experience?',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 13,
+                      color: subColor,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) {
+                      final filled = i < selected;
+                      return GestureDetector(
+                        onTap: () => setS(() => selected = i + 1),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Icon(
+                            filled
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            color: filled
+                                ? const Color(0xFFFFC107)
+                                : Colors.grey,
+                            size: 38,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: appBlue,
+                            side: BorderSide(
+                              color: appBlue.withValues(alpha: 0.4),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            'Cancel',
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: selected == 0
+                              ? null
+                              : () async {
+                                  Navigator.pop(ctx);
+                                  try {
+                                    final result = await ApiService.rateCafe(
+                                      cafeId: cafeId,
+                                      userId: AppSession.userId,
+                                      stars: selected,
+                                    );
+                                    if (!mounted) return;
+                                    setState(() {
+                                      _userRatings[cafeId] = selected;
+                                      final idx = cafes.indexWhere(
+                                        (c) => c['_id']?.toString() == cafeId,
+                                      );
+                                      if (idx != -1) {
+                                        cafes[idx]['rating'] = result['rating'];
+                                        cafes[idx]['reviews'] =
+                                            result['reviews'];
+                                      }
+                                      _filterCafes();
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          'Thanks for rating $selected ★',
+                                        ),
+                                        backgroundColor: appBlue,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  } catch (_) {}
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: appBlue,
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 13),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Text(
+                            'Submit',
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_userRatings.containsKey(cafeId)) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () async {
                         Navigator.pop(ctx);
                         try {
-                          final result = await ApiService.rateCafe(
+                          final result = await ApiService.deleteRating(
                             cafeId: cafeId,
                             userId: AppSession.userId,
-                            stars: selected,
                           );
                           if (!mounted) return;
                           setState(() {
-                            _userRatings[cafeId] = selected;
-                            final idx = cafes.indexWhere((c) => c['_id']?.toString() == cafeId);
+                            _userRatings.remove(cafeId);
+                            final idx = cafes.indexWhere(
+                              (c) => c['_id']?.toString() == cafeId,
+                            );
                             if (idx != -1) {
                               cafes[idx]['rating'] = result['rating'];
                               cafes[idx]['reviews'] = result['reviews'];
@@ -628,66 +767,48 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                             _filterCafes();
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Thanks for rating $selected ★'), backgroundColor: appBlue, behavior: SnackBarBehavior.floating),
+                            const SnackBar(
+                              content: Text('Rating removed'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
                           );
                         } catch (_) {}
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: appBlue,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      child: Text(
+                        'Remove my Rating',
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          color: Colors.red.shade400,
+                          fontSize: 13,
+                        ),
                       ),
-                      child: const Text('Submit', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
                     ),
-                  ),
-                ]),
-                if (_userRatings.containsKey(cafeId)) ...[
-                  const SizedBox(height: 8),
-                  TextButton(
-                    onPressed: () async {
-                      Navigator.pop(ctx);
-                      try {
-                        final result = await ApiService.deleteRating(
-                          cafeId: cafeId,
-                          userId: AppSession.userId,
-                        );
-                        if (!mounted) return;
-                        setState(() {
-                          _userRatings.remove(cafeId);
-                          final idx = cafes.indexWhere((c) => c['_id']?.toString() == cafeId);
-                          if (idx != -1) {
-                            cafes[idx]['rating'] = result['rating'];
-                            cafes[idx]['reviews'] = result['reviews'];
-                          }
-                          _filterCafes();
-                        });
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Rating removed'), behavior: SnackBarBehavior.floating),
-                        );
-                      } catch (_) {}
-                    },
-                    child: Text('Remove my Rating', style: TextStyle(fontFamily: 'Nunito', color: Colors.red.shade400, fontSize: 13)),
-                  ),
+                  ],
                 ],
-              ],
-            ),
-          );
-        });
+              ),
+            );
+          },
+        );
       },
     );
   }
 
   Widget _buildCafeCard(Map<String, dynamic> cafe, bool isDark, bool isMobile) {
+    final isActive = cafe['active'] as bool? ?? true;
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => HomePage(cafe: cafe)),
-        );
-      },
-      child: Container(
+      onTap: isActive
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => HomePage(cafe: cafe)),
+              );
+            }
+          : null,
+      child: Opacity(
+        opacity: isActive ? 1.0 : 0.45,
+        child: Stack(
+          children: [
+        Container(
         decoration: BoxDecoration(
           color: isDark ? const Color(0xFF0F172A) : Colors.white,
           borderRadius: BorderRadius.circular(24),
@@ -902,41 +1023,78 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
               ),
             ),
             // Rate Me banner
-            Builder(builder: (_) {
-              final cafeId = cafe['_id']?.toString() ?? '';
-              final rated = _userRatings.containsKey(cafeId);
-              final ratedStars = _userRatings[cafeId] ?? 0;
-              return GestureDetector(
-                onTap: () => _showRatingDialog(cafe),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: rated
-                        ? const Color(0xFFFFC107).withValues(alpha: 0.12)
-                        : appBlue.withValues(alpha: 0.07),
-                    border: Border(top: BorderSide(color: isDark ? Colors.white12 : Colors.grey.shade200)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(rated ? Icons.star_rounded : Icons.star_outline_rounded,
-                        color: rated ? const Color(0xFFFFC107) : appBlue, size: 16),
-                      const SizedBox(width: 6),
-                      Text(
-                        rated ? ' You Rated  $ratedStars ★   |   Tap to Change' : 'Tap to Rate',
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
-                          color: rated ? const Color(0xFFFFC107) : appBlue,
+            Builder(
+              builder: (_) {
+                final cafeId = cafe['_id']?.toString() ?? '';
+                final rated = _userRatings.containsKey(cafeId);
+                final ratedStars = _userRatings[cafeId] ?? 0;
+                return GestureDetector(
+                  onTap: () => _showRatingDialog(cafe),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    decoration: BoxDecoration(
+                      color: rated
+                          ? const Color(0xFFFFC107).withValues(alpha: 0.12)
+                          : appBlue.withValues(alpha: 0.07),
+                      border: Border(
+                        top: BorderSide(
+                          color: isDark ? Colors.white12 : Colors.grey.shade200,
                         ),
                       ),
-                    ],
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          rated
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          color: rated ? const Color(0xFFFFC107) : appBlue,
+                          size: 16,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          rated
+                              ? ' You Rated  $ratedStars ★   |   Tap to Change'
+                              : 'Tap to Rate',
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: rated ? const Color(0xFFFFC107) : appBlue,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+            if (!isActive)
+              Positioned(
+                top: 12,
+                left: 12,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Text(
+                    'Currently Unavailable',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Inter',
+                    ),
                   ),
                 ),
-              );
-            }),
+              ),
           ],
         ),
       ),
@@ -1051,7 +1209,9 @@ class CustomFloatingNavBar extends StatelessWidget {
                                     child: Container(
                                       padding: const EdgeInsets.all(4),
                                       constraints: const BoxConstraints(
-                                          minWidth: 16, minHeight: 16),
+                                        minWidth: 16,
+                                        minHeight: 16,
+                                      ),
                                       decoration: const BoxDecoration(
                                         color: Color(0xFF0F4CFF),
                                         shape: BoxShape.circle,

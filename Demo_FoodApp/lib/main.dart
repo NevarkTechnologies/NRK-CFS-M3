@@ -6,13 +6,14 @@ import 'firebase_options.dart';
 import 'services/session.dart';
 import 'services/api_service.dart';
 import 'services/notification_service.dart';
+import 'services/nav.dart';
 import 'services/theme_service.dart';
 import 'model/favorite_model.dart';
 import 'screens/login_page.dart';
 import 'screens/splash_page.dart';
 import 'screens/cart_page.dart';
 
-final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+export 'services/nav.dart' show navigatorKey;
 
 Future<void> handleAuthError() async {
   await FirebaseAuth.instance.signOut();

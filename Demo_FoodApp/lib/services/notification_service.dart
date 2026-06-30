@@ -8,7 +8,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../firebase_options.dart';
 import '../model/notification_model.dart';
+import '../screens/detail_page.dart';
+import '../screens/vendor/order_page.dart';
 import 'api_service.dart';
+import 'nav.dart';
 import 'session.dart';
 
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
@@ -40,7 +43,7 @@ Future<void> _initializeLocalNotifications() async {
     const channel = AndroidNotificationChannel(
       'orders',
       'Order Notifications',
-      description: 'Notifications for order status and offers',
+      description: 'Notifications for Order Status',
       importance: Importance.high,
     );
     await _localNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
@@ -55,7 +58,7 @@ Future<void> _showNotification(RemoteMessage message) async {
 
   if (notification == null) return;
 
-  final title = notification.title ?? 'Food App';
+  final title = notification.title ?? 'BenchBites Food App';
   final body = notification.body ?? '';
 
   await _localNotificationsPlugin.show(
@@ -66,7 +69,7 @@ Future<void> _showNotification(RemoteMessage message) async {
       android: AndroidNotificationDetails(
         'orders',
         'Order Notifications',
-        channelDescription: 'Notifications for order status and offers',
+        channelDescription: 'Notifications for Order Status',
         importance: Importance.max,
         priority: Priority.max,
         playSound: true,
@@ -113,7 +116,8 @@ class NotificationService {
 
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
-      _handleMessageOpenedApp(initialMessage);
+      // Delay so the navigator is ready after app startup
+      WidgetsBinding.instance.addPostFrameCallback((_) => _handleMessageOpenedApp(initialMessage));
     }
 
     _messaging.onTokenRefresh.listen((token) {
@@ -318,5 +322,18 @@ class NotificationService {
 
   Future<void> _handleMessageOpenedApp(RemoteMessage message) async {
     debugPrint('Notification opened: ${message.messageId}');
+    final type = message.data['type']?.toString() ?? '';
+    final nav = navigatorKey.currentState;
+    if (nav == null) return;
+
+    if (type == 'vendor_order') {
+      nav.push(MaterialPageRoute(
+        builder: (_) => OrdersPage(toggleTheme: () {}),
+      ));
+    } else if (type == 'order') {
+      nav.push(MaterialPageRoute(
+        builder: (_) => DetailPage(title: AppSession.name),
+      ));
+    }
   }
 }

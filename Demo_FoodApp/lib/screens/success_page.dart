@@ -1,5 +1,6 @@
 ﻿import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import '../model/cart_model.dart';
 import 'cafeteria_page.dart';
 import 'cart_page.dart';
@@ -32,7 +33,17 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
       _checkCtrl.forward();
       Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
-        setState(() => step = 2);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (ctx) => _OrderConfirmedDialog(isDark: isDark),
+          ).then((_) {
+            if (!mounted) return;
+            setState(() => step = 2);
+          });
+        });
       });
     });
   }
@@ -376,6 +387,105 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
           ]),
         ),
       ],
+    );
+  }
+}
+
+class _OrderConfirmedDialog extends StatelessWidget {
+  final bool isDark;
+  const _OrderConfirmedDialog({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(32),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF0F172A) : Colors.white,
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF0F4CFF).withValues(alpha: 0.15),
+              blurRadius: 40,
+              offset: const Offset(0, 16),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 88,
+              height: 88,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_rounded,
+                color: Color(0xFF0F4CFF),
+                size: 52,
+              ),
+            )
+                .animate()
+                .scale(
+                  begin: const Offset(0, 0),
+                  end: const Offset(1, 1),
+                  duration: 500.ms,
+                  curve: Curves.elasticOut,
+                ),
+            const SizedBox(height: 24),
+            Text(
+              'Order Confirmed!',
+              style: TextStyle(
+                fontSize: 24,
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w900,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 200.ms, duration: 300.ms)
+                .slideY(begin: 0.3, end: 0, delay: 200.ms, duration: 300.ms),
+            const SizedBox(height: 12),
+            Text(
+              'Your order is placed. Check notifications for pickup updates.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: isDark ? Colors.white60 : const Color(0xFF64748B),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 350.ms, duration: 300.ms),
+            const SizedBox(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F4CFF),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  'View Order Details',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                ),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: 500.ms, duration: 300.ms)
+                .slideY(begin: 0.2, end: 0, delay: 500.ms, duration: 300.ms),
+          ],
+        ),
+      ),
     );
   }
 }

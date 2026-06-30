@@ -339,35 +339,44 @@ class _HomePageState extends State<HomePage> {
                             }
                             return false;
                           },
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            physics: const BouncingScrollPhysics(),
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 1180,
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
+                          child: RefreshIndicator(
+                            onRefresh: _loadMenuForCafe,
+                            color: const Color(0xFF0F4CFF),
+                            backgroundColor: isDark
+                                ? const Color(0xFF0F172A)
+                                : Colors.white,
+                            child: SingleChildScrollView(
+                              controller: _scrollController,
+                              physics: const AlwaysScrollableScrollPhysics(
+                                parent: BouncingScrollPhysics(),
+                              ),
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 1180,
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.stretch,
-                                    children: [
-                                      const SizedBox(height: 16),
-                                      _buildTopBar(isDark),
-                                      const SizedBox(height: 16),
-                                      _buildSearchBar(isDark),
-                                      const SizedBox(height: 20),
-                                      _buildSectionHeader(isDark),
-                                      _buildMenuCategories(
-                                        isDark,
-                                        isDesktop,
-                                        isTablet,
-                                      ),
-                                      const SizedBox(height: 280),
-                                    ],
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        const SizedBox(height: 16),
+                                        _buildTopBar(isDark),
+                                        const SizedBox(height: 16),
+                                        _buildSearchBar(isDark),
+                                        const SizedBox(height: 20),
+                                        _buildSectionHeader(isDark),
+                                        _buildMenuCategories(
+                                          isDark,
+                                          isDesktop,
+                                          isTablet,
+                                        ),
+                                        const SizedBox(height: 280),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
@@ -909,7 +918,9 @@ class _HomePageState extends State<HomePage> {
                           fontWeight: FontWeight.w900,
                           fontSize: 15,
                           color: isAvailable
-                              ? (isDark ? Colors.white : const Color(0xFF10254E))
+                              ? (isDark
+                                    ? Colors.white
+                                    : const Color(0xFF10254E))
                               : Colors.grey,
                         ),
                       ),

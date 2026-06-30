@@ -34,18 +34,38 @@ class _VendorHomePageState extends State<VendorHomePage> {
   int completed = 0;
   List<Map<String, dynamic>> recentOrders = [];
   bool isDashboardLoading = true;
+  bool _cafeActive = true;
+  bool _togglingActive = false;
 
   bool get _requiresBusinessDetails => !VendorData.isBusinessDetailsComplete;
 
   @override
   void initState() {
     super.initState();
+    _cafeActive = AppSession.cafe?['active'] as bool? ?? true;
     loadDashboard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_requiresBusinessDetails) {
         _promptCompleteBusinessDetails();
       }
     });
+  }
+
+  Future<void> _toggleCafeActive(bool value) async {
+    final cafeId = AppSession.cafeId;
+    if (cafeId.isEmpty || _togglingActive) return;
+    setState(() => _togglingActive = true);
+    try {
+      await ApiService.setCafeActive(cafeId, active: value);
+      final updated = Map<String, dynamic>.from(AppSession.cafe ?? {});
+      updated['active'] = value;
+      await AppSession.setUser({...AppSession.currentUser!, 'cafeId': updated});
+      if (mounted) setState(() => _cafeActive = value);
+    } catch (_) {
+      if (mounted) setState(() {}); // revert visual
+    } finally {
+      if (mounted) setState(() => _togglingActive = false);
+    }
   }
 
   Future<void> loadDashboard() async {
@@ -661,6 +681,38 @@ class _VendorHomePageState extends State<VendorHomePage> {
                           ),
                         ],
                       ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              _cafeActive ? 'Open' : 'Closed',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: _cafeActive ? const Color(0xFF22C55E) : Colors.redAccent,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _togglingActive
+                                ? const SizedBox(width: 36, height: 20, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))))
+                                : Switch(
+                                    value: _cafeActive,
+                                    onChanged: _toggleCafeActive,
+                                    activeThumbColor: const Color(0xFF22C55E),
+                                    inactiveThumbColor: Colors.redAccent,
+                                    inactiveTrackColor: Colors.redAccent.withValues(alpha: 0.3),
+                                  ),
+                          ],
+                        ),
+                        Text(
+                          'Cafe Status',
+                          style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: subText),
+                        ),
+                      ],
                     ),
                   ],
                 ),

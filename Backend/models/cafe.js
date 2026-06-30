@@ -9,7 +9,7 @@ const CafeSchema = new mongoose.Schema(
     category: { type: String, default: '', trim: true },
     image: { type: String, default: '' },
     imageType: { type: String, enum: ['url', 'asset', 'base64', 'none'], default: 'asset' },
-    rating: { type: Number, default: 0, min: 1, max: 5 },
+    rating: { type: Number, default: 0, min: 0, max: 5 },
     reviews: { type: Number, default: 0, min: 0 },
     ratings: [{ userId: String, stars: { type: Number, min: 1, max: 5 } }],
     time: { type: String, default: 'Open Now' },

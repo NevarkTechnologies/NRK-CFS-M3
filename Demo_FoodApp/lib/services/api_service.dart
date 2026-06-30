@@ -136,6 +136,12 @@ class ApiService {
     return _decodeList(response);
   }
 
+  static Future<void> setCafeActive(String cafeId, {required bool active}) async {
+    final uri = Uri.parse('$baseUrl/cafes/$cafeId');
+    final response = await http.patch(uri, headers: await _jsonHeaders(), body: jsonEncode({'active': active}));
+    _decodeObject(response);
+  }
+
   static Future<List<Map<String, dynamic>>> getMenu({String? cafeId}) async {
     final uri = Uri.parse('$baseUrl/menu').replace(
       queryParameters: {

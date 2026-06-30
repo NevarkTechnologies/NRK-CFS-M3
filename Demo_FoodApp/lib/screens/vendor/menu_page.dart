@@ -573,7 +573,7 @@ class _MenuPageState extends State<MenuPage> {
                             onPressed: () async {
                               final pickedImage = await ImagePicker().pickImage(
                                 source: ImageSource.gallery,
-                                imageQuality: 80,
+                                imageQuality: 60,
                               );
                               if (pickedImage == null) return;
                               final bytes = await pickedImage.readAsBytes();

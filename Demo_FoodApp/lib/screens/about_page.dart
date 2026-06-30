@@ -136,12 +136,13 @@ class AboutPage extends StatelessWidget {
 
                         Center(
                           child: Text(
-                            'Dream. Create. Innovate.',
+                            'GROUPS',
                             textAlign: TextAlign.center,
-                            style: GoogleFonts.ruluko(
+                            style: GoogleFonts.plusJakartaSans(
                               fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: const Color.fromARGB(179, 0, 0, 0),
+                              fontStyle: FontStyle.italic,
+                              fontWeight: FontWeight.w500,
+                              color: const Color.fromARGB(179, 43, 42, 42),
                               height: 1,
                             ),
                           ),
@@ -239,7 +240,7 @@ class AboutPage extends StatelessWidget {
 
                   Center(
                     child: Text(
-                      '© 2026 Nevark Technologies\n All Rights Reserved',
+                      '© 2026 Nevark LLP\n All Rights Reserved',
 
                       textAlign: TextAlign.center,
 
@@ -308,7 +309,7 @@ class AboutPage extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: GoogleFonts.robotoMono(
+                  style: GoogleFonts.ruluko(
                     
                     fontWeight: FontWeight.w900,
                     fontSize: 14,

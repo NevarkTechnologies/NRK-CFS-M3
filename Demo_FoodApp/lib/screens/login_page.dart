@@ -186,11 +186,11 @@ class _LoginPageState extends State<LoginPage> {
                                     }
                                     try {
                                       await ApiService.updateUser(userId, {
-                                        'phone': phone,
+                                        'phone': '+91$phone',
                                       });
                                       await AppSession.setUser({
                                         ...AppSession.currentUser!,
-                                        'phone': phone,
+                                        'phone': '+91$phone',
                                       });
                                     } catch (_) {}
 
@@ -321,6 +321,54 @@ class _LoginPageState extends State<LoginPage> {
         );
       } else {
         setState(() => isSigningIn = false);
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: const Color(0xFF0F172A),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: const Color(0xFF0F4CFF).withValues(alpha: 0.3)),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: const Color(0xFF0F4CFF), size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Pickup Time Notice',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Please ensure your selected pickup time is accurate. Canteen staff prepare orders based on the time provided. Once prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.',
+              style: TextStyle(
+                color: Color(0xFFCBD5E1),
+                fontSize: 13.5,
+                height: 1.55,
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                style: TextButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F4CFF),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                ),
+                child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -1015,7 +1063,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
         Text(
-          "© Nevark Technologies",
+          "© Nevark Foods",
           style: GoogleFonts.plusJakartaSans(
             color: appBlue,
             fontSize: 13,

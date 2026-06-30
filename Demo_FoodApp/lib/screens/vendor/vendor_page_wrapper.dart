@@ -22,6 +22,7 @@ class VendorPageWrapper extends StatefulWidget {
   final String pageTitle;
   final int selectedMenuIndex;
   final VoidCallback toggleTheme;
+  final List<Widget>? trailingActions;
 
   const VendorPageWrapper({
     super.key,
@@ -29,6 +30,7 @@ class VendorPageWrapper extends StatefulWidget {
     required this.pageTitle,
     required this.selectedMenuIndex,
     required this.toggleTheme,
+    this.trailingActions,
   });
 
   @override
@@ -213,6 +215,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                 ),
               ),
               actions: [
+                if (widget.trailingActions != null) ...widget.trailingActions!,
                 if (_pendingOrderCount > 0)
                   Padding(
                     padding: const EdgeInsets.only(right: 8),

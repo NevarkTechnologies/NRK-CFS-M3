@@ -144,6 +144,13 @@ class _OrdersPageState extends State<OrdersPage> {
       pageTitle: "Order Management",
       selectedMenuIndex: 1,
       toggleTheme: widget.toggleTheme,
+      trailingActions: [
+        IconButton(
+          icon: Icon(Icons.refresh_rounded, color: primaryBlue),
+          tooltip: 'Refresh orders',
+          onPressed: loadOrders,
+        ),
+      ],
       child: Scaffold(
         backgroundColor: bgColor,
         body: RefreshIndicator(

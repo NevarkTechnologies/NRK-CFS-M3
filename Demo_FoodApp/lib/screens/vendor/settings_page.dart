@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/session.dart';
 import '../../services/api_service.dart';
@@ -131,7 +132,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final picker = ImagePicker();
     final picked = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 75,
+      imageQuality: 65,
       maxWidth: 1200,
     );
     if (picked == null) return;
@@ -352,10 +353,16 @@ class _SettingsPageState extends State<SettingsPage> {
         if (_pickedImageBase64 != null) 'imageType': 'base64',
       };
 
+      final firebaseToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      final authHeaders = {
+        'Content-Type': 'application/json',
+        if (firebaseToken != null) 'Authorization': 'Bearer $firebaseToken',
+      };
+
       final cafeResponse = await http
           .patch(
             Uri.parse('${ApiService.baseUrl}/cafes/$cafeId'),
-            headers: {'Content-Type': 'application/json'},
+            headers: authHeaders,
             body: jsonEncode(cafeUpdate),
           )
           .timeout(const Duration(seconds: 10));
@@ -371,7 +378,7 @@ class _SettingsPageState extends State<SettingsPage> {
         final userResponse = await http
             .patch(
               Uri.parse('${ApiService.baseUrl}/users/$userId'),
-              headers: {'Content-Type': 'application/json'},
+              headers: authHeaders,
               body: jsonEncode(userUpdate),
             )
             .timeout(const Duration(seconds: 10));

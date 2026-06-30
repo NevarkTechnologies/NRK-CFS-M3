@@ -1,8 +1,8 @@
 name: nevark_foods
-description: Nevark Foods is a food ordering app that connects students with local canteens. It offers a wide variety of cuisines, easy ordering, and reliable service.
+description: Nevark's BenchBites is a food ordering app that connects students with local canteens. It offers a wide variety of cuisines, easy ordering, and reliable service.
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 2.0.0+1
 
 environment:
   sdk: ^3.11.4
@@ -32,18 +32,26 @@ dependencies:
   file_picker: ^10.3.3
   path_provider: ^2.1.2
   excel: ^4.0.3 
+  animated_text_kit: ^4.2.3
   web: ^1.1.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+  
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/icon3.png"
 
 flutter:
   uses-material-design: true
   assets:
     - assets/cafes/
     - assets/
+    - assets/icon/
     - assets/Nevark_Logo.png
     - assets/Nevark.png
     

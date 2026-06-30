@@ -318,7 +318,7 @@ function validateObjectId(paramName) {
 }
 
 function buildCafeQuery(req) {
-  const query = { active: true };
+  const query = {};
   if (req.query.search) query.$text = { $search: req.query.search };
   if (req.query.category) query.category = req.query.category;
   return query;
@@ -706,6 +706,14 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   if (!resolvedCafeId && cafeteriaName) {
     const cafe = await Cafe.findOne({ name: cafeteriaName }).select('_id');
     resolvedCafeId = cafe?._id;
+  }
+
+  // Reject if cafe is currently closed
+  if (resolvedCafeId) {
+    const cafe = await Cafe.findById(resolvedCafeId).select('active').lean();
+    if (cafe && cafe.active === false) {
+      return res.status(409).json({ message: 'This cafe is currently closed and not accepting orders.' });
+    }
   }
 
   // Reject if any item is currently disabled by the vendor
