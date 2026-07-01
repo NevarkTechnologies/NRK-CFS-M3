@@ -128,6 +128,73 @@ class _CheckoutPageState extends State<CheckoutPage> {
       }
       return;
     }
+    // Warn if pickup is more than 4 hours away
+    final diffMinutes = pickedMinutes - nowMinutes;
+    if (diffMinutes > 240) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) {
+          return AlertDialog(
+            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: const Color(0xFF0F4CFF).withValues(alpha: 0.25)),
+            ),
+            title: Row(
+              children: [
+                Icon(Icons.schedule_rounded, color: const Color(0xFF0F4CFF), size: 20),
+                const SizedBox(width: 8),
+                Text(
+                  'Confirm Pickup Time',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.w800,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Your selected pickup time is more than 4 hours from now. Please ensure this is intentional — canteen staff will prepare your order based on this time.',
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13.5,
+                height: 1.55,
+                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+              ),
+            ),
+            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            actions: [
+              OutlinedButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0F4CFF),
+                  side: const BorderSide(color: Color(0xFF0F4CFF)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: const Text('Change Time', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F4CFF),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          );
+        },
+      );
+      if (confirm != true) return;
+    }
+
     setState(() => _pickupTime = picked);
   }
 
