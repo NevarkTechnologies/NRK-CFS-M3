@@ -1,12 +1,45 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/api_service.dart';
 import '../../services/session.dart';
 import 'vendor_page_wrapper.dart';
+
+/// Capitalizes the first letter of each word as the user types,
+/// e.g. "chicken biryani" -> "Chicken Biryani".
+class _TitleCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text;
+    if (text.isEmpty) return newValue;
+    final buffer = StringBuffer();
+    var capitalizeNext = true;
+    for (final char in text.split('')) {
+      if (char.trim().isEmpty) {
+        buffer.write(char);
+        capitalizeNext = true;
+      } else if (capitalizeNext) {
+        buffer.write(char.toUpperCase());
+        capitalizeNext = false;
+      } else {
+        buffer.write(char);
+      }
+    }
+    final formatted = buffer.toString();
+    if (formatted == text) return newValue;
+    return TextEditingValue(
+      text: formatted,
+      selection: newValue.selection,
+      composing: TextRange.empty,
+    );
+  }
+}
 
 class MenuItemModel {
   final String id;
@@ -51,6 +84,8 @@ class _MenuPageState extends State<MenuPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
   bool isLoading = true;
   List<MenuItemModel> menu = [];
+  // Tracks which categories are collapsed. Absent/false => expanded (default).
+  final Map<String, bool> _collapsedCategories = {};
 
   Map<String, List<MenuItemModel>> groupByCategory() {
     final grouped = <String, List<MenuItemModel>>{};
@@ -174,6 +209,7 @@ class _MenuPageState extends State<MenuPage> {
                     'Item Name',
                     (v) => setDialogState(() => name = v),
                     textColor,
+                    titleCase: true,
                   ),
                   if (categories.isNotEmpty)
                     Padding(
@@ -409,12 +445,19 @@ class _MenuPageState extends State<MenuPage> {
     Function(String) onChanged,
     Color textColor, {
     bool isNumber = false,
+    bool titleCase = false,
+    TextEditingController? controller,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
+        controller: controller,
         onChanged: onChanged,
         keyboardType: isNumber ? TextInputType.number : TextInputType.text,
+        textCapitalization: titleCase
+            ? TextCapitalization.words
+            : TextCapitalization.none,
+        inputFormatters: titleCase ? [_TitleCaseTextFormatter()] : null,
         style: TextStyle(
           color: textColor,
           fontFamily: 'Inter',
@@ -481,147 +524,244 @@ class _MenuPageState extends State<MenuPage> {
     }
   }
 
-  void openEditDialog(MenuItemModel item) {
+  void openEditDialog(MenuItemModel item, Color cardColor, Color textColor) {
     final nameController = TextEditingController(text: item.name);
     final priceController = TextEditingController(text: item.price.toString());
-    String category = item.category;
+    final categories = getCategoryOptions();
+    const customOption = 'Create new category';
+    String selectedCategory = canonicalCategory(item.category);
+    String customCategory = '';
+    bool useCustomCategory = false;
+    // Ensure the item's current category is selectable even if it somehow
+    // isn't part of the derived options list.
+    if (!categories.any(
+      (c) => c.toLowerCase() == selectedCategory.toLowerCase(),
+    )) {
+      categories.insert(0, selectedCategory);
+    }
     Uint8List? selectedImageBytes;
     String selectedImageDataUrl = '';
 
     showDialog(
       context: context,
-      builder: (_) {
-        return AlertDialog(
-          title: const Text("Edit Item"),
-          content: StatefulBuilder(
-            builder: (context, setDialogState) {
-              return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: nameController,
-                      decoration: const InputDecoration(labelText: 'Name'),
-                    ),
-                    const SizedBox(height: 15),
-                    DropdownButtonFormField<String>(
-                      initialValue: category,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: getCategoryOptions()
-                          .map(
-                            (e) => DropdownMenuItem(value: e, child: Text(e)),
-                          )
-                          .toList(),
-                      onChanged: (v) {
-                        if (v != null) {
-                          setDialogState(() {
-                            category = v;
-                          });
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 15),
-                    TextField(
-                      controller: priceController,
-                      decoration: const InputDecoration(labelText: 'Price'),
-                      keyboardType: TextInputType.number,
-                    ),
-                    const SizedBox(height: 15),
-                    Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: Colors.grey.withValues(alpha: 0.08),
+      builder: (_) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final categoryItems = [...categories, customOption];
+          return AlertDialog(
+            backgroundColor: cardColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            title: Text(
+              'Edit Item',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontWeight: FontWeight.w900,
+                color: textColor,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _inputField(
+                    'Item Name',
+                    (_) {},
+                    textColor,
+                    titleCase: true,
+                    controller: nameController,
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Category',
+                        labelStyle: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontFamily: 'Inter',
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey.withValues(alpha: 0.05),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (selectedImageBytes != null ||
-                              item.image.isNotEmpty) ...[
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: selectedImageBytes != null
-                                  ? Image.memory(
-                                      selectedImageBytes!,
-                                      height: 140,
-                                      fit: BoxFit.cover,
-                                    )
-                                  : _buildMenuItemImage(item.image),
-                            ),
-                            const SizedBox(height: 10),
-                          ],
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.image),
-                            label: Text(
-                              selectedImageBytes != null
-                                  ? 'Replace photo'
-                                  : item.image.isNotEmpty
-                                  ? 'Change photo'
-                                  : 'Upload photo',
-                              style: const TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w600,
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: useCustomCategory
+                              ? customOption
+                              : selectedCategory,
+                          isExpanded: true,
+                          items: categoryItems.map((categoryValue) {
+                            return DropdownMenuItem<String>(
+                              value: categoryValue,
+                              child: Text(
+                                categoryValue,
+                                style: TextStyle(
+                                  color: textColor,
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: primaryBlue,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () async {
-                              final pickedImage = await ImagePicker().pickImage(
-                                source: ImageSource.gallery,
-                                imageQuality: 60,
-                              );
-                              if (pickedImage == null) return;
-                              final bytes = await pickedImage.readAsBytes();
-                              final mimeType =
-                                  pickedImage.mimeType ?? 'image/png';
-                              setDialogState(() {
-                                selectedImageBytes = bytes;
-                                selectedImageDataUrl =
-                                    'data:$mimeType;base64,${base64Encode(bytes)}';
-                              });
-                            },
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setDialogState(() {
+                              if (value == customOption) {
+                                useCustomCategory = true;
+                                customCategory = '';
+                              } else {
+                                useCustomCategory = false;
+                                selectedCategory = value;
+                              }
+                            });
+                          },
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (useCustomCategory)
+                    _inputField(
+                      'New Category',
+                      (v) => setDialogState(() => customCategory = v),
+                      textColor,
+                    ),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      color: Colors.grey.withValues(alpha: 0.08),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (selectedImageBytes != null ||
+                            item.image.isNotEmpty) ...[
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: selectedImageBytes != null
+                                ? Image.memory(
+                                    selectedImageBytes!,
+                                    height: 140,
+                                    fit: BoxFit.cover,
+                                  )
+                                : _buildMenuItemImage(item.image),
                           ),
+                          const SizedBox(height: 10),
                         ],
-                      ),
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.image),
+                          label: Text(
+                            selectedImageBytes != null
+                                ? 'Replace photo'
+                                : item.image.isNotEmpty
+                                ? 'Change photo'
+                                : 'Upload photo',
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryBlue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final pickedImage = await ImagePicker().pickImage(
+                              source: ImageSource.gallery,
+                              imageQuality: 60,
+                            );
+                            if (pickedImage == null) return;
+                            final bytes = await pickedImage.readAsBytes();
+                            final mimeType =
+                                pickedImage.mimeType ?? 'image/png';
+                            setDialogState(() {
+                              selectedImageBytes = bytes;
+                              selectedImageDataUrl =
+                                  'data:$mimeType;base64,${base64Encode(bytes)}';
+                            });
+                          },
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 8),
+                  _inputField(
+                    'Price (₹)',
+                    (_) {},
+                    textColor,
+                    isNumber: true,
+                    controller: priceController,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              );
-            },
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final navigator = Navigator.of(context);
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryBlue,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                ),
+                onPressed: () async {
+                  final navigator = Navigator.of(context);
 
-                await updateMenuItem(
-                  item.id,
-                  nameController.text,
-                  category,
-                  priceController.text,
-                  image: selectedImageDataUrl.isNotEmpty
-                      ? selectedImageDataUrl
-                      : null,
-                  imageType: selectedImageDataUrl.isNotEmpty ? 'base64' : null,
-                );
+                  final rawCategory = useCustomCategory
+                      ? customCategory
+                      : selectedCategory;
+                  final savedCategory = canonicalCategory(
+                    rawCategory.isEmpty ? 'Others' : rawCategory,
+                  );
 
-                if (!mounted) return;
-                navigator.pop();
-              },
-              child: const Text("Save"),
-            ),
-          ],
-        );
-      },
+                  await updateMenuItem(
+                    item.id,
+                    nameController.text,
+                    savedCategory,
+                    priceController.text,
+                    image: selectedImageDataUrl.isNotEmpty
+                        ? selectedImageDataUrl
+                        : null,
+                    imageType: selectedImageDataUrl.isNotEmpty ? 'base64' : null,
+                  );
+
+                  if (!mounted) return;
+                  navigator.pop();
+                },
+                child: const Text(
+                  'Save Item',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 
@@ -753,29 +893,70 @@ class _MenuPageState extends State<MenuPage> {
             : ListView(
                 padding: const EdgeInsets.all(16),
                 children: groupedMenu.entries.map((entry) {
+                  final bool collapsed =
+                      _collapsedCategories[entry.key] ?? false;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        entry.key,
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          color: textColor,
+                      InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => setState(() {
+                          _collapsedCategories[entry.key] = !collapsed;
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  entry.key,
+                                  style: TextStyle(
+                                    fontFamily: 'Nunito',
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    color: textColor,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                '${entry.value.length}',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              AnimatedRotation(
+                                turns: collapsed ? -0.25 : 0,
+                                duration: const Duration(milliseconds: 200),
+                                child: Icon(
+                                  Icons.expand_more_rounded,
+                                  color: textColor,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ).animate().fade().slideX(),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 16,
-                        runSpacing: 16,
-                        children: entry.value
-                            .map(
-                              (item) =>
-                                  buildCard(item, cardColor, textColor, isDark),
-                            )
-                            .toList(),
-                      ).animate().fade(delay: 100.ms),
+                      if (!collapsed) ...[
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: entry.value
+                              .map(
+                                (item) => buildCard(
+                                  item,
+                                  cardColor,
+                                  textColor,
+                                  isDark,
+                                ),
+                              )
+                              .toList(),
+                        ).animate().fade(delay: 100.ms),
+                      ],
                       const SizedBox(height: 32),
                     ],
                   );
@@ -834,13 +1015,15 @@ class _MenuPageState extends State<MenuPage> {
           const SizedBox(height: 16),
           Text(
             item.name,
-            maxLines: 1,
+            maxLines: 2,
+            softWrap: true,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: 'Nunito',
               fontWeight: FontWeight.w900,
               fontSize: 16,
               color: textColor,
+              height: 1.2,
             ),
           ),
           const SizedBox(height: 4),
@@ -897,7 +1080,8 @@ class _MenuPageState extends State<MenuPage> {
                                     color: Colors.blue,
                                     size: 18,
                                   ),
-                                  onPressed: () => openEditDialog(item),
+                                  onPressed: () =>
+                                      openEditDialog(item, cardColor, textColor),
                                 ),
                               ),
                             ),
@@ -958,7 +1142,8 @@ class _MenuPageState extends State<MenuPage> {
                               color: Colors.blue,
                               size: 18,
                             ),
-                            onPressed: () => openEditDialog(item),
+                            onPressed: () =>
+                                openEditDialog(item, cardColor, textColor),
                           ),
                         ),
 

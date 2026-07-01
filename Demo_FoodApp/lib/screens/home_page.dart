@@ -86,9 +86,7 @@ class _HomePageState extends State<HomePage> {
             'id': item['_id']?.toString() ?? item['id']?.toString() ?? '',
             'name': item['name'] ?? '',
             'price': item['price'] ?? 0,
-            'image': item['image']?.toString().isNotEmpty == true
-                ? item['image']
-                : widget.cafe['image'],
+            'image': item['image']?.toString() ?? '',
             'desc': item['description'] ?? item['desc'] ?? '',
             'category': item['category'] ?? 'Others',
             'rating': item['rating'] ?? 4.5,
@@ -736,6 +734,20 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _menuImagePlaceholder() {
+    return Container(
+      height: 110,
+      width: double.infinity,
+      color: Colors.grey.withValues(alpha: 0.1),
+      alignment: Alignment.center,
+      child: Icon(
+        Icons.fastfood_rounded,
+        color: appBlue.withValues(alpha: 0.5),
+        size: 40,
+      ),
+    );
+  }
+
   Widget _buildFoodCard(Map<String, dynamic> food, bool isDark) {
     final qty = CartModel.getQty(food["id"]);
     final bool isAvailable = food['available'] as bool? ?? true;
@@ -765,7 +777,7 @@ class _HomePageState extends State<HomePage> {
                 builder: (context) {
                   final imageUrl = food["image"]?.toString().trim() ?? '';
                   if (imageUrl.isEmpty) {
-                    return const SizedBox(height: 110);
+                    return _menuImagePlaceholder();
                   }
                   if (imageUrl.startsWith('data:image')) {
                     final bytes = base64Decode(imageUrl.split(',').last);
@@ -782,7 +794,7 @@ class _HomePageState extends State<HomePage> {
                     height: 110,
                     width: double.infinity,
                     fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => const SizedBox(height: 110),
+                    errorBuilder: (_, _, _) => _menuImagePlaceholder(),
                   );
                 },
               ),
