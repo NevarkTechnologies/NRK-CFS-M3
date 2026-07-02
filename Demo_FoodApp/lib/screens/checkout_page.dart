@@ -142,6 +142,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
     // Warn if pickup is more than 4 hours away
     final diffMinutes = pickedMinutes - nowMinutes;
     if (diffMinutes > 240) {
+      if (!mounted) return;
       final confirm = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
@@ -206,7 +207,7 @@ class _CheckoutPageState extends State<CheckoutPage> {
       if (confirm != true) return;
     }
 
-    setState(() => _pickupTime = picked);
+    if (mounted) setState(() => _pickupTime = picked);
   }
 
   double get _itemTotal {

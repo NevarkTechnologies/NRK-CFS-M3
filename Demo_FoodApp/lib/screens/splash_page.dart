@@ -41,7 +41,11 @@ class _SplashPageState extends State<SplashPage> {
       FirebaseAuth.instance.authStateChanges().first,
     ]);
 
-    final firebaseUser = results[1] as User?;
+    // authStateChanges() can emit an initial null before the native SDK
+    // finishes restoring the persisted session (platform-channel race). By the
+    // time the parallel 3s splash delay has elapsed the restore is complete,
+    // so fall back to currentUser — only a real sign-out leaves both null.
+    final firebaseUser = (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
 
     if (!mounted) return;
 

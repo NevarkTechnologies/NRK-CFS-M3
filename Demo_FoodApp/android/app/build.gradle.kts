@@ -12,6 +12,13 @@ android {
     namespace = "com.nevark.foodapp"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = "28.2.13676358"
+    applicationVariants.all {
+    outputs.all {
+        val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+        output.outputFileName =
+            "BenchBites-${versionName}.apk"
+            }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
