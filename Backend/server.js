@@ -45,7 +45,12 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: '5mb' }));
+app.use(express.json({
+  limit: '5mb',
+  // Keep the raw request bytes — Razorpay webhook signatures are computed over
+  // the exact body, so verification must not use the re-serialized JSON.
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
 
 // express-mongo-sanitize is incompatible with Express 5 (req.query is read-only).
 // Inline sanitizer: strips keys starting with $ or containing . from body and query.
@@ -705,58 +710,72 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   res.json({ razorpayOrder, razorpayKeyId: process.env.RAZORPAY_KEY_ID });
 }));
 
-// Step 2: verify HMAC, retrieve cart from DB, create order.
-app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, res) => {
-  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
-    return res.status(400).json({ message: 'razorpay_order_id, razorpay_payment_id, and razorpay_signature are required' });
-  }
+// Create the DB order for a paid Razorpay order — shared by the client confirm
+// endpoint and the Razorpay webhook, whichever arrives first. Idempotent on
+// razorpay_order_id: if the order already exists it is returned untouched, so
+// the two paths can never double-create or double-notify. Returns null only
+// when no order exists and the PaymentSession is gone (expired/never created).
+async function createOrderFromPaymentSession(razorpay_order_id, razorpay_payment_id) {
+  // Fast path: the other path (webhook or client confirm) already created it.
+  const existing = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
+  if (existing) return existing;
 
-  // 1. Cryptographic verification first.
-  if (!verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
-    return res.status(400).json({ message: 'Payment verification failed — invalid signature' });
-  }
-
-  // 2. Retrieve and atomically delete the session (findOneAndDelete = one-time use).
+  // Retrieve and atomically delete the session (findOneAndDelete = one-time use).
   const session = await PaymentSession.findOneAndDelete({ razorpayOrderId: razorpay_order_id });
   if (!session) {
-    return res.status(400).json({ message: 'Payment session expired or already used' });
+    // Session already consumed — the winner may still be mid-creation, so poll
+    // briefly for the order it is writing before giving up.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 400));
+      const order = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
+      if (order) return order;
+    }
+    return null;
   }
 
   const cart = session.cart;
 
-  // 3. Create the DB order — only reachable after valid signature + valid session.
+  // Create the DB order — only reachable after valid signature + valid session.
   const orderId     = makeOrderId();
   const tokenNumber = await generateTokenNumber(cart.cafeId);
-  const order = await Order.create({
-    orderId, tokenNumber,
-    userId:         cart.userId,
-    customerName:   cart.customerName,
-    customerEmail:  cart.customerEmail,
-    cafeId:         cart.cafeId,
-    cafeteriaName:  cart.cafeteriaName,
-    items:          cart.items,
-    itemTotal:      cart.itemTotal,
-    platformFee:    cart.platformFee,
-    convenienceFee: cart.convenienceFee,
-    discount:       cart.discount,
-    total:          cart.total,
-    status:         'Pending',
-    payment: {
-      method:          'Online',
-      provider:        'Razorpay',
-      providerOrderId: razorpay_order_id,
-      transactionId:   razorpay_payment_id,
-      status:          'Paid',
-    },
-    location:   cart.location,
-    pickupTime: cart.pickupTime,
-    notes:      cart.notes,
-  });
+  let order;
+  try {
+    order = await Order.create({
+      orderId, tokenNumber,
+      userId:         cart.userId,
+      customerName:   cart.customerName,
+      customerEmail:  cart.customerEmail,
+      cafeId:         cart.cafeId,
+      cafeteriaName:  cart.cafeteriaName,
+      items:          cart.items,
+      itemTotal:      cart.itemTotal,
+      platformFee:    cart.platformFee,
+      convenienceFee: cart.convenienceFee,
+      discount:       cart.discount,
+      total:          cart.total,
+      status:         'Pending',
+      payment: {
+        method:          'Online',
+        provider:        'Razorpay',
+        providerOrderId: razorpay_order_id,
+        transactionId:   razorpay_payment_id,
+        status:          'Paid',
+      },
+      location:   cart.location,
+      pickupTime: cart.pickupTime,
+      notes:      cart.notes,
+    });
+  } catch (err) {
+    // Unique index on payment.providerOrderId — the other path won the race.
+    if (err && err.code === 11000) {
+      return await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
+    }
+    throw err;
+  }
 
   audit('payment.confirmed', cart.userId, 'payment', order.orderId, { amount: cart.total, razorpayPaymentId: razorpay_payment_id, cafeId: cart.cafeId });
 
-  // 4. Notify customer.
+  // Notify customer.
   if (order.userId) {
     await Notification.create({
       userId: order.userId, title: 'Order Placed 🎉',
@@ -770,7 +789,7 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
     );
   }
 
-  // 5. Notify vendor of new order.
+  // Notify vendor of new order.
   if (order.cafeId) {
     const vendorUser = await User.findOne({ cafeId: order.cafeId, role: 'vendor' }).select('_id').lean();
     if (vendorUser) {
@@ -783,7 +802,82 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
     }
   }
 
+  return order;
+}
+
+// Step 2: verify HMAC, retrieve cart from DB, create order.
+app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, res) => {
+  const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
+  if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    return res.status(400).json({ message: 'razorpay_order_id, razorpay_payment_id, and razorpay_signature are required' });
+  }
+
+  // Cryptographic verification first.
+  if (!verifyRazorpaySignature({ razorpay_order_id, razorpay_payment_id, razorpay_signature })) {
+    return res.status(400).json({ message: 'Payment verification failed — invalid signature' });
+  }
+
+  const order = await createOrderFromPaymentSession(razorpay_order_id, razorpay_payment_id);
+  if (!order) {
+    return res.status(400).json({ message: 'Payment session expired or already used' });
+  }
+
   res.status(201).json(order);
+}));
+
+// Razorpay webhook — authoritative fallback for order creation. If the app is
+// killed or loses the checkout success callback during a UPI redirect and never
+// calls /api/orders/confirm, this still creates the order once the payment is
+// captured. Configure in the Razorpay dashboard with the same secret as
+// RAZORPAY_WEBHOOK_SECRET, subscribed to payment.captured and order.paid.
+// No Firebase auth — authenticated by the webhook HMAC signature instead.
+app.post('/api/razorpay/webhook', asyncHandler(async (req, res) => {
+  const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
+  if (!secret) return res.status(503).json({ message: 'Webhook secret not configured' });
+
+  const signature = req.headers['x-razorpay-signature'];
+  if (!signature || !req.rawBody) {
+    return res.status(400).json({ message: 'Missing webhook signature' });
+  }
+
+  const expected = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+  let valid = false;
+  try {
+    valid = expected.length === String(signature).length &&
+      crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(String(signature)));
+  } catch {
+    valid = false;
+  }
+  if (!valid) return res.status(400).json({ message: 'Invalid webhook signature' });
+
+  const event = req.body?.event;
+  if (event === 'payment.captured' || event === 'order.paid') {
+    const paymentEntity = req.body?.payload?.payment?.entity;
+    const razorpayOrderId = paymentEntity?.order_id;
+    const razorpayPaymentId = paymentEntity?.id;
+    if (razorpayOrderId && razorpayPaymentId) {
+      await createOrderFromPaymentSession(razorpayOrderId, razorpayPaymentId);
+    }
+  }
+
+  // Always 200 for verified events (including ones we ignore) so Razorpay
+  // doesn't keep retrying deliveries we have already processed.
+  res.json({ ok: true });
+}));
+
+// Recovery lookup: after a lost success callback the app polls this with the
+// Razorpay order id to find the order the webhook created, instead of showing
+// the customer a false "payment declined".
+app.get('/api/orders/by-payment/:razorpayOrderId', requireFirebaseAuth, orderReadLimiter, asyncHandler(async (req, res) => {
+  const order = await Order.findOne({ 'payment.providerOrderId': req.params.razorpayOrderId });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+
+  // Access control: only the customer who placed the order may recover it.
+  const requesterEmail = (req.firebaseUser.email || '').toLowerCase();
+  if (!order.customerEmail || order.customerEmail.toLowerCase() !== requesterEmail) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+  res.json(order);
 }));
 
 app.post('/api/orders', orderLimiter, requireFirebaseAuth, asyncHandler(createOrder));

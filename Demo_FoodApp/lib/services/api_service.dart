@@ -284,6 +284,20 @@ class ApiService {
     return _decodeObject(response);
   }
 
+  /// Recovery: look up an order by its Razorpay order id. Used when the
+  /// payment succeeded but the checkout success callback was lost (e.g. the
+  /// app was backgrounded during a UPI redirect) — the order is then created
+  /// by the server-side Razorpay webhook and fetched here.
+  static Future<Map<String, dynamic>> getOrderByRazorpayOrderId(
+    String razorpayOrderId,
+  ) async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/orders/by-payment/$razorpayOrderId'),
+      headers: await _jsonHeaders(),
+    );
+    return _decodeObject(response);
+  }
+
   static Future<Map<String, dynamic>> rateCafe({
     required String cafeId,
     required String userId,

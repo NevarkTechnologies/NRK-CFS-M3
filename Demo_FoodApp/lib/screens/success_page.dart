@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../model/cart_model.dart';
+import '../services/notification_service.dart';
 import 'cafeteria_page.dart';
 import 'cart_page.dart';
 
@@ -19,13 +20,39 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
   late final Animation<double> _checkScale;
   static const _primaryBlue = Color(0xFF0F4CFF);
 
+  // True once the "Order Placed" FCM push for THIS order has arrived (or the
+  // fallback timeout fired) — drives the "Order is being created" footer.
+  bool _orderPushReceived = false;
+  Timer? _pushFallbackTimer;
+
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
+
+  void _onOrderPush() {
+    if (_orderPushReceived) return;
+    final pushedId = NotificationService.lastOrderPushOrderId.value;
+    if (pushedId != null && pushedId == widget.order['orderId']?.toString()) {
+      if (mounted) setState(() => _orderPushReceived = true);
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _checkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _checkScale = CurvedAnimation(parent: _checkCtrl, curve: Curves.elasticOut);
+
+    NotificationService.lastOrderPushOrderId.addListener(_onOrderPush);
+    // The push may have arrived before this page mounted (webhook path sends
+    // it as soon as the payment is captured) — check the retained value now.
+    _onOrderPush();
+    // FCM delivery has no latency guarantee (Doze, OEM battery savers, campus
+    // Wi-Fi NAT timeouts) — don't spin forever if it's very late or the app
+    // was briefly backgrounded and the foreground listener missed it.
+    _pushFallbackTimer = Timer(const Duration(seconds: 60), () {
+      if (mounted && !_orderPushReceived) {
+        setState(() => _orderPushReceived = true);
+      }
+    });
 
     Timer(const Duration(seconds: 2), () {
       if (!mounted) return;
@@ -50,6 +77,8 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
 
   @override
   void dispose() {
+    NotificationService.lastOrderPushOrderId.removeListener(_onOrderPush);
+    _pushFallbackTimer?.cancel();
     _checkCtrl.dispose();
     super.dispose();
   }
@@ -90,7 +119,47 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
             ),
           ),
         ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 14),
+            child: _orderCreationFooter(subText),
+          ),
+        ),
       ),
+    );
+  }
+
+  /// One-liner at the bottom: "Order is being created" + small loader until
+  /// the "Order Placed" FCM push for this order arrives, then a green check.
+  Widget _orderCreationFooter(Color subText) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: _orderPushReceived
+          ? [
+              const Icon(Icons.check_circle_rounded, color: Color(0xFF22C55E), size: 15),
+              const SizedBox(width: 6),
+              const Text(
+                'Order created',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF22C55E),
+                ),
+              ),
+            ]
+          : [
+              Text(
+                'Order is being created',
+                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: subText),
+              ),
+              const SizedBox(width: 8),
+              const SizedBox(
+                width: 12,
+                height: 12,
+                child: CircularProgressIndicator(color: _primaryBlue, strokeWidth: 2),
+              ),
+            ],
     );
   }
 

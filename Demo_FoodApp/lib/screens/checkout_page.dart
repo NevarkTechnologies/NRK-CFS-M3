@@ -37,6 +37,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
   Map<String, dynamic>? _razorpayOrder;
   String? _razorpayKeyId; // Received from server — never hardcoded client-side
 
+  // True from the moment Razorpay checkout opens until a terminal outcome:
+  // SuccessPage navigation, payment failure, or recovery giving up. Drives the
+  // full-screen loader shown when the user returns from an external UPI app.
+  bool _awaitingPayment = false;
+
+  void _setAwaitingPayment(bool value) {
+    if (mounted && _awaitingPayment != value) {
+      setState(() => _awaitingPayment = value);
+    }
+  }
+
   String get _pickupTimeLabel {
     if (_pickupTime == null) return 'Set Pickup Time';
     final h = _pickupTime!.hourOfPeriod == 0 ? 12 : _pickupTime!.hourOfPeriod;
@@ -234,6 +245,66 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
     final textColor = isDark ? Colors.white : Colors.black;
 
+    return PopScope(
+      // Block back navigation while a payment is being finalized — popping the
+      // page here would orphan the SuccessPage navigation.
+      canPop: !_awaitingPayment,
+      child: Stack(
+        children: [
+          _buildScaffold(background, cardColor, textColor),
+          if (_awaitingPayment) _paymentLoaderOverlay(cardColor, textColor),
+        ],
+      ),
+    );
+  }
+
+  /// Full-screen barrier shown from checkout open until SuccessPage or a
+  /// terminal failure — covers the bare checkout page seen after returning
+  /// from an external UPI app while the payment is still being verified.
+  Widget _paymentLoaderOverlay(Color cardColor, Color textColor) {
+    return Positioned.fill(
+      child: AbsorbPointer(
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.6),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+              margin: const EdgeInsets.symmetric(horizontal: 32),
+              decoration: BoxDecoration(
+                color: cardColor,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: primaryColor),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Completing your payment…',
+                    style: TextStyle(
+                      color: textColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Please don\'t close the app',
+                    style: TextStyle(
+                      color: textColor.withValues(alpha: 0.6),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildScaffold(Color background, Color cardColor, Color textColor) {
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
@@ -531,8 +602,10 @@ Container(
 
       _razorpayOrder = Map<String, dynamic>.from(data['razorpayOrder'] as Map);
       _razorpayKeyId = data['razorpayKeyId']?.toString();
+      _setAwaitingPayment(true);
       await _openRazorpayCheckout();
     } catch (error) {
+      _setAwaitingPayment(false);
       _showError(error.toString().replaceFirst("Exception: ", ""));
     } finally {
       if (mounted) setState(() => isSubmitting = false);
@@ -586,8 +659,57 @@ Container(
           ? 'Try again'
           : message;
 
+  // Razorpay reports "This order has already been paid" when the payment
+  // actually succeeded but the checkout lost the success event (common on
+  // UPI app redirects) and re-attempted the same order. The money was taken,
+  // so recover the order created by the server webhook instead of showing a
+  // false decline.
+  final normalized = errorMessage.toLowerCase();
+  if (normalized.contains('already') && normalized.contains('paid')) {
+    // Keep the loader up while recovery polls for the webhook-created order.
+    _recoverPaidOrder(fallbackError: 'Payment failed: $errorMessage');
+    return;
+  }
+
+  _setAwaitingPayment(false);
   _showError('Payment failed: $errorMessage');
 }
+
+  /// Polls the backend for the order created by the Razorpay webhook when the
+  /// payment succeeded but the app never received the success callback.
+  Future<void> _recoverPaidOrder({required String fallbackError}) async {
+    final razorpayOrderId = _razorpayOrder?['id']?.toString();
+    if (razorpayOrderId == null || razorpayOrderId.isEmpty) {
+      _setAwaitingPayment(false);
+      _showError(fallbackError);
+      return;
+    }
+
+    for (var attempt = 0; attempt < 6; attempt++) {
+      try {
+        final order =
+            await ApiService.getOrderByRazorpayOrderId(razorpayOrderId);
+        if (!mounted) return;
+        globalCartItems.clear();
+        CartModel.clear();
+        await saveCart();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
+        );
+        return;
+      } catch (_) {
+        await Future.delayed(const Duration(seconds: 2));
+      }
+    }
+
+    if (mounted) {
+      _setAwaitingPayment(false);
+      _showError(
+          'Payment received — order confirmation is delayed. Please check My Orders in a moment before paying again.');
+    }
+  }
 
   Future<void> _handleRazorpaySuccess(Map<String, dynamic> response) async {
     try {
@@ -610,7 +732,13 @@ Container(
         MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
       );
     } catch (error) {
-      _showError('Payment verification error: ${error.toString().replaceFirst("Exception: ", "")}');
+      // Payment definitely succeeded (Razorpay fired the success event) — the
+      // server webhook creates the order even when this confirm call fails,
+      // so recover it rather than reporting a verification failure.
+      await _recoverPaidOrder(
+        fallbackError:
+            'Payment verification error: ${error.toString().replaceFirst("Exception: ", "")}',
+      );
     }
   }
 

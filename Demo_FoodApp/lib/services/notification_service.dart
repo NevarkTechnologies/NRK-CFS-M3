@@ -94,6 +94,12 @@ class NotificationService {
 
   static final NotificationService instance = NotificationService._();
 
+  /// orderId of the most recent 'order' push received in the foreground.
+  /// Retains its value so listeners that mount after the push arrives (e.g.
+  /// SuccessPage when the webhook-sent push beats the page transition) can
+  /// still read it. Used to drive the "Order is being created" footer.
+  static final ValueNotifier<String?> lastOrderPushOrderId = ValueNotifier<String?>(null);
+
   bool _initialized = false;
   late final FirebaseMessaging _messaging;
 
@@ -315,6 +321,9 @@ class NotificationService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     await _showNotification(message);
+    if (message.data['type']?.toString() == 'order') {
+      lastOrderPushOrderId.value = message.data['orderId']?.toString();
+    }
     if (AppSession.isLoggedIn) {
       NotificationModel.fetchNotifications(AppSession.userId).catchError((_) {});
     }

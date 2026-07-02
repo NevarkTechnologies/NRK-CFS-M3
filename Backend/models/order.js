@@ -48,5 +48,12 @@ const OrderSchema = new mongoose.Schema(
 
 OrderSchema.index({ cafeId: 1, createdAt: -1 });
 OrderSchema.index({ customerEmail: 1, createdAt: -1 });
+// One order per Razorpay order id — backstop against the webhook and the
+// client confirm racing to create the same order. Partial: non-online orders
+// all share providerOrderId '' and must not collide.
+OrderSchema.index(
+  { 'payment.providerOrderId': 1 },
+  { unique: true, partialFilterExpression: { 'payment.providerOrderId': { $type: 'string', $gt: '' } } }
+);
 
 module.exports = mongoose.model('Order', OrderSchema);
