@@ -46,6 +46,12 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // R8 was stripping classes firebase_auth needs to restore the
+            // persisted user, so release builds lost the login on every cold
+            // start (sign-in still worked in-session). Keep minification off
+            // until proper keep rules are added and verified.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }

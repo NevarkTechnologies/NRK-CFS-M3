@@ -70,28 +70,11 @@ Future<void> openRazorpayCheckout(
     'description': 'Food Order',
     'prefill': prefill,
     'theme': {'color': '#0F4CFF'},
-    'config': {
-      'display': {
-        'blocks': {
-          'apps': {
-            'name': 'Pay using UPI apps',
-            'instruments': [
-              {'method': 'upi', 'flows': ['intent']},
-            ],
-          },
-          // QR + collect: lets the user pay from a secondary phone by
-          // scanning a UPI QR or approving a collect request on their UPI ID.
-          'other': {
-            'name': 'Pay from another phone',
-            'instruments': [
-              {'method': 'upi', 'flows': ['qr', 'collect']},
-            ],
-          },
-        },
-        'sequence': ['block.apps', 'block.other'],
-        'preferences': {'show_default_blocks': false},
-      },
-    },
+    // No display config: the native Android sheet ignores custom display
+    // blocks and the restrictive config suppressed its default UPI section,
+    // which includes the "Enter UPI ID" (collect) option. Default rendering
+    // shows all account-enabled methods — trim those in the Razorpay
+    // dashboard, not here.
   };
 
   try {

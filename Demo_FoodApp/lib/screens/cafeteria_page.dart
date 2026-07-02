@@ -435,7 +435,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         color: hintColor,
                         fontSize: 15,
                       ),
-                      duration: const Duration(milliseconds: 3000),
+                      duration: const Duration(milliseconds: 2000),
                     ),
                     RotateAnimatedText(
                       'Search for Cafes',
@@ -444,7 +444,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         color: hintColor,
                         fontSize: 15,
                       ),
-                      duration: const Duration(milliseconds: 3000),
+                      duration: const Duration(milliseconds: 2000),
                     ),
                   ],
                 ),

@@ -8,11 +8,11 @@ import '../services/session.dart';
 import '../services/razorpay_helper.dart';
 
 class CheckoutPage extends StatefulWidget {
-  final List<OrderItem>? items; 
-  final String? cafeteriaName; 
+  final List<OrderItem>? items;
+  final String? cafeteriaName;
   final String? cafeId;
   final String? pickupLocation;
-  final bool isReorder;  
+  final bool isReorder;
   const CheckoutPage({
     super.key,
     this.items,
@@ -60,28 +60,36 @@ class _CheckoutPageState extends State<CheckoutPage> {
   String get _pickupTimeISO {
     if (_pickupTime == null) return '';
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day, _pickupTime!.hour, _pickupTime!.minute).toIso8601String();
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+      _pickupTime!.hour,
+      _pickupTime!.minute,
+    ).toIso8601String();
   }
 
   Future<void> _selectPickupTime() async {
     final now = TimeOfDay.now();
     final picked = await showTimePicker(
       context: context,
-      initialTime: _pickupTime ??
+      initialTime:
+          _pickupTime ??
           TimeOfDay(hour: now.hour, minute: (now.minute ~/ 15 + 1) * 15 % 60),
       helpText: 'SELECT PICKUP TIME',
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF0F4CFF),
-              brightness: Theme.of(context).brightness,
-            ).copyWith(
-              primary: const Color(0xFF0F4CFF),
-              onPrimary: Colors.white,
-              surface: isDark ? const Color(0xFF0F172A) : Colors.white,
-              onSurface: isDark ? Colors.white : const Color(0xFF0F172A),
-            ),
+            colorScheme:
+                ColorScheme.fromSeed(
+                  seedColor: const Color(0xFF0F4CFF),
+                  brightness: Theme.of(context).brightness,
+                ).copyWith(
+                  primary: const Color(0xFF0F4CFF),
+                  onPrimary: Colors.white,
+                  surface: isDark ? const Color(0xFF0F172A) : Colors.white,
+                  onSurface: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
             timePickerTheme: TimePickerThemeData(
               backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
               dialBackgroundColor: isDark
@@ -92,22 +100,22 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 (states) => states.contains(WidgetState.selected)
                     ? Colors.white
                     : isDark
-                        ? Colors.white70
-                        : const Color(0xFF0F172A),
+                    ? Colors.white70
+                    : const Color(0xFF0F172A),
               ),
               hourMinuteColor: WidgetStateColor.resolveWith(
                 (states) => states.contains(WidgetState.selected)
                     ? const Color(0xFF0F4CFF)
                     : isDark
-                        ? const Color(0xFF1E293B)
-                        : const Color(0xFFE8F0FF),
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFE8F0FF),
               ),
               hourMinuteTextColor: WidgetStateColor.resolveWith(
                 (states) => states.contains(WidgetState.selected)
                     ? Colors.white
                     : isDark
-                        ? Colors.white70
-                        : const Color(0xFF0F172A),
+                    ? Colors.white70
+                    : const Color(0xFF0F172A),
               ),
               entryModeIconColor: const Color(0xFF0F4CFF),
               helpTextStyle: const TextStyle(
@@ -134,7 +142,13 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (pickedMinutes <= nowMinutes) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pickup Time Must Be Today and Later Than Current Time.'), backgroundColor: Colors.redAccent),
+          const SnackBar(
+            content: Text(
+              'Pickup Time Must Be Today and Later Than Current Time.',
+            ),
+            backgroundColor: Colors.redAccent,
+            duration: Duration(milliseconds: 1000),
+          ),
         );
       }
       return;
@@ -151,11 +165,17 @@ class _CheckoutPageState extends State<CheckoutPage> {
             backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: const Color(0xFF0F4CFF).withValues(alpha: 0.25)),
+              side: BorderSide(
+                color: const Color(0xFF0F4CFF).withValues(alpha: 0.25),
+              ),
             ),
             title: Row(
               children: [
-                Icon(Icons.schedule_rounded, color: const Color(0xFF0F4CFF), size: 20),
+                Icon(
+                  Icons.schedule_rounded,
+                  color: const Color(0xFF0F4CFF),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'Confirm Pickup Time',
@@ -174,7 +194,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 fontFamily: 'Inter',
                 fontSize: 13.5,
                 height: 1.55,
-                color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
+                color: isDark
+                    ? const Color(0xFFCBD5E1)
+                    : const Color(0xFF475569),
               ),
             ),
             actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -184,10 +206,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: const Color(0xFF0F4CFF),
                   side: const BorderSide(color: Color(0xFF0F4CFF)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                 ),
-                child: const Text('Change Time', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Change Time',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(ctx, true),
@@ -195,10 +225,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
                   backgroundColor: const Color(0xFF0F4CFF),
                   foregroundColor: Colors.white,
                   elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                 ),
-                child: const Text('Confirm', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Confirm',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           );
@@ -214,10 +252,14 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (widget.isReorder && widget.items != null) {
       return widget.items!.fold(0.0, (s, i) => s + i.price * i.quantity);
     }
-    return globalCartItems.fold(0.0, (s, i) => s + (i["price"] as num) * (i["qty"] as int));
+    return globalCartItems.fold(
+      0.0,
+      (s, i) => s + (i["price"] as num) * (i["qty"] as int),
+    );
   }
 
-  double get _platformFee => double.parse((_itemTotal * 0.03).toStringAsFixed(2));
+  double get _platformFee =>
+      double.parse((_itemTotal * 0.03).toStringAsFixed(2));
   double get _convenienceFee => 1.5;
   double get _grandTotal => _itemTotal + _platformFee + _convenienceFee;
 
@@ -238,11 +280,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
   @override
   Widget build(BuildContext context) {
-    final background =
-        isDark ? const Color(0xFF020617) : const Color(0xFFF4F6F9);
+    final background = isDark
+        ? const Color(0xFF020617)
+        : const Color(0xFFF4F6F9);
 
-    final cardColor =
-        isDark ? const Color(0xFF0F172A) : Colors.white;
+    final cardColor = isDark ? const Color(0xFF0F172A) : Colors.white;
 
     final textColor = isDark ? Colors.white : Colors.black;
 
@@ -328,29 +370,34 @@ class _CheckoutPageState extends State<CheckoutPage> {
               constraints: const BoxConstraints(maxWidth: 900),
               child: Column(
                 children: [
-                   
-    if (widget.isReorder && widget.items != null) ...[
-Container(
-          width: double.infinity,
-          padding: EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 20, 
-            left: 20, 
-            right: 20, 
-            bottom: 60 
-          ),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE8F0FF),
-            image: DecorationImage(
-              image: const AssetImage('assets/bg.jpg'), 
-              fit: BoxFit.cover,
-              colorFilter: ColorFilter.mode(
-                isDark ? const Color(0xFF0F172A).withValues(alpha: 0.9) : const Color(0xFFF0F6FF).withValues(alpha: 0.85), 
-                BlendMode.srcATop
-              ),
-            ),
-          ),
-        ),
-    ],
+                  if (widget.isReorder && widget.items != null) ...[
+                    Container(
+                      width: double.infinity,
+                      padding: EdgeInsets.only(
+                        top: MediaQuery.of(context).padding.top + 20,
+                        left: 20,
+                        right: 20,
+                        bottom: 60,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF0F172A)
+                            : const Color(0xFFE8F0FF),
+                        image: DecorationImage(
+                          image: const AssetImage('assets/bg.jpg'),
+                          fit: BoxFit.cover,
+                          colorFilter: ColorFilter.mode(
+                            isDark
+                                ? const Color(0xFF0F172A).withValues(alpha: 0.9)
+                                : const Color(
+                                    0xFFF0F6FF,
+                                  ).withValues(alpha: 0.85),
+                            BlendMode.srcATop,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   _orderSummaryCard(cardColor, textColor),
                   _pickupTimeCard(cardColor, textColor),
                   _section("UPI", "upi", _upiUI(), cardColor, textColor),
@@ -366,7 +413,11 @@ Container(
           decoration: BoxDecoration(
             color: cardColor,
             boxShadow: const [
-              BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, -3))
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 10,
+                offset: Offset(0, -3),
+              ),
             ],
           ),
           child: Row(
@@ -386,10 +437,19 @@ Container(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: (isSubmitting || _pickupTime == null) ? null : _handlePayment,
+                    onPressed: (isSubmitting || _pickupTime == null)
+                        ? null
+                        : _handlePayment,
                     child: Text(
-                      isSubmitting ? "Placing Order..." : _pickupTime == null ? "Set Pickup Time to Continue" : "Pay  ₹${_grandTotal.toStringAsFixed(2)}",
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                      isSubmitting
+                          ? "Placing Order..."
+                          : _pickupTime == null
+                          ? "Set Pickup Time to Continue"
+                          : "Pay  ₹${_grandTotal.toStringAsFixed(2)}",
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),
@@ -409,10 +469,19 @@ Container(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: set ? primaryColor.withValues(alpha: 0.5) : Colors.redAccent.withValues(alpha: 0.4),
+          color: set
+              ? primaryColor.withValues(alpha: 0.5)
+              : Colors.redAccent.withValues(alpha: 0.4),
           width: 1.5,
         ),
-        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black54
+                : Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+          ),
+        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -427,26 +496,46 @@ Container(
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: (set ? primaryColor : Colors.redAccent).withValues(alpha: 0.1),
+                    color: (set ? primaryColor : Colors.redAccent).withValues(
+                      alpha: 0.1,
+                    ),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.access_time_rounded, color: set ? primaryColor : Colors.redAccent, size: 20),
+                  child: Icon(
+                    Icons.access_time_rounded,
+                    color: set ? primaryColor : Colors.redAccent,
+                    size: 20,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Pickup Time', style: TextStyle(fontWeight: FontWeight.bold, color: textColor, fontSize: 14)),
+                      Text(
+                        'Pickup Time',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: textColor,
+                          fontSize: 14,
+                        ),
+                      ),
                       const SizedBox(height: 2),
                       Text(
                         set ? _pickupTimeLabel : 'Required - Tap to Set',
-                        style: TextStyle(fontSize: 13, color: set ? primaryColor : Colors.redAccent, fontWeight: set ? FontWeight.w600 : FontWeight.normal),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: set ? primaryColor : Colors.redAccent,
+                          fontWeight: set ? FontWeight.w600 : FontWeight.normal,
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, color: set ? primaryColor : Colors.redAccent),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: set ? primaryColor : Colors.redAccent,
+                ),
               ],
             ),
           ),
@@ -455,7 +544,13 @@ Container(
     );
   }
 
-  Widget _section(String title, String value, Widget child, Color cardColor, Color textColor) {
+  Widget _section(
+    String title,
+    String value,
+    Widget child,
+    Color cardColor,
+    Color textColor,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -463,9 +558,11 @@ Container(
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05),
+            color: isDark
+                ? Colors.black54
+                : Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
-          )
+          ),
         ],
       ),
       child: Column(
@@ -509,33 +606,74 @@ Container(
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black.withValues(alpha: 0.05), blurRadius: 10)],
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black54
+                : Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text("Order Summary", style: TextStyle(fontWeight: FontWeight.bold, color: textColor)),
+          Text(
+            "Order Summary",
+            style: TextStyle(fontWeight: FontWeight.bold, color: textColor),
+          ),
           const SizedBox(height: 12),
-          _summaryRow("Item Total", "₹${_itemTotal.toStringAsFixed(2)}", textColor),
+          _summaryRow(
+            "Item Total",
+            "₹${_itemTotal.toStringAsFixed(2)}",
+            textColor,
+          ),
           const SizedBox(height: 8),
-          _summaryRow("Platform Fee (3%)", "₹${_platformFee.toStringAsFixed(2)}", subColor),
+          _summaryRow(
+            "Platform Fee (3%)",
+            "₹${_platformFee.toStringAsFixed(2)}",
+            subColor,
+          ),
           const SizedBox(height: 8),
-          _summaryRow("Convenience Fee", "₹${_convenienceFee.toStringAsFixed(2)}", subColor),
-          const Padding(padding: EdgeInsets.symmetric(vertical: 10), child: Divider()),
-          _summaryRow("Total", "₹${_grandTotal.toStringAsFixed(2)}", textColor, bold: true),
+          _summaryRow(
+            "Convenience Fee",
+            "₹${_convenienceFee.toStringAsFixed(2)}",
+            subColor,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 10),
+            child: Divider(),
+          ),
+          _summaryRow(
+            "Total",
+            "₹${_grandTotal.toStringAsFixed(2)}",
+            textColor,
+            bold: true,
+          ),
         ],
       ),
     );
   }
 
-  Widget _summaryRow(String label, String value, Color color, {bool bold = false}) {
-    final style = TextStyle(color: color, fontWeight: bold ? FontWeight.bold : FontWeight.normal, fontSize: bold ? 15 : 14);
+  Widget _summaryRow(
+    String label,
+    String value,
+    Color color, {
+    bool bold = false,
+  }) {
+    final style = TextStyle(
+      color: color,
+      fontWeight: bold ? FontWeight.bold : FontWeight.normal,
+      fontSize: bold ? 15 : 14,
+    );
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text(label, style: style), Text(value, style: style)],
+      children: [
+        Text(label, style: style),
+        Text(value, style: style),
+      ],
     );
   }
-
 
   void _showUnavailableDialog(List<String> names) {
     showDialog(
@@ -618,7 +756,8 @@ Container(
       return widget.cafeteriaName!;
     }
     if (globalCartItems.isNotEmpty) {
-      return globalCartItems.first["cafeteriaName"]?.toString() ?? "Campus Cafeteria";
+      return globalCartItems.first["cafeteriaName"]?.toString() ??
+          "Campus Cafeteria";
     }
     return "Campus Cafeteria";
   }
@@ -626,22 +765,26 @@ Container(
   List<Map<String, dynamic>> _orderItems() {
     if (widget.isReorder && widget.items != null) {
       return widget.items!
-          .map((item) => {
-                "name": item.name,
-                "qty": item.quantity,
-                "price": item.price,
-              })
+          .map(
+            (item) => {
+              "name": item.name,
+              "qty": item.quantity,
+              "price": item.price,
+            },
+          )
           .toList();
     }
 
     return globalCartItems
-        .map((item) => {
-              "id": item["id"],
-              "name": item["name"],
-              "qty": item["qty"],
-              "price": item["price"],
-              "image": item["image"],
-            })
+        .map(
+          (item) => {
+            "id": item["id"],
+            "name": item["name"],
+            "qty": item["qty"],
+            "price": item["price"],
+            "image": item["image"],
+          },
+        )
         .toList();
   }
 
@@ -652,29 +795,29 @@ Container(
   }
 
   void _handleRazorpayError(String? message) {
-  final errorMessage =
-      (message == null ||
-       message.trim().isEmpty ||
-       message.trim().toLowerCase() == 'undefined' ||
-       message.trim().toLowerCase() == 'null')
-          ? 'Try again'
-          : message;
+    final errorMessage =
+        (message == null ||
+            message.trim().isEmpty ||
+            message.trim().toLowerCase() == 'undefined' ||
+            message.trim().toLowerCase() == 'null')
+        ? 'Try again'
+        : message;
 
-  // Razorpay reports "This order has already been paid" when the payment
-  // actually succeeded but the checkout lost the success event (common on
-  // UPI app redirects) and re-attempted the same order. The money was taken,
-  // so recover the order created by the server webhook instead of showing a
-  // false decline.
-  final normalized = errorMessage.toLowerCase();
-  if (normalized.contains('already') && normalized.contains('paid')) {
-    // Keep the loader up while recovery polls for the webhook-created order.
-    _recoverPaidOrder(fallbackError: 'Payment failed: $errorMessage');
-    return;
+    // Razorpay reports "This order has already been paid" when the payment
+    // actually succeeded but the checkout lost the success event (common on
+    // UPI app redirects) and re-attempted the same order. The money was taken,
+    // so recover the order created by the server webhook instead of showing a
+    // false decline.
+    final normalized = errorMessage.toLowerCase();
+    if (normalized.contains('already') && normalized.contains('paid')) {
+      // Keep the loader up while recovery polls for the webhook-created order.
+      _recoverPaidOrder(fallbackError: 'Payment failed: $errorMessage');
+      return;
+    }
+
+    _setAwaitingPayment(false);
+    _showError('Payment failed: $errorMessage');
   }
-
-  _setAwaitingPayment(false);
-  _showError('Payment failed: $errorMessage');
-}
 
   /// Polls the backend for the order created by the Razorpay webhook when the
   /// payment succeeded but the app never received the success callback.
@@ -688,8 +831,9 @@ Container(
 
     for (var attempt = 0; attempt < 6; attempt++) {
       try {
-        final order =
-            await ApiService.getOrderByRazorpayOrderId(razorpayOrderId);
+        final order = await ApiService.getOrderByRazorpayOrderId(
+          razorpayOrderId,
+        );
         if (!mounted) return;
         globalCartItems.clear();
         CartModel.clear();
@@ -708,7 +852,8 @@ Container(
     if (mounted) {
       _setAwaitingPayment(false);
       _showError(
-          'Payment received — order confirmation is delayed. Please check My Orders in a moment before paying again.');
+        'Payment received — order confirmation is delayed. Please check My Orders in a moment before paying again.',
+      );
     }
   }
 
@@ -762,4 +907,3 @@ Container(
     );
   }
 }
-

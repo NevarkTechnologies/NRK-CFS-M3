@@ -31,16 +31,10 @@ Future<void> main() async {
 
   // Edge-to-edge on every Android version, not just 15+ where the OS forces
   // it — all screens already handle insets via SafeArea/AppBar/padding.
+  // The nav bar scrim itself is applied by initTheme() below via
+  // applySystemNavStyle(), once the saved theme is known.
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        systemNavigationBarColor: Colors.transparent,
-        systemNavigationBarDividerColor: Colors.transparent,
-        systemNavigationBarContrastEnforced: false,
-      ),
-    );
   }
 
   try {
@@ -92,6 +86,17 @@ class MyApp extends StatelessWidget {
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
+              // Every AppBar re-applies its SystemUiOverlayStyle on build,
+              // which was clobbering the global transparent nav bar set in
+              // main() on Android ≤ 14 — reinforce it from the theme instead.
+              systemOverlayStyle: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.dark,
+                systemNavigationBarColor: Colors.transparent,
+                systemNavigationBarDividerColor: Colors.transparent,
+                systemNavigationBarIconBrightness: Brightness.dark,
+                systemNavigationBarContrastEnforced: false,
+              ),
             ),
           ),
 
@@ -105,6 +110,14 @@ class MyApp extends StatelessWidget {
               backgroundColor: Color(0xFF0F172A),
               elevation: 0,
               iconTheme: IconThemeData(color: Color(0xFF0F4CFF)),
+              systemOverlayStyle: SystemUiOverlayStyle(
+                statusBarColor: Colors.transparent,
+                statusBarIconBrightness: Brightness.light,
+                systemNavigationBarColor: Colors.transparent,
+                systemNavigationBarDividerColor: Colors.transparent,
+                systemNavigationBarIconBrightness: Brightness.light,
+                systemNavigationBarContrastEnforced: false,
+              ),
               titleTextStyle: TextStyle(
                 color: Color(0xFF0F4CFF),
                 fontSize: 18,
@@ -117,6 +130,68 @@ class MyApp extends StatelessWidget {
           themeMode: currentMode,
           themeAnimationDuration: const Duration(milliseconds: 400),
           themeAnimationCurve: Curves.easeInOutCubic,
+
+          // Two app-wide adjustments:
+          // 1. Lift all bottom-anchored UI (nav bar, Pay buttons, …) slightly
+          //    higher above the system nav: every screen positions its bottom
+          //    UI with SafeArea, which reads MediaQuery.padding.bottom, so
+          //    inflating the inset here raises everything at once.
+          // 2. Draw a gradient scrim over the system nav area (35% opacity at
+          //    the bottom fading to 20% at the top). The window's own nav bar
+          //    color is fully transparent — Android windows only support a
+          //    flat color, and app-rendered pixels are immune to OEM ROMs
+          //    force-overriding the window color.
+          builder: (context, child) {
+            if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+              return child!;
+            }
+            final mq = MediaQuery.of(context);
+            const extraLift = 10.0;
+            // System nav inset (0 while the keyboard covers the nav area).
+            final navInset = mq.padding.bottom;
+            final isDark = currentMode == ThemeMode.dark;
+            return Directionality(
+              textDirection: TextDirection.ltr,
+              child: Stack(
+                children: [
+                  MediaQuery(
+                    data: mq.copyWith(
+                      padding: mq.padding.copyWith(
+                        bottom: mq.padding.bottom + extraLift,
+                      ),
+                      viewPadding: mq.viewPadding.copyWith(
+                        bottom: mq.viewPadding.bottom + extraLift,
+                      ),
+                    ),
+                    child: child!,
+                  ),
+                  if (navInset > 0)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      height: navInset,
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: isDark
+                                  ? const [navScrimTopDark, navScrimBottomDark]
+                                  : const [
+                                      navScrimTopLight,
+                                      navScrimBottomLight,
+                                    ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
 
           /// ROUTES
           onGenerateRoute: (settings) {

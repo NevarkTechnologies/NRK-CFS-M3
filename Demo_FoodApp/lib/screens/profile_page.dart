@@ -44,7 +44,7 @@ class _ProfilePageState extends State<ProfilePage> {
   String getDisplayName(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));
 
-    if (parts.isEmpty) return '';
+    if (parts.isEmpty || parts[0].isEmpty) return '';
 
     if (parts.length > 1 && parts[0].length <= 2) {
       return parts[1][0].toUpperCase() + parts[1].substring(1).toLowerCase();

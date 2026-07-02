@@ -787,7 +787,7 @@ class _DetailPageState extends State<DetailPage> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 24),
               child: Text(
-                'No orders found yet. Place an order from the cafeteria to see order history here.',
+                'No Orders Found Yet.\nPlace Your First Order to View Order History.',
                 style: TextStyle(
                   color: isDark ? Colors.white70 : Colors.black54,
                   fontSize: 15,

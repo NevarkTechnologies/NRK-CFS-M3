@@ -18,8 +18,10 @@ Future<void> saveCart() async {
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_cartKey(), jsonEncode(globalCartItems));
-    cartCountNotifier.value =
-        globalCartItems.fold(0, (s, i) => s + (i["qty"] as int? ?? 1));
+    cartCountNotifier.value = globalCartItems.fold(
+      0,
+      (s, i) => s + (i["qty"] as int? ?? 1),
+    );
   } catch (_) {}
 }
 
@@ -34,10 +36,13 @@ Future<void> loadCart(String userId) async {
     final str = prefs.getString(_cartKey());
     if (str != null) {
       final decoded = jsonDecode(str) as List<dynamic>;
-      globalCartItems =
-          decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-      cartCountNotifier.value =
-          globalCartItems.fold(0, (s, i) => s + (i["qty"] as int? ?? 1));
+      globalCartItems = decoded
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      cartCountNotifier.value = globalCartItems.fold(
+        0,
+        (s, i) => s + (i["qty"] as int? ?? 1),
+      );
       // Sync CartModel so home page qty counters reflect persisted cart
       CartModel.clear();
       for (final item in globalCartItems) {
@@ -155,98 +160,111 @@ class _CartPageState extends State<CartPage> {
       extendBody: true,
       body: SafeArea(
         bottom: false,
-        child: SingleChildScrollView(
-          child: Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1180),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildTopBar(isDark, cardColor, textColor),
-                    const SizedBox(height: 24),
+        // Builder so MediaQuery reflects the Scaffold's extendBody adjustment:
+        // padding.bottom here equals the floating nav bar's full overlap
+        // (pill height + margin + system inset).
+        child: Builder(
+          builder: (context) => SingleChildScrollView(
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).padding.bottom + 24,
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 20,
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1180),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTopBar(isDark, cardColor, textColor),
+                      const SizedBox(height: 24),
 
-                    if (globalCartItems.isEmpty)
-                      _buildEmptyCart(subTextColor)
-                    else ...[
-                      ...globalCartItems.map(
-                        (item) => _buildCartItemCard(
-                          item,
+                      if (globalCartItems.isEmpty)
+                        _buildEmptyCart(subTextColor)
+                      else ...[
+                        ...globalCartItems.map(
+                          (item) => _buildCartItemCard(
+                            item,
+                            isDark,
+                            cardColor,
+                            textColor,
+                            subTextColor,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        _buildCouponSection(
                           isDark,
                           cardColor,
                           textColor,
                           subTextColor,
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      _buildCouponSection(
-                        isDark,
-                        cardColor,
-                        textColor,
-                        subTextColor,
-                      ),
-                      const SizedBox(height: 24),
-                      _buildBillDetails(
-                        isDark,
-                        cardColor,
-                        textColor,
-                        subTextColor,
-                      ),
-                      const SizedBox(height: 24),
-                      if (_unavailableIds.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Text(
-                            "Remove unavailable items before checking out",
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontFamily: 'Inter',
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                        const SizedBox(height: 24),
+                        _buildBillDetails(
+                          isDark,
+                          cardColor,
+                          textColor,
+                          subTextColor,
+                        ),
+                        const SizedBox(height: 24),
+                        if (_unavailableIds.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Text(
+                              "Remove unavailable items before checking out",
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontFamily: 'Inter',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              textAlign: TextAlign.center,
                             ),
-                            textAlign: TextAlign.center,
                           ),
-                        ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _unavailableIds.isEmpty ? primaryBlue : Colors.grey,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size(double.infinity, 58),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _unavailableIds.isEmpty
+                                ? primaryBlue
+                                : Colors.grey,
+                            foregroundColor: Colors.white,
+                            minimumSize: const Size(double.infinity, 58),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            elevation: 0,
                           ),
-                          elevation: 0,
-                        ),
-                        onPressed: _unavailableIds.isEmpty
-                            ? () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => CheckoutPage(
-                                    cafeteriaName: globalCartItems
-                                        .first["cafeteriaName"]
-                                        ?.toString(),
-                                    cafeId: globalCartItems.first["cafeId"]
-                                        ?.toString(),
-                                    pickupLocation: globalCartItems.first["location"]
-                                        ?.toString(),
+                          onPressed: _unavailableIds.isEmpty
+                              ? () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => CheckoutPage(
+                                      cafeteriaName: globalCartItems
+                                          .first["cafeteriaName"]
+                                          ?.toString(),
+                                      cafeId: globalCartItems.first["cafeId"]
+                                          ?.toString(),
+                                      pickupLocation: globalCartItems
+                                          .first["location"]
+                                          ?.toString(),
+                                    ),
                                   ),
-                                ),
-                              )
-                            : null,
-                        child: const Text(
-                          "Continue to Checkout",
-                          style: TextStyle(
-                            fontFamily: 'Nunito',
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
+                                )
+                              : null,
+                          child: const Text(
+                            "Continue to Checkout",
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 120),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -454,7 +472,10 @@ class _CartPageState extends State<CartPage> {
                 if (isUnavailable) ...[
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.red.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),

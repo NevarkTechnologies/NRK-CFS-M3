@@ -1021,7 +1021,7 @@ class _LoginPageState extends State<LoginPage> {
                   Text(
                     isSigningIn ? "Signing in..." : "Continue with Google",
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

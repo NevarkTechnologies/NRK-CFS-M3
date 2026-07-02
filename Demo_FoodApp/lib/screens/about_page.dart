@@ -28,7 +28,10 @@ class AboutPage extends StatelessWidget {
     return Scaffold(
       backgroundColor: bg,
 
+      // bottom: false so the list scrolls behind the translucent system nav
+      // like every other page; the ListView padding keeps content reachable.
       body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
             Container(
@@ -94,7 +97,8 @@ class AboutPage extends StatelessWidget {
 
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                padding: EdgeInsets.fromLTRB(
+                  16, 24, 16, 32 + MediaQuery.of(context).padding.bottom),
 
                 children: [
                   Container(

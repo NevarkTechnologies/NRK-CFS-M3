@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
 import '../model/favorite_model.dart';
@@ -45,13 +46,16 @@ class _SplashPageState extends State<SplashPage> {
     // finishes restoring the persisted session (platform-channel race). By the
     // time the parallel 3s splash delay has elapsed the restore is complete,
     // so fall back to currentUser — only a real sign-out leaves both null.
-    final firebaseUser = (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
+    User? firebaseUser = (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
 
-    // TEMP DIAGNOSTIC — remove once the login-persistence issue is identified.
-    debugPrint('SPLASH_AUTH: prefsLoggedIn=${AppSession.isLoggedIn} '
-        'userId=${AppSession.userId.isNotEmpty} '
-        'streamUser=${results[1] != null} '
-        'currentUser=${FirebaseAuth.instance.currentUser != null}');
+    // Fallback: session prefs exist but the SDK has no persisted user — on
+    // some devices (seen on ColorOS) firebase_auth silently fails to save
+    // the FIREBASE_USER entry at sign-in, so cold starts lose the session.
+    // Play Services remembers the account grant at the OS level, so a silent
+    // Google sign-in can rebuild the Firebase session without any UI.
+    if (AppSession.isLoggedIn && firebaseUser == null) {
+      firebaseUser = await _restoreFirebaseSession();
+    }
 
     if (!mounted) return;
 
@@ -67,13 +71,46 @@ class _SplashPageState extends State<SplashPage> {
       return;
     }
 
-    // Session data exists but Firebase session is gone — clear stale data.
-    if (AppSession.isLoggedIn) {
-      await AppSession.clear();
-      if (!mounted) return;
-    }
-
+    // Firebase session missing — route to login but do NOT clear the saved
+    // session prefs. A transient restore failure (or a build issue like the
+    // R8 one) would otherwise permanently destroy a valid session; if the
+    // user is genuinely signed out, explicit logout/auth-error paths already
+    // clear it, and stale prefs alone can never pass the gate above.
     Navigator.pushReplacementNamed(context, '/login');
+  }
+
+  /// Re-establishes the Firebase session without showing any UI, for devices
+  /// where firebase_auth fails to persist its user across cold starts.
+  /// Returns null when no silent sign-in is possible (account signed out or
+  /// access revoked) or when the restored account does not match the saved
+  /// session — both fall through to the normal login page.
+  Future<User?> _restoreFirebaseSession() async {
+    try {
+      final googleUser = await GoogleSignIn()
+          .signInSilently()
+          .timeout(const Duration(seconds: 10));
+      if (googleUser == null) return null;
+
+      // Never pair the stored session with a different Google account.
+      final sessionEmail = AppSession.email.toLowerCase();
+      if (sessionEmail.isEmpty ||
+          googleUser.email.toLowerCase() != sessionEmail) {
+        return null;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      final result = await FirebaseAuth.instance
+          .signInWithCredential(credential)
+          .timeout(const Duration(seconds: 15));
+      return result.user;
+    } catch (_) {
+      // Offline, timeout, or revoked grant — treat as not restorable.
+      return null;
+    }
   }
 
   @override
