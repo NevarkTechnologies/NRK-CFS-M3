@@ -75,7 +75,7 @@ class MyApp extends StatelessWidget {
         return MaterialApp(
           navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
-          title: 'Food App',
+          title: 'BenchBites',
 
           /// 🌞 LIGHT THEME
           theme: ThemeData(

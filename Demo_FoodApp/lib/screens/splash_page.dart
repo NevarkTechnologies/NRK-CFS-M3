@@ -47,6 +47,12 @@ class _SplashPageState extends State<SplashPage> {
     // so fall back to currentUser — only a real sign-out leaves both null.
     final firebaseUser = (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
 
+    // TEMP DIAGNOSTIC — remove once the login-persistence issue is identified.
+    debugPrint('SPLASH_AUTH: prefsLoggedIn=${AppSession.isLoggedIn} '
+        'userId=${AppSession.userId.isNotEmpty} '
+        'streamUser=${results[1] != null} '
+        'currentUser=${FirebaseAuth.instance.currentUser != null}');
+
     if (!mounted) return;
 
     if (AppSession.isLoggedIn && firebaseUser != null) {
