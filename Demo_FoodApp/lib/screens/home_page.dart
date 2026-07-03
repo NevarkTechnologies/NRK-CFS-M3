@@ -722,7 +722,7 @@ class _HomePageState extends State<HomePage> {
                 crossAxisCount: isDesktop ? 4 : (isTablet ? 3 : 2),
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                mainAxisExtent: 290,
+                mainAxisExtent: 230,
               ),
               itemBuilder: (context, index) {
                 return _buildFoodCard(entry.value[index], isDark);
@@ -758,7 +758,7 @@ class _HomePageState extends State<HomePage> {
     return Container(
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
@@ -847,8 +847,8 @@ class _HomePageState extends State<HomePage> {
                           color: isDark
                               ? Colors.white
                               : const Color(0xFF10254E),
-                          fontSize: 13,
-                          height: 1.2,
+                          fontSize: 12,
+                          height: 1.1,
                         ),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
@@ -868,56 +868,6 @@ class _HomePageState extends State<HomePage> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : const Color(0xFFE8F0FF),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.star_rounded,
-                              color: Color(0xFFFFC107),
-                              size: 10,
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              "${food['rating']}",
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: isDark
-                                    ? Colors.white
-                                    : const Color(0xFF10254E),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        "(${food['reviews']})",
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: isDark
-                              ? Colors.white54
-                              : const Color(0xFF6B7280),
-                        ),
-                      ),
-                      const Spacer(),
                     ],
                   ),
                   Row(
@@ -962,12 +912,12 @@ class _HomePageState extends State<HomePage> {
                             style: ElevatedButton.styleFrom(
                               backgroundColor: appBlue,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
+                                borderRadius: BorderRadius.circular(18),
                               ),
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 14,
                               ),
-                              elevation: 0,
+                              elevation: 6,
                             ),
                             onPressed: () => _updateCart(food, 1),
                             child: const Text(
@@ -977,7 +927,7 @@ class _HomePageState extends State<HomePage> {
                                 color: Colors.white,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 11,
-                                letterSpacing: 0.5,
+                                letterSpacing: 1,
                               ),
                             ),
                           ),

@@ -455,10 +455,8 @@ class _CartPageState extends State<CartPage> {
                     fontFamily: 'Nunito',
                     color: textColor,
                     fontWeight: FontWeight.w900,
-                    fontSize: 14,
+                    fontSize: 13,
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 4),
                 Text(

@@ -435,7 +435,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         color: hintColor,
                         fontSize: 15,
                       ),
-                      duration: const Duration(milliseconds: 2000),
+                      duration: const Duration(milliseconds: 1500),
                     ),
                     RotateAnimatedText(
                       'Search for Cafes',
@@ -444,7 +444,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         color: hintColor,
                         fontSize: 15,
                       ),
-                      duration: const Duration(milliseconds: 2000),
+                      duration: const Duration(milliseconds: 1500),
                     ),
                   ],
                 ),
@@ -793,6 +793,19 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
     );
   }
 
+  Widget _cafeImagePlaceholder(bool isDark) {
+    return Container(
+      height: 190,
+      width: double.infinity,
+      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE8F0FF),
+      child: Icon(
+        Icons.storefront_rounded,
+        size: 56,
+        color: isDark ? Colors.white24 : appBlue.withValues(alpha: 0.3),
+      ),
+    );
+  }
+
   Widget _buildCafeCard(Map<String, dynamic> cafe, bool isDark, bool isMobile) {
     final isActive = cafe['active'] as bool? ?? true;
     return GestureDetector(
@@ -837,7 +850,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) =>
-                            Container(color: Colors.grey.shade200),
+                            _cafeImagePlaceholder(isDark),
                       );
                     }
                     if (imagePath.contains('assets/')) {
@@ -847,16 +860,19 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                         width: double.infinity,
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) =>
-                            Container(color: Colors.grey.shade200),
+                            _cafeImagePlaceholder(isDark),
                       );
                     }
+                    if (imagePath.isEmpty) {
+                      return _cafeImagePlaceholder(isDark);
+                    }
                     return Image.network(
-                      imagePath.isNotEmpty ? imagePath : '',
+                      imagePath,
                       height: 190,
                       width: double.infinity,
                       fit: BoxFit.cover,
                       errorBuilder: (_, _, _) =>
-                          Container(color: Colors.grey.shade200),
+                          _cafeImagePlaceholder(isDark),
                     );
                   },
                 ),
@@ -906,10 +922,12 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                       ],
                     ),
                     child: Text(
-                      cafe['time']?.toString() ?? 'Instant',
+                      isActive
+                          ? (cafe['time']?.toString() ?? 'Instant')
+                          : 'Currently Unavailable',
                       style: TextStyle(
                         fontFamily: 'Nunito',
-                        color: appBlue,
+                        color: isActive ? appBlue : Colors.red.shade700,
                         fontWeight: FontWeight.w800,
                         fontSize: 12,
                       ),
@@ -1074,27 +1092,6 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           ],
         ),
       ),
-            if (!isActive)
-              Positioned(
-                top: 12,
-                left: 12,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.65),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text(
-                    'Currently Unavailable',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      fontFamily: 'Inter',
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
