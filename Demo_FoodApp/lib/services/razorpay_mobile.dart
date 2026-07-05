@@ -70,11 +70,38 @@ Future<void> openRazorpayCheckout(
     'description': 'Food Order',
     'prefill': prefill,
     'theme': {'color': '#0F4CFF'},
-    // No display config: the native Android sheet ignores custom display
-    // blocks and the restrictive config suppressed its default UPI section,
-    // which includes the "Enter UPI ID" (collect) option. Default rendering
-    // shows all account-enabled methods — trim those in the Razorpay
-    // dashboard, not here.
+    // UPI block pinned on top: app intent buttons + QR for the order amount.
+    // show_default_blocks stays true so the sheet keeps its default sections
+    // (incl. the "Enter UPI ID" collect option) below this block.
+    'config': {
+      'display': {
+        'blocks': {
+          'upi': {
+            'name': 'Pay via UPI',
+            'instruments': [
+              {
+                'method': 'upi',
+                'flows': ['intent'],
+                'apps': ['google_pay', 'phonepe', 'paytm'],
+              },
+              {
+                'method': 'upi',
+                'flows': ['qr'],
+              },
+              // Collect (Enter UPI ID) must be declared here: once UPI is in
+              // a custom block, checkout de-dupes it out of the default
+              // blocks, so any flow not listed here disappears entirely.
+              {
+                'method': 'upi',
+                'flows': ['collect'],
+              },
+            ],
+          },
+        },
+        'sequence': ['block.upi'],
+        'preferences': {'show_default_blocks': true},
+      },
+    },
   };
 
   try {

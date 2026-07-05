@@ -4,6 +4,8 @@ const cors = require('cors');
 const crypto = require('crypto');
 const helmet = require('helmet');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
+const { RedisStore } = require('rate-limit-redis');
+const Redis = require('ioredis');
 const Razorpay = require('razorpay');
 const admin = require('firebase-admin');
 require('dotenv').config();
@@ -18,8 +20,14 @@ const PaymentSession = require('./models/paymentSession');
 const AuditLog = require('./models/auditLog');
 
 const app = express();
+// Trust the first proxy hop (AWS ALB / nginx) so express-rate-limit reads the real
+// client IP from X-Forwarded-For instead of the proxy's internal address.
+app.set('trust proxy', 1);
 const allowedStatuses = ['Pending', 'Preparing', 'Ready', 'Completed', 'Rejected'];
 let razorpayClient;
+
+const redisClient = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
+redisClient.on('error', (err) => console.warn('Redis error:', err.message));
 let firebaseInitialized = false;
 
 // ── Security middleware ───────────────────────────────────────────────────────
@@ -78,12 +86,15 @@ app.use((req, res, next) => {
 });
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
+// Each limiter gets its own Redis store with a distinct prefix so their counters
+// never collide. All workers share the same Redis counter — limits are global.
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests, please try again later.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:general:' }),
 });
 
 // Strict limit for order writes (place/confirm/status) — 10 per minute
@@ -91,6 +102,7 @@ const orderLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
   message: { message: 'Too many order requests, please slow down.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:order:' }),
 });
 // Generous limit for order reads — per Firebase UID so accounts don't share a bucket
 const orderReadLimiter = rateLimit({
@@ -98,12 +110,14 @@ const orderReadLimiter = rateLimit({
   max: 120,
   keyGenerator: (req) => req.firebaseUser?.uid || ipKeyGenerator(req),
   message: { message: 'Too many requests, please slow down.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:orderread:' }),
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
   message: { message: 'Too many auth requests, please try again later.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:auth:' }),
 });
 
 app.use('/api/', generalLimiter);
@@ -130,7 +144,7 @@ async function generateTokenNumber(cafeId) {
   const doc = await CafeCounter.findOneAndUpdate(
     { key },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
   return String(doc.seq).padStart(4, '0');
 }
@@ -409,7 +423,7 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   if (user.role === 'vendor') {
     const vendorId = decodedToken.uid; // Always use Firebase UID as vendorId
     if (!user.vendorId || user.vendorId !== vendorId) {
-      user = await User.findByIdAndUpdate(user._id, { vendorId }, { new: true }).populate('cafeId');
+      user = await User.findByIdAndUpdate(user._id, { vendorId }, { returnDocument: 'after' }).populate('cafeId');
     }
     if (!user.cafeId) {
       let cafe = await Cafe.findOne({ vendorId });
@@ -418,7 +432,7 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
         const slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`; // Collision-safe
         cafe = await Cafe.create({ name: `${name}'s Cafe`, slug, cuisine: 'General', description: '', location: '', city: '', pin: '', vendorId, active: true });
       }
-      user = await User.findByIdAndUpdate(user._id, { cafeId: cafe._id, vendorId }, { new: true }).populate('cafeId');
+      user = await User.findByIdAndUpdate(user._id, { cafeId: cafe._id, vendorId }, { returnDocument: 'after' }).populate('cafeId');
     }
   }
 
@@ -438,7 +452,7 @@ app.patch('/api/users/:id', requireFirebaseAuth, asyncHandler(async (req, res) =
   for (const key of ['name', 'email', 'avatar', 'phone', 'paymentLabel']) {
     if (req.body[key] !== undefined) allowed[key] = req.body[key];
   }
-  const user = await User.findByIdAndUpdate(req.params.id, allowed, { new: true, runValidators: true }).populate('cafeId');
+  const user = await User.findByIdAndUpdate(req.params.id, allowed, { returnDocument: 'after', runValidators: true }).populate('cafeId');
   res.json(user);
 }));
 
@@ -490,7 +504,7 @@ app.post('/api/cafes', requireFirebaseAuth, asyncHandler(async (req, res) => {
 app.patch('/api/cafes/:id', requireFirebaseAuth, validateObjectId('id'), requireCafeOwner, asyncHandler(async (req, res) => {
   // Strip fields that vendors must not self-set
   const { vendorId, ratings, ...safeBody } = req.body;
-  const cafe = await Cafe.findByIdAndUpdate(req.params.id, safeBody, { new: true, runValidators: true });
+  const cafe = await Cafe.findByIdAndUpdate(req.params.id, safeBody, { returnDocument: 'after', runValidators: true });
   audit('cafe.updated', req.firebaseUser.uid, 'cafe', req.params.id, { fields: Object.keys(safeBody) });
   res.json(cafe);
 }));
@@ -539,33 +553,49 @@ app.post('/api/cafes/:id/review', requireFirebaseAuth, validateObjectId('id'), a
   if (!stars || stars < 1 || stars > 5) {
     return res.status(400).json({ message: 'stars (1-5) is required' });
   }
-  const cafe = await Cafe.findById(req.params.id);
-  if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
-
-  const existing = cafe.ratings.find(r => r.userId === userId);
-  if (existing) {
-    existing.stars = stars;
-  } else {
-    cafe.ratings.push({ userId, stars });
-  }
-  const total = cafe.ratings.reduce((s, r) => s + r.stars, 0);
-  cafe.rating  = Math.round((total / cafe.ratings.length) * 10) / 10;
-  cafe.reviews = cafe.ratings.length;
-  await cafe.save();
-  audit('rating.submitted', userId, 'cafe', req.params.id, { stars, updated: !!existing });
+  // Pull any existing rating for this user (returns pre-update doc to check if it existed).
+  // Then push the new rating and recompute aggregate in a single pipeline update.
+  // Replaces the read-modify-write pattern (findById → modify → save) which would let
+  // two concurrent workers silently clobber each other's rating changes.
+  const beforePull = await Cafe.findByIdAndUpdate(req.params.id, { $pull: { ratings: { userId } } });
+  if (!beforePull) return res.status(404).json({ message: 'Cafe not found' });
+  const cafe = await Cafe.findOneAndUpdate(
+    { _id: req.params.id },
+    [
+      { $set: { ratings: { $concatArrays: ['$ratings', [{ userId, stars: Number(stars) }]] } } },
+      { $set: {
+        reviews: { $size: '$ratings' },
+        rating: { $round: [{ $divide: [{ $sum: '$ratings.stars' }, { $size: '$ratings' }] }, 1] },
+      } },
+    ],
+    { returnDocument: 'after' }
+  );
+  audit('rating.submitted', userId, 'cafe', req.params.id, { stars, updated: beforePull.ratings.some(r => r.userId === userId) });
   res.json({ rating: cafe.rating, reviews: cafe.reviews });
 }));
 
 app.delete('/api/cafes/:id/review', requireFirebaseAuth, validateObjectId('id'), asyncHandler(async (req, res) => {
-  const userId = req.firebaseUser.uid; // Always from token
-  const cafe = await Cafe.findById(req.params.id);
+  const userId = req.firebaseUser.uid;
+  // Single atomic pipeline update: filter out the user's rating and recompute the
+  // aggregate in one findOneAndUpdate — no read-modify-write race possible.
+  const cafe = await Cafe.findOneAndUpdate(
+    { _id: req.params.id },
+    [
+      { $set: { ratings: { $filter: { input: '$ratings', as: 'r', cond: { $ne: ['$$r.userId', userId] } } } } },
+      { $set: {
+        reviews: { $size: '$ratings' },
+        rating: {
+          $cond: [
+            { $gt: [{ $size: '$ratings' }, 0] },
+            { $round: [{ $divide: [{ $sum: '$ratings.stars' }, { $size: '$ratings' }] }, 1] },
+            4,
+          ],
+        },
+      } },
+    ],
+    { returnDocument: 'after' }
+  );
   if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
-
-  cafe.ratings = cafe.ratings.filter(r => r.userId !== userId);
-  const total  = cafe.ratings.reduce((s, r) => s + r.stars, 0);
-  cafe.rating  = cafe.ratings.length ? Math.round((total / cafe.ratings.length) * 10) / 10 : 4;
-  cafe.reviews = cafe.ratings.length;
-  await cafe.save();
   audit('rating.deleted', userId, 'cafe', req.params.id);
   res.json({ rating: cafe.rating, reviews: cafe.reviews });
 }));
@@ -616,7 +646,7 @@ app.post('/api/menu/add', requireFirebaseAuth, asyncHandler(async (req, res) => 
 
 app.patch('/api/menu/:id', requireFirebaseAuth, validateObjectId('id'), requireMenuItemOwner, asyncHandler(async (req, res) => {
   const { cafeId, ...safeBody } = req.body; // Prevent moving item to another cafe
-  const item = await MenuItem.findByIdAndUpdate(req.params.id, safeBody, { new: true, runValidators: true });
+  const item = await MenuItem.findByIdAndUpdate(req.params.id, safeBody, { returnDocument: 'after', runValidators: true });
   if (!item) return res.status(404).json({ message: 'Menu item not found' });
   res.json(item);
 }));
@@ -1000,6 +1030,12 @@ app.patch('/api/orders/:orderId/payment', requireFirebaseAuth, asyncHandler(asyn
 
   const existingOrder = await Order.findOne({ orderId: req.params.orderId });
   if (!existingOrder) return res.status(404).json({ message: 'Order not found' });
+
+  // Ownership check: only the customer who placed the order may update payment status.
+  const requesterEmail = (req.firebaseUser.email || '').toLowerCase();
+  if (!existingOrder.customerEmail || existingOrder.customerEmail.toLowerCase() !== requesterEmail) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
 
   // Always verify Razorpay signature when setting Paid — regardless of current status
   if (status === 'Paid') {
