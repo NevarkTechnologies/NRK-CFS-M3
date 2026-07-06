@@ -41,7 +41,7 @@ Future<void> applySystemNavStyle() async {
   try {
     await _settingsChannel.invokeMethod(
       'setNavBarScrim',
-      Colors.transparent.value,
+      Colors.transparent.toARGB32(),
     );
   } catch (_) {}
 }
