@@ -24,6 +24,7 @@ const PaymentWebhookEvent = require('./models/paymentWebhookEvent');
 const NotificationOutbox = require('./models/notificationOutbox');
 
 const app = express();
+console.log('Co-owner Bug Fixed');
 // Trust the first proxy hop (AWS ALB / nginx) so express-rate-limit reads the real
 // client IP from X-Forwarded-For instead of the proxy's internal address.
 app.set('trust proxy', 1);
@@ -336,7 +337,41 @@ async function requireFirebaseAuth(req, res, next) {
 
 // ── Ownership helpers ─────────────────────────────────────────────────────────
 
-// Verify the authenticated user is the vendor who owns this cafe.
+// Minimal co-owner fix: a vendor may manage a cafe either as the primary
+// Cafe.vendorId Firebase UID or as a vendor user whose assigned cafeId matches.
+async function canManageCafe(firebaseUser, cafe) {
+  if (!firebaseUser || !cafe) return false;
+  if (cafe.vendorId === firebaseUser.uid) return true;
+  const user = await User.findOne({ googleId: firebaseUser.uid })
+    .select('role cafeId')
+    .lean();
+  return user?.role === 'vendor' &&
+    user.cafeId &&
+    String(user.cafeId) === String(cafe._id);
+}
+
+async function manageableCafeIds(firebaseUser, explicitVendorId = null) {
+  const user = await User.findOne({ googleId: firebaseUser.uid })
+    .select('role cafeId vendorId')
+    .lean();
+  const vendorIds = [firebaseUser.uid];
+  if (
+    explicitVendorId &&
+    explicitVendorId !== firebaseUser.uid &&
+    user?.vendorId === explicitVendorId
+  ) {
+    vendorIds.push(explicitVendorId);
+  }
+  const cafes = await Cafe.find({
+    $or: [
+      { vendorId: { $in: vendorIds } },
+      ...(user?.role === 'vendor' && user.cafeId ? [{ _id: user.cafeId }] : []),
+    ],
+  }).select('_id').lean();
+  return cafes.map(c => c._id.toString());
+}
+
+// Verify the authenticated user is allowed to manage this cafe.
 async function requireCafeOwner(req, res, next) {
   try {
     const cafeId = req.params.id || req.params.cafeId || req.body?.cafeId;
@@ -345,7 +380,7 @@ async function requireCafeOwner(req, res, next) {
     }
     const cafe = await Cafe.findById(cafeId).select('vendorId');
     if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
-    if (cafe.vendorId !== req.firebaseUser.uid) {
+    if (!await canManageCafe(req.firebaseUser, cafe)) {
       return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
     }
     req.cafe = cafe;
@@ -355,7 +390,7 @@ async function requireCafeOwner(req, res, next) {
   }
 }
 
-// Verify the authenticated user is the vendor who owns the menu item's cafe.
+// Verify the authenticated user can manage the menu item's cafe.
 async function requireMenuItemOwner(req, res, next) {
   try {
     const itemId = req.params.id;
@@ -365,7 +400,7 @@ async function requireMenuItemOwner(req, res, next) {
     const item = await MenuItem.findById(itemId).select('cafeId');
     if (!item) return res.status(404).json({ message: 'Menu item not found' });
     const cafe = await Cafe.findById(item.cafeId).select('vendorId');
-    if (!cafe || cafe.vendorId !== req.firebaseUser.uid) {
+    if (!cafe || !await canManageCafe(req.firebaseUser, cafe)) {
       return res.status(403).json({ message: 'Forbidden: you do not own this menu item' });
     }
     req.menuItem = item;
@@ -375,13 +410,13 @@ async function requireMenuItemOwner(req, res, next) {
   }
 }
 
-// Verify the authenticated user is the vendor who owns the order's cafe.
+// Verify the authenticated user can manage the order's cafe.
 async function requireOrderCafeOwner(req, res, next) {
   try {
     const order = await Order.findOne({ orderId: req.params.orderId }).select('cafeId');
     if (!order) return res.status(404).json({ message: 'Order not found' });
     const cafe = await Cafe.findById(order.cafeId).select('vendorId');
-    if (!cafe || cafe.vendorId !== req.firebaseUser.uid) {
+    if (!cafe || !await canManageCafe(req.firebaseUser, cafe)) {
       return res.status(403).json({ message: 'Forbidden: you do not own this order' });
     }
     next();
@@ -672,8 +707,8 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   ).populate('cafeId');
 
   if (user.role === 'vendor') {
-    const vendorId = decodedToken.uid; // Always use Firebase UID as vendorId
-    if (!user.vendorId || user.vendorId !== vendorId) {
+    const vendorId = user.cafeId && user.vendorId ? user.vendorId : decodedToken.uid;
+    if (!user.vendorId) {
       user = await User.findByIdAndUpdate(user._id, { vendorId }, { returnDocument: 'after' }).populate('cafeId');
     }
     if (!user.cafeId) {
@@ -874,7 +909,7 @@ app.post('/api/menu', requireFirebaseAuth, asyncHandler(async (req, res) => {
   }
   const cafe = await Cafe.findById(cafeId).select('vendorId');
   if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
-  if (cafe.vendorId !== req.firebaseUser.uid) {
+  if (!await canManageCafe(req.firebaseUser, cafe)) {
     return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
   }
   const item = await MenuItem.create(req.body);
@@ -888,7 +923,7 @@ app.post('/api/menu/add', requireFirebaseAuth, asyncHandler(async (req, res) => 
   }
   const cafe = await Cafe.findById(cafeId).select('vendorId');
   if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
-  if (cafe.vendorId !== req.firebaseUser.uid) {
+  if (!await canManageCafe(req.firebaseUser, cafe)) {
     return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
   }
   const item = await MenuItem.create(req.body);
@@ -1588,8 +1623,7 @@ app.get('/api/orders', requireFirebaseAuth, orderReadLimiter, asyncHandler(async
   if (req.query.cafeId && !mongoose.Types.ObjectId.isValid(req.query.cafeId)) {
     return res.status(400).json({ message: 'Invalid cafeId' });
   }
-  const ownedCafes = await Cafe.find({ vendorId: req.firebaseUser.uid }).select('_id').lean();
-  const ownedCafeIds = ownedCafes.map(c => c._id.toString());
+  const ownedCafeIds = await manageableCafeIds(req.firebaseUser);
 
   if (req.query.cafeId) {
     // Explicit cafe requested — only allowed if the requester owns it.
@@ -1635,8 +1669,8 @@ app.get('/api/orders/:orderId', requireFirebaseAuth, orderReadLimiter, asyncHand
   const isCustomerOwner = !!order.customerEmail && order.customerEmail.toLowerCase() === requesterEmail;
   let isVendorOwner = false;
   if (!isCustomerOwner && order.cafeId) {
-    const cafe = await Cafe.findById(order.cafeId).select('vendorId').lean();
-    isVendorOwner = !!cafe && cafe.vendorId === req.firebaseUser.uid;
+    const cafe = await Cafe.findById(order.cafeId).select('vendorId');
+    isVendorOwner = !!cafe && await canManageCafe(req.firebaseUser, cafe);
   }
   if (!isCustomerOwner && !isVendorOwner) {
     return res.status(403).json({ message: 'Forbidden' });
@@ -1785,12 +1819,12 @@ app.delete('/api/notifications/:notificationId', requireFirebaseAuth, asyncHandl
 
 // Vendor can only access their own dashboard
 app.get('/api/vendor/:vendorId/dashboard', requireFirebaseAuth, asyncHandler(async (req, res) => {
-  if (req.firebaseUser.uid !== req.params.vendorId) {
+  const cafeIds = (await manageableCafeIds(req.firebaseUser, req.params.vendorId))
+    .map(id => new mongoose.Types.ObjectId(id));
+  if (req.firebaseUser.uid !== req.params.vendorId && cafeIds.length === 0) {
     return res.status(403).json({ message: 'Forbidden: you can only access your own dashboard' });
   }
 
-  const cafes   = await Cafe.find({ vendorId: req.params.vendorId }).select('_id');
-  const cafeIds = cafes.map(c => c._id);
   const orderQuery = cafeIds.length ? { cafeId: { $in: cafeIds } } : {};
 
   const [summary] = await Order.aggregate([
