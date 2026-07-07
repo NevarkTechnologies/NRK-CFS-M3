@@ -61,7 +61,7 @@ class _NotificationPageState extends State<NotificationPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _buildTopBar(context, isDark, "Notifications"),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 18),
                   Expanded(
                     child: _loading
                         ? const Center(child: CircularProgressIndicator())
@@ -281,7 +281,7 @@ class _NotificationPageState extends State<NotificationPage> {
         ),
         const SizedBox(height: 16),
         Text(
-          "No notifications yet",
+          "No Notifications Yet",
           style: TextStyle(
             fontFamily: 'Nunito',
             fontSize: 18,
@@ -332,7 +332,7 @@ class NotificationDetailPage extends StatelessWidget {
                     child: items.isEmpty
                         ? Center(
                             child: Text(
-                              "No items found",
+                              "No Items Found",
                               style: TextStyle(
                                 fontFamily: 'Inter',
                                 color: textColor,

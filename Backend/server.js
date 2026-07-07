@@ -854,7 +854,7 @@ app.post('/api/cafes/:id/review', requireFirebaseAuth, validateObjectId('id'), a
         rating: { $round: [{ $divide: [{ $sum: '$ratings.stars' }, { $size: '$ratings' }] }, 1] },
       } },
     ],
-    { returnDocument: 'after' }
+    { returnDocument: 'after', updatePipeline: true }
   );
   audit('rating.submitted', userId, 'cafe', req.params.id, { stars, updated: beforePull.ratings.some(r => r.userId === userId) });
   res.json({ rating: cafe.rating, reviews: cafe.reviews });
@@ -879,7 +879,7 @@ app.delete('/api/cafes/:id/review', requireFirebaseAuth, validateObjectId('id'),
         },
       } },
     ],
-    { returnDocument: 'after' }
+    { returnDocument: 'after', updatePipeline: true }
   );
   if (!cafe) return res.status(404).json({ message: 'Cafe not found' });
   audit('rating.deleted', userId, 'cafe', req.params.id);

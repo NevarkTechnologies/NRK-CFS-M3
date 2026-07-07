@@ -32,6 +32,8 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
   // cafeId -> stars the current user has given
   final Map<String, int> _userRatings = {};
 
+  String? get _firebaseUid => FirebaseAuth.instance.currentUser?.uid;
+
   @override
   void initState() {
     super.initState();
@@ -59,13 +61,10 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
 
     try {
       cafes = await ApiService.getCafes();
-      if (AppSession.isLoggedIn) {
-        try {
-          final firebaseUid =
-              FirebaseAuth.instance.currentUser?.uid ?? AppSession.userId;
-          final ratings = await ApiService.getUserRatings(firebaseUid);
-          _userRatings.addAll(ratings);
-        } catch (_) {}
+      try {
+        await _loadUserRatings();
+      } catch (error) {
+        debugPrint('Rating restore deferred: $error');
       }
     } catch (_) {
       cafes = [];
@@ -77,6 +76,17 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
         _filterCafes();
       }
     }
+  }
+
+  Future<void> _loadUserRatings() async {
+    if (!AppSession.isLoggedIn || _firebaseUid == null) {
+      _userRatings.clear();
+      return;
+    }
+    final ratings = await ApiService.getUserRatings(_firebaseUid!);
+    _userRatings
+      ..clear()
+      ..addAll(ratings);
   }
 
   @override

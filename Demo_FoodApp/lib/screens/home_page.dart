@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'dart:typed_data';
 import 'dart:math' as math;
 import '../services/api_service.dart';
 import '../model/notification_model.dart';
@@ -31,6 +32,8 @@ class _HomePageState extends State<HomePage> {
   late ScrollController _scrollController;
   bool _isMenuVisible = true;
   bool _isCartVisible = true;
+  late final ValueNotifier<bool> _menuVisibleNotifier;
+  late final ValueNotifier<bool> _cartVisibleNotifier;
 
   final Map<String, GlobalKey> categoryKeys = {};
   Map<String, List<Map<String, dynamic>>> groupedFoods = {};
@@ -51,6 +54,8 @@ class _HomePageState extends State<HomePage> {
     _searchFocusNode = FocusNode();
 
     _scrollController = ScrollController();
+    _menuVisibleNotifier = ValueNotifier(_isMenuVisible);
+    _cartVisibleNotifier = ValueNotifier(_isCartVisible);
     cartCountNotifier.addListener(_onCartChanged);
 
     allFoods = [];
@@ -118,7 +123,16 @@ class _HomePageState extends State<HomePage> {
     cartCountNotifier.removeListener(_onCartChanged);
     _searchFocusNode.dispose();
     _scrollController.dispose();
+    _menuVisibleNotifier.dispose();
+    _cartVisibleNotifier.dispose();
     super.dispose();
+  }
+
+  void _setFloatingVisibility({required bool menu, required bool cart}) {
+    _isMenuVisible = menu;
+    _isCartVisible = cart;
+    if (_menuVisibleNotifier.value != menu) _menuVisibleNotifier.value = menu;
+    if (_cartVisibleNotifier.value != cart) _cartVisibleNotifier.value = cart;
   }
 
   void _filterFoods() {
@@ -145,7 +159,7 @@ class _HomePageState extends State<HomePage> {
 
   void _updateCart(Map<String, dynamic> food, int delta) {
     setState(() {
-      _isCartVisible = true;
+      _setFloatingVisibility(menu: _isMenuVisible, cart: true);
 
       if (delta > 0) {
         CartModel.add(food["id"]);
@@ -180,19 +194,22 @@ class _HomePageState extends State<HomePage> {
   void _showMenuBottomSheet(bool isDark) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
-        final bottomInset = MediaQuery.of(context).padding.bottom;
+        final media = MediaQuery.of(context);
+        final bottomInset = media.viewPadding.bottom;
         return SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: EdgeInsets.only(top: 20, bottom: 20 + bottomInset),
+          bottom: true,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: media.size.height * 0.7),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                const SizedBox(height: 20),
                 Container(
                   width: 40,
                   height: 4,
@@ -213,59 +230,67 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                ...groupedFoods.keys.map((cat) {
-                  return Material(
-                    color: Colors.transparent,
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 24,
-                        vertical: 4,
-                      ),
-                      title: Text(
-                        cat,
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontSize: 16,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? Colors.white
-                              : const Color(0xFF081F47),
-                        ),
-                      ),
-                      trailing: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: appBlue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          "${groupedFoods[cat]!.length}",
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: appBlue,
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    padding: EdgeInsets.only(bottom: bottomInset + 32),
+                    itemCount: groupedFoods.keys.length,
+                    itemBuilder: (context, index) {
+                      final cat = groupedFoods.keys.elementAt(index);
+                      return Material(
+                        color: Colors.transparent,
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 4,
                           ),
+                          title: Text(
+                            cat,
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF081F47),
+                            ),
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: appBlue.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              "${groupedFoods[cat]!.length}",
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: appBlue,
+                              ),
+                            ),
+                          ),
+                          onTap: () {
+                            Navigator.pop(context);
+                            final key = categoryKeys[cat];
+                            if (key != null && key.currentContext != null) {
+                              Scrollable.ensureVisible(
+                                key.currentContext!,
+                                duration: const Duration(milliseconds: 600),
+                                curve: Curves.easeInOutCubic,
+                                alignment: 0.05,
+                              );
+                            }
+                          },
                         ),
-                      ),
-                      onTap: () {
-                        Navigator.pop(context);
-                        final key = categoryKeys[cat];
-                        if (key != null && key.currentContext != null) {
-                          Scrollable.ensureVisible(
-                            key.currentContext!,
-                            duration: const Duration(milliseconds: 600),
-                            curve: Curves.easeInOutCubic,
-                            alignment: 0.05,
-                          );
-                        }
-                      },
-                    ),
-                  );
-                }),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -321,18 +346,15 @@ class _HomePageState extends State<HomePage> {
                             if (notification.direction ==
                                 ScrollDirection.reverse) {
                               if (_isMenuVisible || _isCartVisible) {
-                                setState(() {
-                                  _isMenuVisible = false;
-                                  _isCartVisible = false;
-                                });
+                                _setFloatingVisibility(
+                                  menu: false,
+                                  cart: false,
+                                );
                               }
                             } else if (notification.direction ==
                                 ScrollDirection.forward) {
                               if (!_isMenuVisible || !_isCartVisible) {
-                                setState(() {
-                                  _isMenuVisible = true;
-                                  _isCartVisible = true;
-                                });
+                                _setFloatingVisibility(menu: true, cart: true);
                               }
                             }
                             return false;
@@ -367,11 +389,13 @@ class _HomePageState extends State<HomePage> {
                                         _buildSearchBar(isDark),
                                         const SizedBox(height: 20),
                                         _buildSectionHeader(isDark),
-                                        _buildMenuCategories(
-                                          isDark,
-                                          isDesktop,
-                                          isTablet,
-                                        ),
+                                        isLoadingMenu
+                                            ? _buildMenuLoader(isDark)
+                                            : _buildMenuCategories(
+                                                isDark,
+                                                isDesktop,
+                                                isTablet,
+                                              ),
                                         const SizedBox(height: 280),
                                       ],
                                     ),
@@ -385,87 +409,100 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
 
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.fastLinearToSlowEaseIn,
-                    bottom: _isMenuVisible
-                        ? (totalCartItems > 0 ? 215.0 : 145.0)
-                        : -100.0,
-                    left: 0,
-                    right: 0,
-                    child: AnimatedOpacity(
-                      opacity: _isMenuVisible ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
-                      child: Align(
-                        alignment: Alignment.center,
-                        child: GestureDetector(
-                          onTap: () => _showMenuBottomSheet(isDark),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 20,
-                              vertical: 12,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.white
-                                  : const Color(0xFF081F47),
-                              borderRadius: BorderRadius.circular(24),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (isDark ? Colors.white : Colors.black)
-                                      .withValues(alpha: 0.2),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 8),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _menuVisibleNotifier,
+                    builder: (context, isMenuVisible, _) {
+                      return AnimatedPositioned(
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.fastLinearToSlowEaseIn,
+                        bottom: isMenuVisible
+                            ? (totalCartItems > 0 ? 215.0 : 145.0)
+                            : -100.0,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedOpacity(
+                          opacity: isMenuVisible ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: GestureDetector(
+                              onTap: () => _showMenuBottomSheet(isDark),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 20,
+                                  vertical: 12,
                                 ),
-                              ],
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.restaurant_menu_rounded,
+                                decoration: BoxDecoration(
                                   color: isDark
-                                      ? const Color(0xFF081F47)
-                                      : Colors.white,
-                                  size: 16,
+                                      ? Colors.white
+                                      : const Color(0xFF081F47),
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          (isDark ? Colors.white : Colors.black)
+                                              .withValues(alpha: 0.2),
+                                      blurRadius: 15,
+                                      offset: const Offset(0, 8),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "MENU",
-                                  style: TextStyle(
-                                    fontFamily: 'Inter',
-                                    fontSize: 12,
-                                    color: isDark
-                                        ? const Color(0xFF081F47)
-                                        : Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 1.0,
-                                  ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.restaurant_menu_rounded,
+                                      color: isDark
+                                          ? const Color(0xFF081F47)
+                                          : Colors.white,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      "MENU",
+                                      style: TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontSize: 12,
+                                        color: isDark
+                                            ? const Color(0xFF081F47)
+                                            : Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.0,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
+                      );
+                    },
                   ),
 
-                  AnimatedPositioned(
-                    duration: const Duration(milliseconds: 500),
-                    curve: Curves.fastLinearToSlowEaseIn,
-                    bottom: _isCartVisible && totalCartItems > 0
-                        ? 145.0
-                        : -150.0,
-                    left: 0,
-                    right: 0,
-                    child: AnimatedOpacity(
-                      opacity: _isCartVisible && totalCartItems > 0 ? 1.0 : 0.0,
-                      duration: const Duration(milliseconds: 300),
-                      child: _buildFloatingCartBanner(
-                        totalCartItems,
-                        totalCartPrice,
-                      ),
-                    ),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: _cartVisibleNotifier,
+                    builder: (context, isCartVisible, _) {
+                      return AnimatedPositioned(
+                        duration: const Duration(milliseconds: 500),
+                        curve: Curves.fastLinearToSlowEaseIn,
+                        bottom: isCartVisible && totalCartItems > 0
+                            ? 145.0
+                            : -150.0,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedOpacity(
+                          opacity: isCartVisible && totalCartItems > 0
+                              ? 1.0
+                              : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: _buildFloatingCartBanner(
+                            totalCartItems,
+                            totalCartPrice,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -627,7 +664,7 @@ class _HomePageState extends State<HomePage> {
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
-          hintText: 'Search delicious meals...',
+          hintText: 'Search Delicious Meals & Items Here...',
           hintStyle: TextStyle(
             fontFamily: 'Inter',
             fontSize: 13,
@@ -671,12 +708,75 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildMenuLoader(bool isDark) {
+    return SizedBox(
+      height: 260,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
+          decoration: BoxDecoration(
+            color: isDark
+                ? const Color(0xFF0F172A).withValues(alpha: 0.92)
+                : Colors.white.withValues(alpha: 0.94),
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: appBlue,
+                      backgroundColor: appBlue.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  Icon(Icons.restaurant_menu_rounded, color: appBlue, size: 22),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'Preparing the menu...',
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w900,
+                  color: isDark ? Colors.white : const Color(0xFF081F47),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Fresh picks are loading',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12,
+                  color: isDark ? Colors.white54 : const Color(0xFF6B7280),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMenuCategories(bool isDark, bool isDesktop, bool isTablet) {
     if (groupedFoods.isEmpty) {
       return const SizedBox(
         height: 200,
         child: Center(
-          child: Text("No items found.", style: TextStyle(fontFamily: 'Inter')),
+          child: Text("No Items Found.", style: TextStyle(fontFamily: 'Inter')),
         ),
       );
     }
@@ -723,7 +823,8 @@ class _HomePageState extends State<HomePage> {
                 mainAxisExtent: 230,
               ),
               itemBuilder: (context, index) {
-                return _buildFoodCard(entry.value[index], isDark);
+                final food = entry.value[index];
+                return _buildFoodCard(food, isDark);
               },
             ),
           ],
@@ -754,6 +855,7 @@ class _HomePageState extends State<HomePage> {
         : Colors.white.withValues(alpha: 0.95);
 
     return Container(
+      key: ValueKey('food-card-${food["id"]}'),
       decoration: BoxDecoration(
         color: cardBg,
         borderRadius: BorderRadius.circular(18),
@@ -771,30 +873,10 @@ class _HomePageState extends State<HomePage> {
         children: [
           Stack(
             children: [
-              Builder(
-                builder: (context) {
-                  final imageUrl = food["image"]?.toString().trim() ?? '';
-                  if (imageUrl.isEmpty) {
-                    return _menuImagePlaceholder();
-                  }
-                  if (imageUrl.startsWith('data:image')) {
-                    final bytes = base64Decode(imageUrl.split(',').last);
-
-                    return Image.memory(
-                      bytes,
-                      height: 110,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    );
-                  }
-                  return Image.network(
-                    imageUrl,
-                    height: 110,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) => _menuImagePlaceholder(),
-                  );
-                },
+              _MenuItemImage(
+                key: ValueKey('food-image-${food["id"]}'),
+                imageUrl: food["image"]?.toString().trim() ?? '',
+                placeholder: _menuImagePlaceholder,
               ),
               Positioned(
                 top: 8,
@@ -1098,6 +1180,80 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _MenuItemImage extends StatefulWidget {
+  final String imageUrl;
+  final Widget Function() placeholder;
+
+  const _MenuItemImage({
+    super.key,
+    required this.imageUrl,
+    required this.placeholder,
+  });
+
+  @override
+  State<_MenuItemImage> createState() => _MenuItemImageState();
+}
+
+class _MenuItemImageState extends State<_MenuItemImage> {
+  Uint8List? _bytes;
+  String _decodedSource = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _decodeIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MenuItemImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) _decodeIfNeeded();
+  }
+
+  void _decodeIfNeeded() {
+    final imageUrl = widget.imageUrl;
+    if (!imageUrl.startsWith('data:image')) {
+      _bytes = null;
+      _decodedSource = '';
+      return;
+    }
+    if (_decodedSource == imageUrl && _bytes != null) return;
+    _decodedSource = imageUrl;
+    try {
+      _bytes = base64Decode(imageUrl.split(',').last);
+    } catch (_) {
+      _bytes = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final imageUrl = widget.imageUrl;
+    if (imageUrl.isEmpty) return widget.placeholder();
+
+    return RepaintBoundary(
+      child: imageUrl.startsWith('data:image')
+          ? (_bytes == null
+                ? widget.placeholder()
+                : Image.memory(
+                    _bytes!,
+                    height: 110,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ))
+          : Image.network(
+              imageUrl,
+              height: 110,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (_, _, _) => widget.placeholder(),
+            ),
     );
   }
 }

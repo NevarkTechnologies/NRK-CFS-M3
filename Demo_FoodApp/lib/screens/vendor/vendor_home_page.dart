@@ -150,7 +150,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final dialogCard = isDark ? const Color(0xFF0F172A) : Colors.white;
     final dialogText = isDark ? Colors.white : const Color(0xFF10254E);
-    final dialogSub  = isDark ? Colors.white60 : const Color(0xFF6B7280);
+    final dialogSub = isDark ? Colors.white60 : const Color(0xFF6B7280);
 
     return showDialog<bool>(
       context: context,
@@ -169,7 +169,11 @@ class _VendorHomePageState extends State<VendorHomePage> {
                 color: Colors.redAccent.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+                size: 28,
+              ),
             ),
             const SizedBox(height: 16),
             Text(
@@ -185,7 +189,11 @@ class _VendorHomePageState extends State<VendorHomePage> {
             Text(
               'Are you sure you want to log out?\nYour session data will be cleared.',
               textAlign: TextAlign.center,
-              style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: dialogSub),
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: dialogSub,
+              ),
             ),
             const SizedBox(height: 24),
             Row(
@@ -205,7 +213,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
                     ),
                     child: const Text(
                       'Cancel',
-                      style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -224,7 +235,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
                     ),
                     child: const Text(
                       'Logout',
-                      style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -457,43 +471,43 @@ class _VendorHomePageState extends State<VendorHomePage> {
             left: false,
             right: false,
             child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: GestureDetector(
-              onTap: widget.toggleTheme,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding: const EdgeInsets.symmetric(
-                  vertical: 14,
-                  horizontal: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isDark
-                          ? Icons.light_mode_rounded
-                          : Icons.dark_mode_rounded,
-                      color: const Color(0xFF0F4CFF),
-                      size: 22,
-                    ),
-                    const SizedBox(width: 16),
-                    Text(
-                      isDark ? 'Light Mode' : 'Dark Mode',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: GestureDetector(
+                onTap: widget.toggleTheme,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isDark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                        color: const Color(0xFF0F4CFF),
+                        size: 22,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 16),
+                      Text(
+                        isDark ? 'Light Mode' : 'Dark Mode',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           ),
         ],
       ),
@@ -693,24 +707,43 @@ class _VendorHomePageState extends State<VendorHomePage> {
                                 fontFamily: 'Inter',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _cafeActive ? const Color(0xFF22C55E) : Colors.redAccent,
+                                color: _cafeActive
+                                    ? const Color(0xFF22C55E)
+                                    : Colors.redAccent,
                               ),
                             ),
                             const SizedBox(width: 8),
                             _togglingActive
-                                ? const SizedBox(width: 36, height: 20, child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))))
+                                ? const SizedBox(
+                                    width: 36,
+                                    height: 20,
+                                    child: Center(
+                                      child: SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    ),
+                                  )
                                 : Switch(
                                     value: _cafeActive,
                                     onChanged: _toggleCafeActive,
                                     activeThumbColor: const Color(0xFF22C55E),
                                     inactiveThumbColor: Colors.redAccent,
-                                    inactiveTrackColor: Colors.redAccent.withValues(alpha: 0.3),
+                                    inactiveTrackColor: Colors.redAccent
+                                        .withValues(alpha: 0.3),
                                   ),
                           ],
                         ),
                         Text(
                           'Cafe Status',
-                          style: TextStyle(fontFamily: 'Inter', fontSize: 11, color: subText),
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 11,
+                            color: subText,
+                          ),
                         ),
                       ],
                     ),
@@ -880,6 +913,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
                       : "Not set yet",
                   "status": order["status"] ?? "Not set yet",
                   "items": order["items"] ?? [],
+                  "createdAt": order["createdAt"] ?? "",
                 },
               )
               .toList();
@@ -1100,6 +1134,17 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
     currentStatus = widget.order["status"];
   }
 
+  String _formatOrderDateTime() {
+    final raw = widget.order["createdAt"]?.toString() ?? "";
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return "Not available";
+    final local = parsed.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final ampm = local.hour >= 12 ? 'PM' : 'AM';
+    return '${local.day.toString().padLeft(2, '0')}/${local.month.toString().padLeft(2, '0')}/${local.year} • $hour:$minute $ampm';
+  }
+
   // Persist the status change to the backend with an optimistic update + revert on failure.
   Future<void> _updateStatus(String status) async {
     if (_updating) return;
@@ -1117,10 +1162,12 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => currentStatus = prev);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error.toString().replaceFirst("Exception: ", "")),
-        backgroundColor: Colors.redAccent,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst("Exception: ", "")),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     } finally {
       if (mounted) setState(() => _updating = false);
     }
@@ -1170,16 +1217,23 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 10,
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(
-                        "Order #${widget.order['id']}",
-                        style: TextStyle(
-                          fontFamily: 'Nunito',
-                          fontWeight: FontWeight.w900,
-                          fontSize: 20,
-                          color: textColor,
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 520),
+                        child: Text(
+                          "Order #${widget.order['id']}",
+                          softWrap: true,
+                          style: TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w900,
+                            fontSize: 20,
+                            color: textColor,
+                          ),
                         ),
                       ),
                       _buildStatusChip(currentStatus),
@@ -1194,6 +1248,29 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
                       fontWeight: FontWeight.w600,
                       color: subText,
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        size: 16,
+                        color: primaryBlue,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          "Ordered on ${_formatOrderDateTime()}",
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: subText,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
 
                   Padding(

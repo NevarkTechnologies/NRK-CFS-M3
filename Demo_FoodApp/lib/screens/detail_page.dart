@@ -500,7 +500,7 @@ class _DetailPageState extends State<DetailPage> {
             child: Padding(
               padding: const EdgeInsets.all(40),
               child: Text(
-                "No favorite items",
+                "No Favorite Items Yet",
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,

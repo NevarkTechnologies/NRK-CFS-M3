@@ -806,9 +806,9 @@ class _CartPageState extends State<CartPage> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Text(
-            "Your cart is empty",
+            "Your Cart Is Empty",
             style: TextStyle(
               fontFamily: 'Nunito',
               fontSize: 20,
@@ -818,7 +818,7 @@ class _CartPageState extends State<CartPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Add items from cafeterias to see them here.",
+            "Add Items from Menu Now !",
             style: TextStyle(
               fontFamily: 'Inter',
               fontSize: 14,
