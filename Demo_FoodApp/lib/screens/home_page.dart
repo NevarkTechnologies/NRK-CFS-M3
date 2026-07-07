@@ -10,6 +10,7 @@ import 'profile_page.dart';
 import 'cafeteria_page.dart';
 import '../model/cart_model.dart';
 import '../model/favorite_model.dart';
+import '../widgets/smooth_marquee_text.dart';
 import 'dart:convert';
 
 class HomePage extends StatefulWidget {
@@ -48,9 +49,6 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _searchFocusNode = FocusNode();
-    _searchFocusNode.addListener(() {
-      setState(() {});
-    });
 
     _scrollController = ScrollController();
     cartCountNotifier.addListener(_onCartChanged);
@@ -187,9 +185,11 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
+        final bottomInset = MediaQuery.of(context).padding.bottom;
         return SafeArea(
+          bottom: false,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 20),
+            padding: EdgeInsets.only(top: 20, bottom: 20 + bottomInset),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -346,7 +346,7 @@ class _HomePageState extends State<HomePage> {
                             child: SingleChildScrollView(
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
+                                parent: ClampingScrollPhysics(),
                               ),
                               child: Center(
                                 child: ConstrainedBox(
@@ -525,10 +525,8 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
+                SmoothMarqueeText(
                   widget.cafe['cuisine'] ?? 'Food Menu',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontFamily: 'Inter',
                     color: isDark ? Colors.white70 : const Color(0xFF5B6B89),

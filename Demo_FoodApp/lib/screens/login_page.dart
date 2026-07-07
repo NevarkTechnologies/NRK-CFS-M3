@@ -9,8 +9,12 @@ import 'cafeteria_page.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
+// CODEX EDITS: Recover payments made before an auth/process interruption.
+import '../services/pending_payment_service.dart';
 import '../model/favorite_model.dart';
+import '../model/cart_model.dart';
 import 'cart_page.dart';
+import 'success_page.dart';
 
 class LoginPage extends StatefulWidget {
   final VoidCallback? toggleTheme;
@@ -309,6 +313,34 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
+      // CODEX EDITS: A customer who had to sign in again must see the already
+      // captured order before any home-page retry can create confusion.
+      if (role != 'vendor') {
+        try {
+          final recovered = await PendingPaymentService.reconcile();
+          if (!mounted) return;
+          if (recovered?['state'] == 'captured' && recovered?['order'] is Map) {
+            final order = Map<String, dynamic>.from(recovered!['order'] as Map);
+            globalCartItems.clear();
+            CartModel.clear();
+            await saveCart();
+            // CODEX EDITS: Clear only after local success state is durable.
+            await PendingPaymentService.clear();
+            if (!mounted) return;
+            setState(() => isSigningIn = false);
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
+            );
+            return;
+          }
+        } catch (error) {
+          debugPrint(
+            'CODEX EDITS: Post-login payment reconciliation deferred: $error',
+          );
+        }
+      }
+
       // 5. Navigate based on the fetched role
       if (role == 'vendor') {
         setState(() => isSigningIn = false);
@@ -328,11 +360,17 @@ class _LoginPageState extends State<LoginPage> {
             backgroundColor: const Color(0xFF0F172A),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
-              side: BorderSide(color: const Color(0xFF0F4CFF).withValues(alpha: 0.3)),
+              side: BorderSide(
+                color: const Color(0xFF0F4CFF).withValues(alpha: 0.3),
+              ),
             ),
             title: Row(
               children: [
-                Icon(Icons.schedule_rounded, color: const Color(0xFF0F4CFF), size: 20),
+                Icon(
+                  Icons.schedule_rounded,
+                  color: const Color(0xFF0F4CFF),
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
                 const Text(
                   'Pickup Time Notice',
@@ -361,9 +399,15 @@ class _LoginPageState extends State<LoginPage> {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 10,
+                  ),
                 ),
-                child: const Text('Got it', style: TextStyle(fontWeight: FontWeight.w600)),
+                child: const Text(
+                  'Got it',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
             ],
           ),
@@ -382,7 +426,9 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Sign-in failed: Server Not Responding - Try Again Later"),
+          content: Text(
+            "Sign-in failed: Server Not Responding - Try Again Later",
+          ),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),

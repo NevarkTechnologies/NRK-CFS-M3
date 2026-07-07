@@ -50,7 +50,9 @@ class ApiService {
   }
 
   /// Returns { itemId: { available: bool, name: String } } for each requested id.
-  static Future<Map<String, dynamic>> checkMenuAvailability(List<String> itemIds) async {
+  static Future<Map<String, dynamic>> checkMenuAvailability(
+    List<String> itemIds,
+  ) async {
     final response = await http.post(
       Uri.parse('$baseUrl/menu/availability-check'),
       headers: const {'Content-Type': 'application/json'},
@@ -138,9 +140,16 @@ class ApiService {
     return _decodeList(response);
   }
 
-  static Future<void> setCafeActive(String cafeId, {required bool active}) async {
+  static Future<void> setCafeActive(
+    String cafeId, {
+    required bool active,
+  }) async {
     final uri = Uri.parse('$baseUrl/cafes/$cafeId');
-    final response = await http.patch(uri, headers: await _jsonHeaders(), body: jsonEncode({'active': active}));
+    final response = await http.patch(
+      uri,
+      headers: await _jsonHeaders(),
+      body: jsonEncode({'active': active}),
+    );
     _decodeObject(response);
   }
 
@@ -294,6 +303,24 @@ class ApiService {
     final response = await http.get(
       Uri.parse('$baseUrl/orders/by-payment/$razorpayOrderId'),
       headers: await _jsonHeaders(),
+    );
+    return _decodeObject(response);
+  }
+
+  // CODEX EDITS: Ask the authenticated backend to fetch Razorpay's authoritative
+  // order/payment state. Rich SDK diagnostics are optional and never trusted as
+  // proof of success or failure.
+  static Future<Map<String, dynamic>> reconcilePayment({
+    required String razorpayOrderId,
+    Map<String, dynamic>? sdkError,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/payment/reconcile'),
+      headers: await _jsonHeaders(),
+      body: jsonEncode({
+        'razorpay_order_id': razorpayOrderId,
+        'sdk_error': ?sdkError,
+      }),
     );
     return _decodeObject(response);
   }

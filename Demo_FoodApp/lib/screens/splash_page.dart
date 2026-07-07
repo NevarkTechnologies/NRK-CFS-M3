@@ -4,9 +4,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../services/notification_service.dart';
 import '../services/session.dart';
+// CODEX EDITS: Cold-start payment reconciliation runs after Firebase auth restore.
+import '../services/pending_payment_service.dart';
 import '../model/favorite_model.dart';
+import '../model/cart_model.dart';
 import 'cafeteria_page.dart';
 import 'cart_page.dart';
+import 'success_page.dart';
 import 'vendor/vendor_home_page.dart';
 
 class SplashPage extends StatefulWidget {
@@ -19,7 +23,6 @@ class SplashPage extends StatefulWidget {
 }
 
 class _SplashPageState extends State<SplashPage> {
-
   @override
   void initState() {
     super.initState();
@@ -30,7 +33,10 @@ class _SplashPageState extends State<SplashPage> {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
     // Restore persisted cart and favorites before any UI runs
-    await Future.wait([loadCart(AppSession.userId), FavoriteModel.load(AppSession.userId)]);
+    await Future.wait([
+      loadCart(AppSession.userId),
+      FavoriteModel.load(AppSession.userId),
+    ]);
     if (!mounted) return;
     await NotificationService.instance.ensurePermissionRequired(context);
     if (!mounted) return;
@@ -46,7 +52,8 @@ class _SplashPageState extends State<SplashPage> {
     // finishes restoring the persisted session (platform-channel race). By the
     // time the parallel 3s splash delay has elapsed the restore is complete,
     // so fall back to currentUser — only a real sign-out leaves both null.
-    User? firebaseUser = (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
+    User? firebaseUser =
+        (results[1] as User?) ?? FirebaseAuth.instance.currentUser;
 
     // Fallback: session prefs exist but the SDK has no persisted user — on
     // some devices (seen on ColorOS) firebase_auth silently fails to save
@@ -60,6 +67,33 @@ class _SplashPageState extends State<SplashPage> {
     if (!mounted) return;
 
     if (AppSession.isLoggedIn && firebaseUser != null) {
+      // CODEX EDITS: Recover a captured UPI payment before navigating home. A
+      // gateway outage remains pending and never blocks normal app startup.
+      if (!AppSession.isVendor) {
+        try {
+          final recovered = await PendingPaymentService.reconcile();
+          if (!mounted) return;
+          if (recovered?['state'] == 'captured' && recovered?['order'] is Map) {
+            final order = Map<String, dynamic>.from(recovered!['order'] as Map);
+            globalCartItems.clear();
+            CartModel.clear();
+            await saveCart();
+            // CODEX EDITS: Clear only after local success state is durable.
+            await PendingPaymentService.clear();
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
+            );
+            return;
+          }
+        } catch (error) {
+          // CODEX EDITS: Startup remains available offline; Checkout/resume will retry.
+          debugPrint(
+            'CODEX EDITS: Cold-start payment reconciliation deferred: $error',
+          );
+        }
+      }
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
@@ -86,9 +120,9 @@ class _SplashPageState extends State<SplashPage> {
   /// session — both fall through to the normal login page.
   Future<User?> _restoreFirebaseSession() async {
     try {
-      final googleUser = await GoogleSignIn()
-          .signInSilently()
-          .timeout(const Duration(seconds: 10));
+      final googleUser = await GoogleSignIn().signInSilently().timeout(
+        const Duration(seconds: 10),
+      );
       if (googleUser == null) return null;
 
       // Never pair the stored session with a different Google account.
@@ -118,10 +152,7 @@ class _SplashPageState extends State<SplashPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       body: SizedBox.expand(
-        child: Image.asset(
-          'assets/splashscreen.gif',
-          fit: BoxFit.cover,
-        ),
+        child: Image.asset('assets/splashscreen.gif', fit: BoxFit.cover),
       ),
     );
   }

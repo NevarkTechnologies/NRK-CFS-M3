@@ -5,14 +5,19 @@ import 'session.dart';
 // at payment-initiation time and passed directly to openRazorpayCheckout().
 late Razorpay _razorpay;
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
-late void Function(String) _paymentErrorCallback;
+// CODEX EDITS: Preserve the SDK code and structured body for authoritative
+// reconciliation instead of collapsing every outcome into a message string.
+late void Function(Map<String, dynamic>) _paymentErrorCallback;
+void Function(String)? _externalWalletCallback;
 
 Future<void> initRazorpay(
   void Function(Map<String, dynamic>) onSuccess,
-  void Function(String) onError,
-) async {
+  void Function(Map<String, dynamic>) onError, {
+  void Function(String)? onExternalWallet,
+}) async {
   _paymentSuccessCallback = onSuccess;
   _paymentErrorCallback = onError;
+  _externalWalletCallback = onExternalWallet;
 
   _razorpay = Razorpay();
   _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, (response) {
@@ -23,10 +28,21 @@ Future<void> initRazorpay(
     });
   });
   _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, (response) {
-    _paymentErrorCallback(response.message ?? 'Payment failed');
+    // CODEX EDITS: PaymentFailureResponse.error contains Razorpay's reason,
+    // source, and step; key conversion keeps the payload JSON-safe.
+    final rawError = response.error;
+    final structuredError = rawError?.map<String, dynamic>(
+      (key, value) => MapEntry(key.toString(), value),
+    );
+    _paymentErrorCallback({
+      'code': response.code,
+      'message': response.message ?? 'Payment status could not be confirmed',
+      'error': structuredError,
+    });
   });
   _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, (response) {
-    _paymentErrorCallback('External wallet selected');
+    // CODEX EDITS: Wallet selection is not a failed payment.
+    _externalWalletCallback?.call(response.walletName ?? 'External wallet');
   });
 }
 
@@ -38,7 +54,11 @@ Future<void> openRazorpayCheckout(
   String? selectedApp,
 }) async {
   if (keyId == null || keyId.isEmpty) {
-    _paymentErrorCallback('Payment configuration error: key not available');
+    // CODEX EDITS: Configuration errors use the same structured contract.
+    _paymentErrorCallback({
+      'code': Razorpay.INVALID_OPTIONS,
+      'message': 'Payment configuration error: key not available',
+    });
     return;
   }
 
@@ -107,10 +127,16 @@ Future<void> openRazorpayCheckout(
   try {
     _razorpay.open(options);
   } catch (e) {
-    _paymentErrorCallback('Error opening payment: $e');
+    // CODEX EDITS: Opening exceptions remain reconcilable and observable.
+    _paymentErrorCallback({
+      'code': Razorpay.UNKNOWN_ERROR,
+      'message': 'Error opening payment: $e',
+    });
   }
 }
 
 void disposeRazorpay() {
   _razorpay.clear();
+  // CODEX EDITS: Avoid retaining a disposed Checkout page callback.
+  _externalWalletCallback = null;
 }

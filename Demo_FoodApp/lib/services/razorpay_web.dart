@@ -12,14 +12,20 @@ external JSAny _jsonParse(String source);
 external JSString _jsonStringify(JSAny value);
 
 late void Function(Map<String, dynamic>) _paymentSuccessCallback;
-late void Function(String) _paymentErrorCallback;
+// CODEX EDITS: Match the mobile structured-error contract so conditional
+// imports compile and reconciliation behaves consistently on every platform.
+late void Function(Map<String, dynamic>) _paymentErrorCallback;
+// ignore: unused_element
+void Function(String)? _externalWalletCallback;
 
 Future<void> initRazorpay(
   void Function(Map<String, dynamic>) onSuccess,
-  void Function(String) onError,
-) async {
+  void Function(Map<String, dynamic>) onError, {
+  void Function(String)? onExternalWallet,
+}) async {
   _paymentSuccessCallback = onSuccess;
   _paymentErrorCallback = onError;
+  _externalWalletCallback = onExternalWallet;
 }
 
 Future<void> openRazorpayCheckout(
@@ -31,14 +37,15 @@ Future<void> openRazorpayCheckout(
 }) async {
   try {
     if (keyId == null || keyId.isEmpty) {
-      _paymentErrorCallback('Payment configuration error: key not available');
+      // CODEX EDITS: Structured INVALID_OPTIONS equivalent for web Checkout.
+      _paymentErrorCallback({
+        'code': 1,
+        'message': 'Payment configuration error: key not available',
+      });
       return;
     }
 
-    final prefill = <String, dynamic>{
-      'email': email,
-      'contact': '9876543210',
-    };
+    final prefill = <String, dynamic>{'email': email, 'contact': '9876543210'};
 
     if (upiId != null && upiId.isNotEmpty) {
       prefill['vpa'] = upiId;
@@ -62,7 +69,10 @@ Future<void> openRazorpayCheckout(
             'apps': {
               'name': 'Pay using UPI apps',
               'instruments': [
-                {'method': 'upi', 'flows': ['intent']},
+                {
+                  'method': 'upi',
+                  'flows': ['intent'],
+                },
               ],
             },
             // QR + collect: lets the user pay from a secondary phone by
@@ -70,7 +80,10 @@ Future<void> openRazorpayCheckout(
             'other': {
               'name': 'Pay from another phone',
               'instruments': [
-                {'method': 'upi', 'flows': ['qr', 'collect']},
+                {
+                  'method': 'upi',
+                  'flows': ['qr', 'collect'],
+                },
               ],
             },
           },
@@ -102,19 +115,27 @@ Future<void> openRazorpayCheckout(
     modal.setProperty(
       'ondismiss'.toJS,
       (() {
-        _paymentErrorCallback('Payment cancelled');
+        // CODEX EDITS: Dismissal is reconciled because a redirect can close
+        // after the bank has already accepted the payment.
+        _paymentErrorCallback({'code': 2, 'message': 'Payment cancelled'});
       }).toJS,
     );
     jsOpts.setProperty('modal'.toJS, modal);
 
     // Instantiate Razorpay from the global scope and open checkout
-    final constructor =
-        globalContext.getProperty<JSFunction>('Razorpay'.toJS);
+    final constructor = globalContext.getProperty<JSFunction>('Razorpay'.toJS);
     final rzp = constructor.callAsConstructor<JSObject>(jsOpts);
     rzp.callMethod<JSAny?>('open'.toJS);
   } catch (e) {
-    _paymentErrorCallback('Error opening Razorpay checkout: $e');
+    // CODEX EDITS: Unknown web exceptions use the structured error contract.
+    _paymentErrorCallback({
+      'code': 100,
+      'message': 'Error opening Razorpay checkout: $e',
+    });
   }
 }
 
-void disposeRazorpay() {}
+void disposeRazorpay() {
+  // CODEX EDITS: Release page callbacks consistently with the mobile helper.
+  _externalWalletCallback = null;
+}

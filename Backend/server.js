@@ -18,6 +18,10 @@ const Notification = require('./models/notification');
 const CafeCounter = require('./models/cafeCounter');
 const PaymentSession = require('./models/paymentSession');
 const AuditLog = require('./models/auditLog');
+// CODEX EDITS: Durable webhook receipts and notification outbox are shared by
+// every PM2 worker through MongoDB.
+const PaymentWebhookEvent = require('./models/paymentWebhookEvent');
+const NotificationOutbox = require('./models/notificationOutbox');
 
 const app = express();
 // Trust the first proxy hop (AWS ALB / nginx) so express-rate-limit reads the real
@@ -25,6 +29,13 @@ const app = express();
 app.set('trust proxy', 1);
 const allowedStatuses = ['Pending', 'Preparing', 'Ready', 'Completed', 'Rejected'];
 let razorpayClient;
+// CODEX EDITS: Processing leases allow another worker to safely resume work
+// after a crash without deleting the payment cart.
+const PAYMENT_PROCESSING_LEASE_MS = 30 * 1000;
+const WEBHOOK_PROCESSING_LEASE_MS = 60 * 1000;
+const OUTBOX_PROCESSING_LEASE_MS = 60 * 1000;
+const PAYMENT_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+let notificationOutboxTimer;
 
 const redisClient = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 redisClient.on('error', (err) => console.warn('Redis error:', err.message));
@@ -95,6 +106,9 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
   message: { message: 'Too many requests, please try again later.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:general:' }),
+  // CODEX EDITS: Razorpay deliveries use a dedicated, higher-capacity limiter;
+  // sharing the public API bucket could reject valid captures during bursts.
+  skip: req => req.path === '/razorpay/webhook',
 });
 
 // Strict limit for order writes (place/confirm/status) — 10 per minute
@@ -103,6 +117,8 @@ const orderLimiter = rateLimit({
   max: 10,
   message: { message: 'Too many order requests, please slow down.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:order:' }),
+  // CODEX EDITS: Reconciliation has its own authenticated read-style limiter.
+  skip: req => req.path === '/reconcile',
 });
 // Generous limit for order reads — per Firebase UID so accounts don't share a bucket
 const orderReadLimiter = rateLimit({
@@ -120,6 +136,27 @@ const authLimiter = rateLimit({
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:auth:' }),
 });
 
+// CODEX EDITS: Supports bounded foreground polling without weakening write
+// limits on payment initiation or order confirmation.
+const paymentReconcileLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  keyGenerator: req => req.firebaseUser?.uid || ipKeyGenerator(req),
+  message: { message: 'Too many payment status checks, please slow down.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:reconcile:' }),
+});
+
+// CODEX EDITS: Dedicated webhook limiter protects the public signed endpoint
+// without coupling all merchants to Razorpay's shared source IP bucket.
+const webhookLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 2000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many webhook requests.' },
+  store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:webhook:' }),
+});
+
 app.use('/api/', generalLimiter);
 app.use('/api/payment', orderLimiter);
 app.use('/api/auth', authLimiter);
@@ -127,6 +164,28 @@ app.use('/api/auth', authLimiter);
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function asyncHandler(fn) {
   return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+}
+
+// CODEX EDITS: Structured, correlation-friendly payment logs intentionally omit
+// signatures, UPI IDs, tokens, and other secrets/PII.
+function paymentLog(event, fields = {}, level = 'info') {
+  const safeFields = Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+  const record = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    service: 'nevark-food-backend',
+    workerId: process.env.NODE_APP_INSTANCE || '0',
+    event,
+    ...safeFields,
+  });
+  (console[level] || console.log)(record);
+}
+
+// CODEX EDITS: Bound persisted/logged error text so external SDK responses
+// cannot inflate Mongo documents or logs.
+function safeErrorMessage(error) {
+  return String(error?.message || error || 'Unknown error').slice(0, 500);
 }
 
 function makeOrderId() {
@@ -137,14 +196,17 @@ function toMoney(value) {
   return Math.round(Number(value || 0) * 100) / 100;
 }
 
-async function generateTokenNumber(cafeId) {
+async function generateTokenNumber(cafeId, mongoSession = null) {
   const ist = new Date(Date.now() + 330 * 60 * 1000);
   const today = ist.toISOString().slice(0, 10);
   const key = `${cafeId}:${today}`;
+  const options = { returnDocument: 'after', upsert: true };
+  // CODEX EDITS: Participate in the order transaction when MongoDB supports it.
+  if (mongoSession) options.session = mongoSession;
   const doc = await CafeCounter.findOneAndUpdate(
     { key },
     { $inc: { seq: 1 } },
-    { returnDocument: 'after', upsert: true }
+    options
   );
   return String(doc.seq).padStart(4, '0');
 }
@@ -209,7 +271,7 @@ async function sendPushNotification(userIds, title, message, data = {}) {
   try {
     const users = await User.find({ _id: { $in: userIds } }).select('fcmTokens');
     const tokens = users.flatMap(user => user.fcmTokens || []).filter(Boolean);
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) return true;
     const firebase = initializeFirebaseAdmin();
     await firebase.messaging().sendEachForMulticast({
       tokens,
@@ -224,8 +286,10 @@ async function sendPushNotification(userIds, title, message, data = {}) {
       },
       data: Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)])),
     });
+    return true;
   } catch (err) {
     console.warn('Push notification failed:', err.message);
+    return false;
   }
 }
 
@@ -368,7 +432,194 @@ function getMongoOptions() {
 async function connectDatabase() {
   if (!process.env.MONGO_URI) throw new Error('MONGO_URI is missing. Add it to Backend/.env');
   await mongoose.connect(process.env.MONGO_URI, getMongoOptions());
+  // CODEX EDITS: Migrate the former 30-minute createdAt TTL online. Dropping
+  // the old TTL first prevents it racing the seven-day backfill.
+  await migratePaymentSessionIndexes();
+  // CODEX EDITS: Fail startup before accepting traffic if payment-critical
+  // idempotency indexes cannot be created or validated.
+  await Promise.all([
+    PaymentSession.init(),
+    PaymentWebhookEvent.init(),
+    NotificationOutbox.init(),
+    Notification.init(),
+    Order.init(),
+  ]);
   console.log('MongoDB connected');
+}
+
+// CODEX EDITS: Backward-compatible online migration for sessions created by
+// previous releases. Existing sessions receive defaults without rewriting carts.
+async function migratePaymentSessionIndexes() {
+  try {
+    const indexes = await PaymentSession.collection.indexes();
+    const oldTtl = indexes.find(index =>
+      index.key?.createdAt === 1 && index.expireAfterSeconds !== undefined
+    );
+    if (oldTtl) {
+      await PaymentSession.collection.dropIndex(oldTtl.name);
+      paymentLog('payment_session.old_ttl_removed', { indexName: oldTtl.name });
+    }
+  } catch (error) {
+    // NamespaceNotFound means this is a clean deployment with no collection yet.
+    if (error?.code !== 26 && error?.codeName !== 'NamespaceNotFound') throw error;
+  }
+
+  const defaultExpiry = new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS);
+  await PaymentSession.updateMany(
+    { status: { $exists: false } },
+    { $set: { status: 'pending' } }
+  );
+  await PaymentSession.updateMany(
+    { expiresAt: { $exists: false } },
+    { $set: { expiresAt: defaultExpiry } }
+  );
+  await PaymentSession.collection.createIndex(
+    { expiresAt: 1 },
+    { expireAfterSeconds: 0, name: 'expiresAt_1' }
+  );
+}
+
+// CODEX EDITS: The outbox insert is idempotent and can participate in the same
+// transaction as order creation, leaving notification delivery off the request path.
+async function enqueueOrderNotifications(order, mongoSession = null) {
+  const options = { upsert: true };
+  if (mongoSession) options.session = mongoSession;
+  await NotificationOutbox.updateOne(
+    { dedupeKey: `order:${order._id}:created` },
+    {
+      $setOnInsert: {
+        dedupeKey: `order:${order._id}:created`,
+        orderId: order._id,
+        status: 'pending',
+        nextAttemptAt: new Date(),
+      },
+    },
+    options
+  );
+}
+
+// CODEX EDITS: One PM2 worker atomically leases each outbox job. Failed jobs
+// use bounded exponential backoff and can be resumed after worker termination.
+async function processNotificationOutboxOnce() {
+  const now = new Date();
+  const staleBefore = new Date(Date.now() - OUTBOX_PROCESSING_LEASE_MS);
+  const job = await NotificationOutbox.findOneAndUpdate(
+    {
+      $or: [
+        { status: { $in: ['pending', 'failed'] }, nextAttemptAt: { $lte: now } },
+        { status: 'processing', processingStartedAt: { $lt: staleBefore } },
+      ],
+    },
+    {
+      $set: { status: 'processing', processingStartedAt: now, lastError: '' },
+      $inc: { attempts: 1 },
+    },
+    { sort: { nextAttemptAt: 1 }, returnDocument: 'after' }
+  );
+  if (!job) return;
+
+  try {
+    const order = await Order.findById(job.orderId);
+    if (!order) throw new Error('Outbox order no longer exists');
+
+    if (order.userId && !job.customerNotificationSentAt) {
+      await Notification.updateOne(
+        { dedupeKey: `order:${order._id}:placed` },
+        {
+          $setOnInsert: {
+            userId: order.userId,
+            title: 'Order Placed 🎉',
+            message: `Token #${order.tokenNumber} confirmed — payment received.`,
+            type: 'order',
+            orderId: order._id,
+            items: order.items.map(item => item.name),
+            dedupeKey: `order:${order._id}:placed`,
+          },
+        },
+        { upsert: true }
+      );
+      await NotificationOutbox.updateOne(
+        { _id: job._id },
+        { $set: { customerNotificationSentAt: new Date() } }
+      );
+    }
+
+    if (order.userId && !job.customerPushSentAt) {
+      const sent = await sendPushNotification(
+        [order.userId],
+        'Order Placed 🎉',
+        `Token #${order.tokenNumber} confirmed — payment received.`,
+        { type: 'order', orderId: order.orderId, status: 'Pending' }
+      );
+      if (!sent) throw new Error('Customer FCM delivery failed');
+      await NotificationOutbox.updateOne(
+        { _id: job._id },
+        { $set: { customerPushSentAt: new Date() } }
+      );
+    }
+
+    if (order.cafeId && !job.vendorPushSentAt) {
+      const vendorUser = await User.findOne({ cafeId: order.cafeId, role: 'vendor' }).select('_id').lean();
+      if (vendorUser) {
+        const sent = await sendPushNotification(
+          [vendorUser._id],
+          'New Order 🛎️',
+          `Token #${order.tokenNumber} — new order from ${order.customerName || 'a customer'}`,
+          { type: 'vendor_order', orderId: order.orderId, status: 'Pending' }
+        );
+        if (!sent) throw new Error('Vendor FCM delivery failed');
+      }
+      await NotificationOutbox.updateOne(
+        { _id: job._id },
+        { $set: { vendorPushSentAt: new Date() } }
+      );
+    }
+
+    await NotificationOutbox.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          status: 'sent',
+          sentAt: new Date(),
+          processingStartedAt: null,
+          lastError: '',
+        },
+      }
+    );
+    paymentLog('notification_outbox.sent', { orderId: order.orderId, attempts: job.attempts });
+  } catch (error) {
+    const delayMs = Math.min(5 * 60 * 1000, 1000 * (2 ** Math.min(job.attempts, 8)));
+    await NotificationOutbox.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          status: 'failed',
+          processingStartedAt: null,
+          nextAttemptAt: new Date(Date.now() + delayMs),
+          lastError: safeErrorMessage(error),
+        },
+      }
+    );
+    paymentLog('notification_outbox.failed', {
+      orderObjectId: String(job.orderId),
+      attempts: job.attempts,
+      error: safeErrorMessage(error),
+    }, 'warn');
+  }
+}
+
+// CODEX EDITS: Timer is unref'd so graceful PM2 shutdown is never held open.
+function startNotificationOutboxWorker() {
+  if (notificationOutboxTimer) return;
+  setImmediate(() => processNotificationOutboxOnce().catch(error =>
+    paymentLog('notification_outbox.worker_error', { error: safeErrorMessage(error) }, 'error')
+  ));
+  notificationOutboxTimer = setInterval(() => {
+    processNotificationOutboxOnce().catch(error =>
+      paymentLog('notification_outbox.worker_error', { error: safeErrorMessage(error) }, 'error')
+    );
+  }, 5000);
+  notificationOutboxTimer.unref?.();
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -725,8 +976,16 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   // Persist cart to MongoDB — survives crashes and multi-instance deployments.
   await PaymentSession.create({
     razorpayOrderId: razorpayOrder.id,
+    // CODEX EDITS: Explicit state/expiry keeps old and new workers compatible
+    // during a rolling PM2 reload.
+    status: 'pending',
+    expiresAt: new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS),
     cart: {
-      userId: resolvedUserId, customerName, customerEmail,
+      // CODEX EDITS: Bind the payment owner to the verified Firebase identity;
+      // never trust a client-supplied email for reconciliation access control.
+      userId: resolvedUserId,
+      customerName,
+      customerEmail: (req.firebaseUser.email || customerEmail || '').toLowerCase(),
       cafeId: resolvedCafeId, cafeteriaName,
       items: normalizedItems,
       itemTotal, platformFee, convenienceFee, discount: discountAmt, total,
@@ -734,6 +993,13 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
       pickupTime: pickupTime || '',
       notes: notes || '',
     },
+  });
+
+  // CODEX EDITS: Correlate initiation without logging cart contents or PII.
+  paymentLog('payment.initiated', {
+    razorpayOrderId: razorpayOrder.id,
+    amountPaise: razorpayOrder.amount,
+    cafeId: resolvedCafeId ? String(resolvedCafeId) : '',
   });
 
   // Return key ID so the Flutter client doesn't need to hardcode it.
@@ -745,93 +1011,193 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
 // razorpay_order_id: if the order already exists it is returned untouched, so
 // the two paths can never double-create or double-notify. Returns null only
 // when no order exists and the PaymentSession is gone (expired/never created).
-async function createOrderFromPaymentSession(razorpay_order_id, razorpay_payment_id) {
-  // Fast path: the other path (webhook or client confirm) already created it.
+// CODEX EDITS: Create the DB order through a leased, durable state machine.
+// Client confirmation and webhook delivery can safely race across PM2 workers.
+async function createOrderFromPaymentSession(razorpay_order_id, razorpay_payment_id, source = 'unknown') {
   const existing = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
-  if (existing) return existing;
+  if (existing) {
+    await markPaymentSessionCompleted(razorpay_order_id, razorpay_payment_id, existing._id);
+    await enqueueOrderNotifications(existing);
+    return existing;
+  }
 
-  // Retrieve and atomically delete the session (findOneAndDelete = one-time use).
-  const session = await PaymentSession.findOneAndDelete({ razorpayOrderId: razorpay_order_id });
-  if (!session) {
-    // Session already consumed — the winner may still be mid-creation, so poll
-    // briefly for the order it is writing before giving up.
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, 400));
-      const order = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
-      if (order) return order;
+  const staleBefore = new Date(Date.now() - PAYMENT_PROCESSING_LEASE_MS);
+  const claimedSession = await PaymentSession.findOneAndUpdate(
+    {
+      razorpayOrderId: razorpay_order_id,
+      $or: [
+        { status: { $in: ['pending', 'failed'] } },
+        { status: { $exists: false } },
+        { status: 'processing', processingStartedAt: { $lt: staleBefore } },
+      ],
+    },
+    {
+      $set: {
+        status: 'processing',
+        processingStartedAt: new Date(),
+        lastPaymentId: razorpay_payment_id,
+        lastError: null,
+      },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!claimedSession) {
+    // CODEX EDITS: A peer worker may own the live lease. Poll only the shared
+    // order result; never consume or mutate its payment session.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 300));
+      const concurrentOrder = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
+      if (concurrentOrder) return concurrentOrder;
     }
     return null;
   }
 
-  const cart = session.cart;
-
-  // Create the DB order — only reachable after valid signature + valid session.
-  const orderId     = makeOrderId();
-  const tokenNumber = await generateTokenNumber(cart.cafeId);
+  const cart = claimedSession.cart;
   let order;
   try {
-    order = await Order.create({
-      orderId, tokenNumber,
-      userId:         cart.userId,
-      customerName:   cart.customerName,
-      customerEmail:  cart.customerEmail,
-      cafeId:         cart.cafeId,
-      cafeteriaName:  cart.cafeteriaName,
-      items:          cart.items,
-      itemTotal:      cart.itemTotal,
-      platformFee:    cart.platformFee,
-      convenienceFee: cart.convenienceFee,
-      discount:       cart.discount,
-      total:          cart.total,
-      status:         'Pending',
-      payment: {
-        method:          'Online',
-        provider:        'Razorpay',
-        providerOrderId: razorpay_order_id,
-        transactionId:   razorpay_payment_id,
-        status:          'Paid',
-      },
-      location:   cart.location,
-      pickupTime: cart.pickupTime,
-      notes:      cart.notes,
-    });
-  } catch (err) {
-    // Unique index on payment.providerOrderId — the other path won the race.
-    if (err && err.code === 11000) {
-      return await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
-    }
-    throw err;
-  }
-
-  audit('payment.confirmed', cart.userId, 'payment', order.orderId, { amount: cart.total, razorpayPaymentId: razorpay_payment_id, cafeId: cart.cafeId });
-
-  // Notify customer.
-  if (order.userId) {
-    await Notification.create({
-      userId: order.userId, title: 'Order Placed 🎉',
-      message: `Token #${order.tokenNumber} confirmed — payment received.`,
-      type: 'order', orderId: order._id, items: order.items.map(i => i.name),
-    });
-    await sendPushNotification(
-      [order.userId], 'Order Placed 🎉',
-      `Token #${order.tokenNumber} confirmed — payment received.`,
-      { type: 'order', orderId: order.orderId, status: 'Pending' }
+    order = await persistPaidOrderWithTransaction(
+      claimedSession,
+      razorpay_order_id,
+      razorpay_payment_id
     );
-  }
-
-  // Notify vendor of new order.
-  if (order.cafeId) {
-    const vendorUser = await User.findOne({ cafeId: order.cafeId, role: 'vendor' }).select('_id').lean();
-    if (vendorUser) {
-      await sendPushNotification(
-        [vendorUser._id],
-        'New Order 🛎️',
-        `Token #${order.tokenNumber} — new order from ${order.customerName || 'a customer'}`,
-        { type: 'vendor_order', orderId: order.orderId, status: 'Pending' }
-      );
+  } catch (error) {
+    // CODEX EDITS: A commit may have succeeded just before a connection loss.
+    // Resolve by the unique provider order ID before resetting the lease.
+    const committedOrder = await Order.findOne({ 'payment.providerOrderId': razorpay_order_id });
+    if (committedOrder) {
+      await markPaymentSessionCompleted(razorpay_order_id, razorpay_payment_id, committedOrder._id);
+      await enqueueOrderNotifications(committedOrder);
+      return committedOrder;
     }
+
+    await PaymentSession.updateOne(
+      { _id: claimedSession._id, status: 'processing' },
+      {
+        $set: {
+          status: 'pending',
+          processingStartedAt: null,
+          lastError: { message: safeErrorMessage(error), at: new Date(), source },
+        },
+      }
+    );
+    paymentLog('payment.order_creation_failed', {
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      source,
+      error: safeErrorMessage(error),
+    }, 'error');
+    throw error;
   }
 
+  audit('payment.confirmed', cart.userId, 'payment', order.orderId, {
+    amount: cart.total,
+    razorpayPaymentId: razorpay_payment_id,
+    cafeId: cart.cafeId,
+    source,
+  });
+  paymentLog('payment.order_created', {
+    razorpayOrderId: razorpay_order_id,
+    razorpayPaymentId: razorpay_payment_id,
+    orderId: order.orderId,
+    source,
+  });
+  return order;
+}
+
+// CODEX EDITS: Keep the session result repairable and queryable after completion.
+async function markPaymentSessionCompleted(razorpayOrderId, razorpayPaymentId, orderObjectId, mongoSession = null) {
+  const options = mongoSession ? { session: mongoSession } : {};
+  await PaymentSession.updateOne(
+    { razorpayOrderId },
+    {
+      $set: {
+        status: 'completed',
+        processingStartedAt: null,
+        completedAt: new Date(),
+        completedOrderId: orderObjectId,
+        lastPaymentId: razorpayPaymentId,
+        lastError: null,
+      },
+    },
+    options
+  );
+}
+
+// CODEX EDITS: Transactionally commit counter, order, session state, and outbox.
+// A standalone-Mongo fallback preserves local development without weakening the
+// crash-recovery state machine used in production replica sets.
+async function persistPaidOrderWithTransaction(paymentSession, razorpayOrderId, razorpayPaymentId) {
+  const mongoSession = await mongoose.startSession();
+  let createdOrder;
+  try {
+    await mongoSession.withTransaction(async () => {
+      createdOrder = await persistPaidOrder(
+        paymentSession,
+        razorpayOrderId,
+        razorpayPaymentId,
+        mongoSession
+      );
+    }, {
+      readConcern: { level: 'snapshot' },
+      writeConcern: { w: 'majority' },
+      readPreference: 'primary',
+    });
+    return createdOrder;
+  } catch (error) {
+    const unsupported = error?.code === 20 ||
+      error?.code === 263 ||
+      /transaction numbers are only allowed|replica set|mongos/i.test(safeErrorMessage(error));
+    if (!unsupported) throw error;
+    paymentLog('payment.transaction_fallback', {
+      razorpayOrderId,
+      reason: safeErrorMessage(error),
+    }, 'warn');
+    return persistPaidOrder(paymentSession, razorpayOrderId, razorpayPaymentId, null);
+  } finally {
+    await mongoSession.endSession();
+  }
+}
+
+// CODEX EDITS: Shared write unit for transactional production and safe local fallback.
+async function persistPaidOrder(paymentSession, razorpayOrderId, razorpayPaymentId, mongoSession) {
+  const cart = paymentSession.cart;
+  const tokenNumber = await generateTokenNumber(cart.cafeId, mongoSession);
+  const payload = {
+    orderId: makeOrderId(),
+    tokenNumber,
+    userId: cart.userId,
+    customerName: cart.customerName,
+    customerEmail: cart.customerEmail,
+    cafeId: cart.cafeId,
+    cafeteriaName: cart.cafeteriaName,
+    items: cart.items,
+    itemTotal: cart.itemTotal,
+    platformFee: cart.platformFee,
+    convenienceFee: cart.convenienceFee,
+    discount: cart.discount,
+    total: cart.total,
+    status: 'Pending',
+    payment: {
+      method: 'Online',
+      provider: 'Razorpay',
+      providerOrderId: razorpayOrderId,
+      transactionId: razorpayPaymentId,
+      status: 'Paid',
+    },
+    location: cart.location,
+    pickupTime: cart.pickupTime,
+    notes: cart.notes,
+  };
+
+  let order;
+  if (mongoSession) {
+    [order] = await Order.create([payload], { session: mongoSession });
+  } else {
+    order = await Order.create(payload);
+  }
+  await markPaymentSessionCompleted(razorpayOrderId, razorpayPaymentId, order._id, mongoSession);
+  await enqueueOrderNotifications(order, mongoSession);
   return order;
 }
 
@@ -847,13 +1213,174 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
     return res.status(400).json({ message: 'Payment verification failed — invalid signature' });
   }
 
-  const order = await createOrderFromPaymentSession(razorpay_order_id, razorpay_payment_id);
+  // CODEX EDITS: Tag the source for production correlation and state repair.
+  const order = await createOrderFromPaymentSession(
+    razorpay_order_id,
+    razorpay_payment_id,
+    'client_confirm'
+  );
   if (!order) {
-    return res.status(400).json({ message: 'Payment session expired or already used' });
+    return res.status(409).json({ message: 'Payment confirmation is already being processed' });
   }
 
   res.status(201).json(order);
 }));
+
+// CODEX EDITS: Ownership helper supports both current verified-email sessions
+// and older sessions that may only contain the Mongo user reference.
+async function paymentBelongsToRequester(req, customerEmail, userId) {
+  const verifiedEmail = String(req.firebaseUser?.email || '').toLowerCase();
+  if (verifiedEmail && String(customerEmail || '').toLowerCase() === verifiedEmail) return true;
+  if (!userId) return false;
+  const requester = await User.findOne({ googleId: req.firebaseUser.uid }).select('_id').lean();
+  return !!requester && String(requester._id) === String(userId);
+}
+
+// CODEX EDITS: Persist only bounded, non-sensitive SDK diagnostics.
+function sanitizeSdkError(value) {
+  if (!value || typeof value !== 'object') return null;
+  const nested = value.error && typeof value.error === 'object' ? value.error : {};
+  return {
+    code: String(value.code ?? '').slice(0, 50),
+    message: String(value.message ?? '').slice(0, 300),
+    reason: String(nested.reason ?? nested.error_reason ?? '').slice(0, 100),
+    source: String(nested.source ?? nested.error_source ?? '').slice(0, 100),
+    step: String(nested.step ?? nested.error_step ?? '').slice(0, 100),
+  };
+}
+
+// CODEX EDITS: Never fulfil from a captured webhook/API object unless its
+// immutable amount, currency, and provider order ID match the server-side cart.
+function assertCapturedPaymentIntegrity(paymentSession, razorpayOrder, payment) {
+  const expectedAmount = toPaise(paymentSession.cart.total);
+  const orderAmount = Number(razorpayOrder?.amount);
+  const paymentAmount = Number(payment?.amount);
+  const currency = String(payment?.currency || razorpayOrder?.currency || '').toUpperCase();
+  const orderMatches = String(payment?.order_id || '') === paymentSession.razorpayOrderId;
+  if (
+    orderAmount !== expectedAmount ||
+    paymentAmount !== expectedAmount ||
+    currency !== 'INR' ||
+    !orderMatches
+  ) {
+    const error = new Error('Captured payment does not match the initiated order');
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+// CODEX EDITS: Authoritative reconciliation is used for SDK errors, lifecycle
+// resumes, cold starts, and safe retries of the same Razorpay order.
+app.post(
+  '/api/payment/reconcile',
+  requireFirebaseAuth,
+  paymentReconcileLimiter,
+  asyncHandler(async (req, res) => {
+    const razorpayOrderId = String(req.body?.razorpay_order_id || '').trim();
+    if (!/^order_[A-Za-z0-9]+$/.test(razorpayOrderId)) {
+      return res.status(400).json({ message: 'A valid razorpay_order_id is required' });
+    }
+
+    const existingOrder = await Order.findOne({ 'payment.providerOrderId': razorpayOrderId });
+    if (existingOrder) {
+      const ownsOrder = await paymentBelongsToRequester(
+        req,
+        existingOrder.customerEmail,
+        existingOrder.userId
+      );
+      if (!ownsOrder) return res.status(403).json({ message: 'Forbidden' });
+      paymentLog('payment.reconciled_existing', {
+        razorpayOrderId,
+        orderId: existingOrder.orderId,
+      });
+      return res.json({ state: 'captured', order: existingOrder });
+    }
+
+    const paymentSession = await PaymentSession.findOne({ razorpayOrderId });
+    if (!paymentSession) {
+      paymentLog('payment.reconcile_expired', { razorpayOrderId }, 'warn');
+      return res.json({ state: 'expired', message: 'Payment session is no longer available' });
+    }
+
+    const ownsSession = await paymentBelongsToRequester(
+      req,
+      paymentSession.cart?.customerEmail,
+      paymentSession.cart?.userId
+    );
+    if (!ownsSession) return res.status(403).json({ message: 'Forbidden' });
+
+    const sdkError = sanitizeSdkError(req.body?.sdk_error);
+    if (sdkError) {
+      await PaymentSession.updateOne(
+        { _id: paymentSession._id },
+        { $set: { lastError: { ...sdkError, at: new Date(), source: 'mobile_sdk' } } }
+      );
+    }
+
+    let razorpayOrder;
+    let paymentCollection;
+    try {
+      const client = getRazorpayClient();
+      [razorpayOrder, paymentCollection] = await Promise.all([
+        client.orders.fetch(razorpayOrderId),
+        client.orders.fetchPayments(razorpayOrderId),
+      ]);
+    } catch (error) {
+      // A gateway/network outage is indeterminate, never a customer-facing failure.
+      paymentLog('payment.reconcile_gateway_unavailable', {
+        razorpayOrderId,
+        sdkErrorCode: sdkError?.code,
+        error: safeErrorMessage(error),
+      }, 'warn');
+      return res.json({
+        state: 'pending',
+        gatewayStatus: 'unavailable',
+        retryable: true,
+        message: 'Payment status is temporarily unavailable',
+      });
+    }
+
+    const payments = Array.isArray(paymentCollection)
+      ? paymentCollection
+      : (Array.isArray(paymentCollection?.items) ? paymentCollection.items : []);
+    const capturedPayment = payments
+      .filter(payment => payment?.status === 'captured' || payment?.captured === true)
+      .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0];
+
+    if (capturedPayment) {
+      assertCapturedPaymentIntegrity(paymentSession, razorpayOrder, capturedPayment);
+      const order = await createOrderFromPaymentSession(
+        razorpayOrderId,
+        capturedPayment.id,
+        'server_reconcile'
+      );
+      if (order) return res.json({ state: 'captured', order });
+    }
+
+    const gatewayStatus = capturedPayment
+      ? 'captured_processing'
+      : String(razorpayOrder?.status || 'created');
+    paymentLog('payment.reconcile_pending', {
+      razorpayOrderId,
+      gatewayStatus,
+      paymentAttempts: payments.length,
+      sdkErrorCode: sdkError?.code,
+    });
+    return res.json({
+      state: 'pending',
+      gatewayStatus,
+      retryable: true,
+      checkoutOrder: {
+        id: razorpayOrderId,
+        amount: Number(razorpayOrder?.amount || toPaise(paymentSession.cart.total)),
+        currency: String(razorpayOrder?.currency || 'INR'),
+        status: gatewayStatus,
+      },
+      razorpayKeyId: process.env.RAZORPAY_KEY_ID,
+      message: 'Payment is awaiting final confirmation',
+    });
+  })
+);
 
 // Razorpay webhook — authoritative fallback for order creation. If the app is
 // killed or loses the checkout success callback during a UPI redirect and never
@@ -861,7 +1388,7 @@ app.post('/api/orders/confirm', requireFirebaseAuth, asyncHandler(async (req, re
 // captured. Configure in the Razorpay dashboard with the same secret as
 // RAZORPAY_WEBHOOK_SECRET, subscribed to payment.captured and order.paid.
 // No Firebase auth — authenticated by the webhook HMAC signature instead.
-app.post('/api/razorpay/webhook', asyncHandler(async (req, res) => {
+app.post('/api/razorpay/webhook', webhookLimiter, asyncHandler(async (req, res) => {
   const secret = process.env.RAZORPAY_WEBHOOK_SECRET;
   if (!secret) return res.status(503).json({ message: 'Webhook secret not configured' });
 
@@ -880,18 +1407,158 @@ app.post('/api/razorpay/webhook', asyncHandler(async (req, res) => {
   }
   if (!valid) return res.status(400).json({ message: 'Invalid webhook signature' });
 
-  const event = req.body?.event;
-  if (event === 'payment.captured' || event === 'order.paid') {
-    const paymentEntity = req.body?.payload?.payment?.entity;
-    const razorpayOrderId = paymentEntity?.order_id;
-    const razorpayPaymentId = paymentEntity?.id;
-    if (razorpayOrderId && razorpayPaymentId) {
-      await createOrderFromPaymentSession(razorpayOrderId, razorpayPaymentId);
+  // CODEX EDITS: Persist and lease every verified delivery before processing;
+  // the raw-body hash is a stable fallback when Razorpay omits an event ID.
+  const event = String(req.body?.event || 'unknown');
+  const paymentEntity = req.body?.payload?.payment?.entity;
+  const orderEntity = req.body?.payload?.order?.entity;
+  let razorpayOrderId = String(paymentEntity?.order_id || orderEntity?.id || '');
+  let razorpayPaymentId = String(paymentEntity?.id || '');
+  const eventKey = String(req.body?.id || crypto.createHash('sha256').update(req.rawBody).digest('hex'));
+  try {
+    await PaymentWebhookEvent.updateOne(
+      { eventKey },
+      {
+        $setOnInsert: {
+          eventKey,
+          eventType: event,
+          razorpayOrderId,
+          razorpayPaymentId,
+          status: 'received',
+        },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    // CODEX EDITS: PM2 workers can receive the same webhook simultaneously.
+    // A duplicate insert race is safe because the next lease query is idempotent.
+    if (error?.code !== 11000) throw error;
+  }
+
+  if ((event === 'payment.captured' || event === 'order.paid') && razorpayOrderId && !razorpayPaymentId) {
+    // CODEX EDITS: Some order.paid deliveries are order-centric and omit the
+    // payment entity. Fetching the captured payment keeps order.paid useful
+    // without trusting a partial webhook payload to fulfil an order.
+    const paymentCollection = await getRazorpayClient().orders.fetchPayments(razorpayOrderId);
+    const payments = Array.isArray(paymentCollection)
+      ? paymentCollection
+      : (Array.isArray(paymentCollection?.items) ? paymentCollection.items : []);
+    const capturedPayment = payments
+      .filter(payment => payment?.status === 'captured' || payment?.captured === true)
+      .sort((a, b) => Number(b.created_at || 0) - Number(a.created_at || 0))[0];
+    if (capturedPayment) {
+      razorpayPaymentId = String(capturedPayment.id || '');
+      await PaymentWebhookEvent.updateOne(
+        { eventKey },
+        {
+          $set: {
+            razorpayOrderId,
+            razorpayPaymentId,
+          },
+        }
+      );
     }
   }
 
-  // Always 200 for verified events (including ones we ignore) so Razorpay
-  // doesn't keep retrying deliveries we have already processed.
+  const receipt = await PaymentWebhookEvent.findOneAndUpdate(
+    {
+      eventKey,
+      $or: [
+        { status: { $in: ['received', 'failed'] } },
+        {
+          status: 'processing',
+          processingStartedAt: { $lt: new Date(Date.now() - WEBHOOK_PROCESSING_LEASE_MS) },
+        },
+      ],
+    },
+    {
+      $set: { status: 'processing', processingStartedAt: new Date(), lastError: '' },
+      $inc: { attempts: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!receipt) {
+    paymentLog('payment.webhook_duplicate', { eventKey, event, razorpayOrderId });
+    return res.json({ ok: true, duplicate: true });
+  }
+
+  try {
+    if (event === 'payment.captured' || event === 'order.paid') {
+      if (!razorpayOrderId || !razorpayPaymentId) {
+        throw new Error('Captured webhook is missing payment or order ID');
+      }
+
+      const existingOrder = await Order.findOne({ 'payment.providerOrderId': razorpayOrderId });
+      if (!existingOrder) {
+        const paymentSession = await PaymentSession.findOne({ razorpayOrderId });
+        if (!paymentSession) throw new Error('Payment session not found for captured webhook');
+        // CODEX EDITS: Use the signed payment entity when present; otherwise
+        // fetch the captured payment for order.paid payloads that omit it.
+        let capturedPaymentEntity = paymentEntity;
+        if (!capturedPaymentEntity || String(capturedPaymentEntity.id || '') !== razorpayPaymentId) {
+          const paymentCollection = await getRazorpayClient().orders.fetchPayments(razorpayOrderId);
+          const payments = Array.isArray(paymentCollection)
+            ? paymentCollection
+            : (Array.isArray(paymentCollection?.items) ? paymentCollection.items : []);
+          capturedPaymentEntity = payments.find(payment => String(payment?.id || '') === razorpayPaymentId);
+        }
+        if (!capturedPaymentEntity) throw new Error('Captured payment entity could not be resolved');
+        assertCapturedPaymentIntegrity(
+          paymentSession,
+          orderEntity || { amount: capturedPaymentEntity?.amount, currency: capturedPaymentEntity?.currency },
+          capturedPaymentEntity
+        );
+        const order = await createOrderFromPaymentSession(
+          razorpayOrderId,
+          razorpayPaymentId,
+          'razorpay_webhook'
+        );
+        if (!order) throw new Error('Paid order is still unavailable after processing lease');
+      }
+    }
+
+    await PaymentWebhookEvent.updateOne(
+      { _id: receipt._id },
+      {
+        $set: {
+          status: 'processed',
+          processedAt: new Date(),
+          processingStartedAt: null,
+          lastError: '',
+        },
+      }
+    );
+    paymentLog('payment.webhook_processed', {
+      eventKey,
+      event,
+      razorpayOrderId,
+      razorpayPaymentId,
+      attempts: receipt.attempts,
+    });
+  } catch (error) {
+    await PaymentWebhookEvent.updateOne(
+      { _id: receipt._id },
+      {
+        $set: {
+          status: 'failed',
+          processingStartedAt: null,
+          lastError: safeErrorMessage(error),
+        },
+      }
+    );
+    paymentLog('payment.webhook_failed', {
+      eventKey,
+      event,
+      razorpayOrderId,
+      razorpayPaymentId,
+      error: safeErrorMessage(error),
+    }, 'error');
+    throw error;
+  }
+
+  // CODEX EDITS: Only successfully persisted/processed events return 200;
+  // failures reach the error handler so Razorpay retries them.
   res.json({ ok: true });
 }));
 
@@ -1161,6 +1828,39 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
+let httpServer;
 connectDatabase()
-  .then(() => app.listen(PORT, () => console.log(`Server running on port ${PORT}`)))
+  .then(() => {
+    httpServer = app.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      // CODEX EDITS: Start background delivery only after Mongo and HTTP are ready.
+      startNotificationOutboxWorker();
+      if (typeof process.send === 'function') process.send('ready');
+    });
+  })
   .catch(err => { console.error('Failed to start server:', err.message); process.exit(1); });
+
+// CODEX EDITS: Graceful PM2 reload stops new traffic, lets active requests
+// finish, and closes shared clients without abandoning payment work mid-write.
+async function gracefulShutdown(signal) {
+  paymentLog('process.shutdown_started', { signal });
+  if (notificationOutboxTimer) clearInterval(notificationOutboxTimer);
+  const forceTimer = setTimeout(() => process.exit(1), 30 * 1000);
+  forceTimer.unref?.();
+  const closeResources = async () => {
+    try {
+      await mongoose.connection.close(false);
+      await redisClient.quit();
+      clearTimeout(forceTimer);
+      process.exit(0);
+    } catch (error) {
+      paymentLog('process.shutdown_failed', { error: safeErrorMessage(error) }, 'error');
+      process.exit(1);
+    }
+  };
+  if (httpServer) httpServer.close(closeResources);
+  else await closeResources();
+}
+
+process.once('SIGINT', () => gracefulShutdown('SIGINT'));
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'success_page.dart';
 import 'detail_page.dart';
@@ -6,6 +8,8 @@ import '../model/cart_model.dart';
 import '../services/api_service.dart';
 import '../services/session.dart';
 import '../services/razorpay_helper.dart';
+// CODEX EDITS: Durable payment recovery across UPI redirects and process death.
+import '../services/pending_payment_service.dart';
 
 class CheckoutPage extends StatefulWidget {
   final List<OrderItem>? items;
@@ -25,7 +29,10 @@ class CheckoutPage extends StatefulWidget {
   State<CheckoutPage> createState() => _CheckoutPageState();
 }
 
-class _CheckoutPageState extends State<CheckoutPage> {
+// CODEX EDITS: Observe app resume so returning from a UPI app always reconciles
+// against Razorpay through the backend, even if the SDK callback is lost.
+class _CheckoutPageState extends State<CheckoutPage>
+    with WidgetsBindingObserver {
   final Color primaryColor = const Color(0xFF0F4CFF);
 
   String selectedMethod = "";
@@ -41,6 +48,11 @@ class _CheckoutPageState extends State<CheckoutPage> {
   // SuccessPage navigation, payment failure, or recovery giving up. Drives the
   // full-screen loader shown when the user returns from an external UPI app.
   bool _awaitingPayment = false;
+  // CODEX EDITS: Guards prevent lifecycle, webhook recovery, and SDK callbacks
+  // from navigating twice or issuing overlapping reconciliation requests.
+  bool _isReconcilingPayment = false;
+  bool _paymentTerminalHandled = false;
+  Timer? _resumeReconcileTimer;
 
   void _setAwaitingPayment(bool value) {
     if (mounted && _awaitingPayment != value) {
@@ -269,13 +281,43 @@ class _CheckoutPageState extends State<CheckoutPage> {
   void initState() {
     super.initState();
     selectedMethod = "upi";
-    initRazorpay(_handleRazorpaySuccess, _handleRazorpayError);
+    // CODEX EDITS: Wallet selection has its own non-failure callback.
+    initRazorpay(
+      _handleRazorpaySuccess,
+      _handleRazorpayError,
+      onExternalWallet: _handleExternalWallet,
+    );
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // CODEX EDITS: Reconcile when Checkout is reopened after process death.
+      _restorePendingPayment();
+    });
   }
 
   @override
   void dispose() {
+    // CODEX EDITS: Release lifecycle/debounce resources before SDK callbacks.
+    WidgetsBinding.instance.removeObserver(this);
+    _resumeReconcileTimer?.cancel();
     disposeRazorpay();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed ||
+        !_awaitingPayment ||
+        _paymentTerminalHandled) {
+      return;
+    }
+    // CODEX EDITS: Let the Razorpay plugin deliver its native result first;
+    // reconciliation then covers missing/late callbacks without racing it.
+    _resumeReconcileTimer?.cancel();
+    _resumeReconcileTimer = Timer(const Duration(milliseconds: 900), () {
+      if (mounted && !_paymentTerminalHandled) {
+        _reconcilePendingPayment(pollAttempts: 3, showPendingMessage: false);
+      }
+    });
   }
 
   @override
@@ -697,6 +739,40 @@ class _CheckoutPageState extends State<CheckoutPage> {
     if (isSubmitting) return;
     setState(() => isSubmitting = true);
 
+    // CODEX EDITS: Resolve or safely reopen an existing Razorpay order before
+    // validating a new cart or creating another chargeable order.
+    try {
+      final pending = await PendingPaymentService.loadForCurrentUser();
+      if (pending != null) {
+        _setAwaitingPayment(true);
+        final result = await _reconcilePendingPayment(
+          pollAttempts: 1,
+          showPendingMessage: false,
+        );
+        if (_paymentTerminalHandled) {
+          if (mounted) setState(() => isSubmitting = false);
+          return;
+        }
+        final state = result?['state']?.toString();
+        if (state != 'expired') {
+          if (_razorpayOrder != null && (_razorpayKeyId?.isNotEmpty ?? false)) {
+            _setAwaitingPayment(true);
+            await _openRazorpayCheckout();
+          } else {
+            _setAwaitingPayment(false);
+            _showPaymentPending();
+          }
+          if (mounted) setState(() => isSubmitting = false);
+          return;
+        }
+      }
+    } catch (_) {
+      _setAwaitingPayment(false);
+      _showPaymentPending();
+      if (mounted) setState(() => isSubmitting = false);
+      return;
+    }
+
     final orderItems = _orderItems();
     if (orderItems.isEmpty) {
       setState(() => isSubmitting = false);
@@ -741,6 +817,9 @@ class _CheckoutPageState extends State<CheckoutPage> {
 
       _razorpayOrder = Map<String, dynamic>.from(data['razorpayOrder'] as Map);
       _razorpayKeyId = data['razorpayKeyId']?.toString();
+      // CODEX EDITS: Persist before opening native Checkout so immediate
+      // process death or UPI switching cannot orphan the payment.
+      await PendingPaymentService.save(_razorpayOrder?['id']?.toString() ?? '');
       _setAwaitingPayment(true);
       await _openRazorpayCheckout();
     } catch (error) {
@@ -794,70 +873,143 @@ class _CheckoutPageState extends State<CheckoutPage> {
     );
   }
 
-  void _handleRazorpayError(String? message) {
-    final errorMessage =
-        (message == null ||
-            message.trim().isEmpty ||
-            message.trim().toLowerCase() == 'undefined' ||
-            message.trim().toLowerCase() == 'null')
-        ? 'Try again'
-        : message;
-
-    // Razorpay reports "This order has already been paid" when the payment
-    // actually succeeded but the checkout lost the success event (common on
-    // UPI app redirects) and re-attempted the same order. The money was taken,
-    // so recover the order created by the server webhook instead of showing a
-    // false decline.
-    final normalized = errorMessage.toLowerCase();
-    if (normalized.contains('already') && normalized.contains('paid')) {
-      // Keep the loader up while recovery polls for the webhook-created order.
-      _recoverPaidOrder(fallbackError: 'Payment failed: $errorMessage');
-      return;
-    }
-
-    _setAwaitingPayment(false);
-    _showError('Payment failed: $errorMessage');
+  // CODEX EDITS: Every SDK error is indeterminate until the authenticated
+  // backend checks Razorpay. No message-text matching or false terminal failure.
+  Future<void> _handleRazorpayError(Map<String, dynamic> sdkError) async {
+    if (_paymentTerminalHandled) return;
+    _setAwaitingPayment(true);
+    await _reconcilePendingPayment(
+      sdkError: sdkError,
+      pollAttempts: 6,
+      showPendingMessage: true,
+    );
   }
 
-  /// Polls the backend for the order created by the Razorpay webhook when the
-  /// payment succeeded but the app never received the success callback.
-  Future<void> _recoverPaidOrder({required String fallbackError}) async {
-    final razorpayOrderId = _razorpayOrder?['id']?.toString();
-    if (razorpayOrderId == null || razorpayOrderId.isEmpty) {
-      _setAwaitingPayment(false);
-      _showError(fallbackError);
-      return;
-    }
+  // CODEX EDITS: Selecting an external wallet is a continuation, not failure.
+  void _handleExternalWallet(String walletName) {
+    if (!mounted || _paymentTerminalHandled) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Continue payment in $walletName'),
+        backgroundColor: primaryColor,
+      ),
+    );
+  }
 
-    for (var attempt = 0; attempt < 6; attempt++) {
-      try {
-        final order = await ApiService.getOrderByRazorpayOrderId(
-          razorpayOrderId,
+  // CODEX EDITS: Restore and reconcile a payment whenever Checkout itself is
+  // reopened. The backend returns checkoutOrder for safe same-order retry.
+  Future<void> _restorePendingPayment() async {
+    if (!mounted || _paymentTerminalHandled) return;
+    final pending = await PendingPaymentService.loadForCurrentUser();
+    if (!mounted || pending == null) return;
+    _setAwaitingPayment(true);
+    await _reconcilePendingPayment(pollAttempts: 1, showPendingMessage: true);
+  }
+
+  // CODEX EDITS: Single reconciliation gate shared by error, resume, reopen,
+  // confirm failure, and retry paths.
+  Future<Map<String, dynamic>?> _reconcilePendingPayment({
+    Map<String, dynamic>? sdkError,
+    int pollAttempts = 1,
+    bool showPendingMessage = false,
+  }) async {
+    if (_isReconcilingPayment || _paymentTerminalHandled) return null;
+    _isReconcilingPayment = true;
+    Map<String, dynamic>? latest;
+    try {
+      for (var attempt = 0; attempt < pollAttempts; attempt++) {
+        latest = await PendingPaymentService.reconcile(
+          sdkError: attempt == 0 ? sdkError : null,
         );
-        if (!mounted) return;
-        globalCartItems.clear();
-        CartModel.clear();
-        await saveCart();
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
-        );
-        return;
-      } catch (_) {
-        await Future.delayed(const Duration(seconds: 2));
+        if (!mounted || _paymentTerminalHandled) return latest;
+        if (latest == null) break;
+
+        final state = latest['state']?.toString();
+        if (state == 'captured' && latest['order'] is Map) {
+          await _finishSuccessfulPayment(
+            Map<String, dynamic>.from(latest['order'] as Map),
+          );
+          return latest;
+        }
+        if (state == 'expired') {
+          _setAwaitingPayment(false);
+          if (showPendingMessage) {
+            _showError(
+              'The previous payment session expired. No confirmed payment was found.',
+            );
+          }
+          return latest;
+        }
+
+        // Preserve the server-returned order/key so Pay retries this exact
+        // Razorpay order instead of charging through a new one.
+        final checkoutOrder = latest['checkoutOrder'];
+        if (checkoutOrder is Map) {
+          _razorpayOrder = Map<String, dynamic>.from(checkoutOrder);
+        }
+        final returnedKey = latest['razorpayKeyId']?.toString();
+        if (returnedKey != null && returnedKey.isNotEmpty) {
+          _razorpayKeyId = returnedKey;
+        }
+
+        if (attempt + 1 < pollAttempts) {
+          await Future.delayed(const Duration(seconds: 2));
+        }
       }
-    }
 
-    if (mounted) {
-      _setAwaitingPayment(false);
-      _showError(
-        'Payment received — order confirmation is delayed. Please check My Orders in a moment before paying again.',
-      );
+      if (mounted && !_paymentTerminalHandled) {
+        _setAwaitingPayment(false);
+        if (showPendingMessage) _showPaymentPending();
+      }
+      return latest;
+    } catch (error) {
+      if (mounted && !_paymentTerminalHandled) {
+        _setAwaitingPayment(false);
+        if (showPendingMessage) _showPaymentPending();
+      }
+      return latest;
+    } finally {
+      _isReconcilingPayment = false;
     }
+  }
+
+  // CODEX EDITS: Pending is deliberately neutral and instructs against a
+  // second charge while webhook/API confirmation is still in flight.
+  void _showPaymentPending() {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Payment is still being verified. Do not start a new payment; tap Pay to safely resume this same order.',
+        ),
+        backgroundColor: Color(0xFFF59E0B),
+        duration: Duration(seconds: 6),
+      ),
+    );
+  }
+
+  // CODEX EDITS: Exactly-once UI completion protects against simultaneous SDK,
+  // lifecycle, and webhook reconciliation results.
+  Future<void> _finishSuccessfulPayment(Map<String, dynamic> order) async {
+    if (_paymentTerminalHandled) return;
+    _paymentTerminalHandled = true;
+    _resumeReconcileTimer?.cancel();
+    final providerOrderId = order['payment'] is Map
+        ? (order['payment'] as Map)['providerOrderId']?.toString()
+        : _razorpayOrder?['id']?.toString();
+    await PendingPaymentService.clear(expectedOrderId: providerOrderId);
+    globalCartItems.clear();
+    CartModel.clear();
+    await saveCart();
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
+    );
   }
 
   Future<void> _handleRazorpaySuccess(Map<String, dynamic> response) async {
+    if (_paymentTerminalHandled) return;
     try {
       // Step 2: server verifies HMAC signature, retrieves server-side cart,
       // and creates the DB order only now — after confirmed payment.
@@ -867,23 +1019,18 @@ class _CheckoutPageState extends State<CheckoutPage> {
         razorpaySignature: response['signature']?.toString() ?? '',
       );
 
-      if (!mounted) return;
-      // Clear cart now that order is placed
-      globalCartItems.clear();
-      CartModel.clear();
-      await saveCart();
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
-      );
+      // CODEX EDITS: Share exactly-once completion with every recovery path.
+      await _finishSuccessfulPayment(order);
     } catch (error) {
-      // Payment definitely succeeded (Razorpay fired the success event) — the
-      // server webhook creates the order even when this confirm call fails,
-      // so recover it rather than reporting a verification failure.
-      await _recoverPaidOrder(
-        fallbackError:
-            'Payment verification error: ${error.toString().replaceFirst("Exception: ", "")}',
+      // CODEX EDITS: Confirmation transport errors are reconciled, never shown
+      // as payment failures after Razorpay has emitted success.
+      await _reconcilePendingPayment(
+        sdkError: {
+          'code': 'confirm_transport_error',
+          'message': error.toString().replaceFirst('Exception: ', ''),
+        },
+        pollAttempts: 6,
+        showPendingMessage: true,
       );
     }
   }

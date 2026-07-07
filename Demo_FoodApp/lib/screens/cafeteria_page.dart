@@ -1,9 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
 import '../model/notification_model.dart';
 import '../services/session.dart';
+import '../widgets/smooth_marquee_text.dart';
 import 'home_page.dart';
 import 'profile_page.dart';
 import 'notification_page.dart';
@@ -59,7 +61,9 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
       cafes = await ApiService.getCafes();
       if (AppSession.isLoggedIn) {
         try {
-          final ratings = await ApiService.getUserRatings(AppSession.userId);
+          final firebaseUid =
+              FirebaseAuth.instance.currentUser?.uid ?? AppSession.userId;
+          final ratings = await ApiService.getUserRatings(firebaseUid);
           _userRatings.addAll(ratings);
         } catch (_) {}
       }
@@ -117,31 +121,31 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
           backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildHeroSection(isDark),
-              const SizedBox(height: 30),
-              Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1180),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildSectionHeader(isDark),
-                        const SizedBox(height: 16),
-                        _buildCafeGrid(isDark, isMobile, isWide),
-                        const SizedBox(height: 120),
-                      ],
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildHeroSection(isDark),
+                const SizedBox(height: 30),
+                Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1180),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildSectionHeader(isDark),
+                          const SizedBox(height: 16),
+                          _buildCafeGrid(isDark, isMobile, isWide),
+                          const SizedBox(height: 120),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ),
       ),
       bottomNavigationBar: CustomFloatingNavBar(
@@ -372,7 +376,9 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
   }
 
   Widget _buildSearchBar(bool isDark) {
-    final hintColor = isDark ? const Color.fromARGB(137, 178, 173, 173) : const Color.fromARGB(255, 105, 103, 103);
+    final hintColor = isDark
+        ? const Color.fromARGB(137, 178, 173, 173)
+        : const Color.fromARGB(255, 105, 103, 103);
     final showAnimatedHint = searchQuery.isEmpty && !_searchFocusNode.hasFocus;
 
     return Container(
@@ -821,277 +827,289 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
         opacity: isActive ? 1.0 : 0.45,
         child: Stack(
           children: [
-        Container(
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF0F172A) : Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                Builder(
-                  builder: (context) {
-                    final imagePath = cafe['image']?.toString() ?? '';
-                    if (imagePath.startsWith('data:image/')) {
-                      final b64 = imagePath.split(',').last;
-                      return Image.memory(
-                        base64Decode(b64),
-                        height: 190,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            _cafeImagePlaceholder(isDark),
-                      );
-                    }
-                    if (imagePath.contains('assets/')) {
-                      return Image.asset(
-                        imagePath,
-                        height: 190,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) =>
-                            _cafeImagePlaceholder(isDark),
-                      );
-                    }
-                    if (imagePath.isEmpty) {
-                      return _cafeImagePlaceholder(isDark);
-                    }
-                    return Image.network(
-                      imagePath,
-                      height: 190,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          _cafeImagePlaceholder(isDark),
-                    );
-                  },
-                ),
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      (cafe['offer']?.toString().trim().isNotEmpty ?? false)
-                          ? cafe['offer'].toString()
-                          : 'Fresh & Fast',
-
-                      style: const TextStyle(
-                        fontFamily: 'Nunito',
-                        color: Color.fromARGB(255, 255, 244, 244),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+            Container(
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF0F172A) : Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10),
                   ),
-                ),
-                Positioned(
-                  top: 16,
-                  right: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 8,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Text(
-                      isActive
-                          ? (cafe['time']?.toString() ?? 'Instant')
-                          : 'Currently Unavailable',
-                      style: TextStyle(
-                        fontFamily: 'Nunito',
-                        color: isActive ? appBlue : Colors.red.shade700,
-                        fontWeight: FontWeight.w800,
-                        fontSize: 12,
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
+                    children: [
+                      Builder(
+                        builder: (context) {
+                          final imagePath = cafe['image']?.toString() ?? '';
+                          if (imagePath.startsWith('data:image/')) {
+                            final b64 = imagePath.split(',').last;
+                            return Image.memory(
+                              base64Decode(b64),
+                              height: 190,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  _cafeImagePlaceholder(isDark),
+                            );
+                          }
+                          if (imagePath.contains('assets/')) {
+                            return Image.asset(
+                              imagePath,
+                              height: 190,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) =>
+                                  _cafeImagePlaceholder(isDark),
+                            );
+                          }
+                          if (imagePath.isEmpty) {
+                            return _cafeImagePlaceholder(isDark);
+                          }
+                          return Image.network(
+                            imagePath,
+                            height: 190,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) =>
+                                _cafeImagePlaceholder(isDark),
+                          );
+                        },
                       ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      cafe['name']?.toString() ?? 'Unnamed Cafe',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontFamily: 'Nunito',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        height: 1.2,
-                        color: isDark ? Colors.white : const Color(0xFF081F47),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Container(
+                      Positioned(
+                        top: 16,
+                        left: 16,
+                        child: Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
+                            horizontal: 14,
+                            vertical: 8,
                           ),
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.1)
-                                : const Color(0xFFE8F0FF),
-                            borderRadius: BorderRadius.circular(10),
+                            color: Colors.black.withValues(alpha: 0.35),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.star_rounded,
-                                color: Color(0xFFFFC107),
-                                size: 16,
+                          child: Text(
+                            (cafe['offer']?.toString().trim().isNotEmpty ??
+                                    false)
+                                ? cafe['offer'].toString()
+                                : 'Fresh & Fast',
+
+                            style: const TextStyle(
+                              fontFamily: 'Nunito',
+                              color: Color.fromARGB(255, 255, 244, 244),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
                               ),
-                              const SizedBox(width: 4),
+                            ],
+                          ),
+                          child: Text(
+                            isActive
+                                ? (cafe['time']?.toString() ?? 'Instant')
+                                : 'Currently Unavailable',
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              color: isActive ? appBlue : Colors.red.shade700,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            cafe['name']?.toString() ?? 'Unnamed Cafe',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'Nunito',
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              height: 1.2,
+                              color: isDark
+                                  ? Colors.white
+                                  : const Color(0xFF081F47),
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.1)
+                                      : const Color(0xFFE8F0FF),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      color: Color(0xFFFFC107),
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      '${cafe['rating']}',
+                                      style: TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? Colors.white
+                                            : const Color(0xFF10254E),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 10),
                               Text(
-                                '${cafe['rating']}',
+                                '(${cafe['reviews']} reviews)',
                                 style: TextStyle(
                                   fontFamily: 'Inter',
-                                  fontWeight: FontWeight.w700,
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF10254E),
                                   fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : const Color(0xFF6B7280),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cafe['location']?.toString() ??
+                                    'Nearby location',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? Colors.white70
+                                      : const Color(0xFF6B7280),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              SmoothMarqueeText(
+                                '${cafe['cuisine']?.toString() ?? 'Cafe'} • ${cafe['price']?.toString() ?? '₹300 for two'}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : const Color(0xFF8B95A5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Rate Me banner
+                  Builder(
+                    builder: (_) {
+                      final cafeId = cafe['_id']?.toString() ?? '';
+                      final rated = _userRatings.containsKey(cafeId);
+                      final ratedStars = _userRatings[cafeId] ?? 0;
+                      return GestureDetector(
+                        onTap: () => _showRatingDialog(cafe),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: rated
+                                ? const Color(
+                                    0xFFFFC107,
+                                  ).withValues(alpha: 0.12)
+                                : appBlue.withValues(alpha: 0.07),
+                            border: Border(
+                              top: BorderSide(
+                                color: isDark
+                                    ? Colors.white12
+                                    : Colors.grey.shade200,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                rated
+                                    ? Icons.star_rounded
+                                    : Icons.star_outline_rounded,
+                                color: rated
+                                    ? const Color(0xFFFFC107)
+                                    : appBlue,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                rated
+                                    ? ' You Rated  $ratedStars ★   |   Tap to Change'
+                                    : 'Tap to Rate',
+                                style: TextStyle(
+                                  fontFamily: 'Nunito',
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: rated
+                                      ? const Color(0xFFFFC107)
+                                      : appBlue,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Text(
-                          '(${cafe['reviews']} reviews)',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? Colors.white54
-                                : const Color(0xFF6B7280),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          cafe['location']?.toString() ?? 'Nearby location',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? Colors.white70
-                                : const Color(0xFF6B7280),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${cafe['cuisine']?.toString() ?? 'Cafe'} • ${cafe['price']?.toString() ?? '₹300 for two'}',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isDark
-                                ? Colors.white54
-                                : const Color(0xFF8B95A5),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      );
+                    },
+                  ),
+                ],
               ),
             ),
-            // Rate Me banner
-            Builder(
-              builder: (_) {
-                final cafeId = cafe['_id']?.toString() ?? '';
-                final rated = _userRatings.containsKey(cafeId);
-                final ratedStars = _userRatings[cafeId] ?? 0;
-                return GestureDetector(
-                  onTap: () => _showRatingDialog(cafe),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    decoration: BoxDecoration(
-                      color: rated
-                          ? const Color(0xFFFFC107).withValues(alpha: 0.12)
-                          : appBlue.withValues(alpha: 0.07),
-                      border: Border(
-                        top: BorderSide(
-                          color: isDark ? Colors.white12 : Colors.grey.shade200,
-                        ),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          rated
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          color: rated ? const Color(0xFFFFC107) : appBlue,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          rated
-                              ? ' You Rated  $ratedStars ★   |   Tap to Change'
-                              : 'Tap to Rate',
-                          style: TextStyle(
-                            fontFamily: 'Nunito',
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                            color: rated ? const Color(0xFFFFC107) : appBlue,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
           ],
         ),
       ),

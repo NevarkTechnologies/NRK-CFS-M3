@@ -9,11 +9,16 @@ const NotificationSchema = new mongoose.Schema(
     orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
     items: [{ type: String }], // For order-related notifications
     isRead: { type: Boolean, default: false },
+    // CODEX EDITS: Optional idempotency key prevents duplicate in-app order
+    // notifications when an outbox job is retried by another PM2 worker.
+    dedupeKey: { type: String, default: undefined },
   },
   { timestamps: true }
 );
 
 NotificationSchema.index({ userId: 1, createdAt: -1 });
 NotificationSchema.index({ userId: 1, isRead: 1 });
+// CODEX EDITS: Sparse keeps existing promotion/system documents compatible.
+NotificationSchema.index({ dedupeKey: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('Notification', NotificationSchema);
