@@ -90,6 +90,9 @@ Future<void> openRazorpayCheckout(
     'description': 'Food Order',
     'prefill': prefill,
     'theme': {'color': '#0F4CFF'},
+    // CODEX EDITS: Disable Razorpay's in-checkout retry so repeated UPI taps
+    // do not create multiple failed attempts/emails for the same order id.
+    'retry': {'enabled': false},
     // UPI block pinned on top: app intent buttons + QR for the order amount.
     // show_default_blocks stays true so the sheet keeps its default sections
     // (incl. the "Enter UPI ID" collect option) below this block.

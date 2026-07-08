@@ -24,19 +24,31 @@ class _OrdersPageState extends State<OrdersPage> {
   // "Accepted" maps to Preparing status per the spec
   static const _tabs = ['All', 'To Accept', 'Preparing', 'Ready', 'Completed'];
   // Status values that each tab filters by (null = show all)
-  static const _tabStatus = [null, 'Pending', 'Preparing', 'Ready', 'Completed'];
+  static const _tabStatus = [
+    null,
+    'Pending',
+    'Preparing',
+    'Ready',
+    'Completed',
+  ];
   int _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
     loadOrders();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _silentRefresh());
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _silentRefresh(),
+    );
   }
 
   Future<void> _silentRefresh() async {
     try {
-      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString(), date: _todayIst());
+      final data = await ApiService.getOrders(
+        cafeId: AppSession.cafe?["_id"]?.toString(),
+        date: _todayIst(),
+      );
       if (!mounted) return;
       setState(() => orders = data.map(_mapApiOrder).toList());
     } catch (_) {}
@@ -49,9 +61,15 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> loadOrders() async {
-    setState(() { isLoading = true; loadError = null; });
+    setState(() {
+      isLoading = true;
+      loadError = null;
+    });
     try {
-      final data = await ApiService.getOrders(cafeId: AppSession.cafe?["_id"]?.toString(), date: _todayIst());
+      final data = await ApiService.getOrders(
+        cafeId: AppSession.cafe?["_id"]?.toString(),
+        date: _todayIst(),
+      );
       if (!mounted) return;
       setState(() {
         orders = data.map(_mapApiOrder).toList();
@@ -76,17 +94,36 @@ class _OrdersPageState extends State<OrdersPage> {
       "items": order["items"] ?? [],
       "location": order["location"] ?? "Pickup counter",
       "pickupTime": order["pickupTime"] ?? "",
+      // CODEX EDITS: Keep order creation time available for the compact
+      // timestamp shown under the pickup location.
+      "createdAt": order["createdAt"] ?? "",
       "cafeteriaName": order["cafeteriaName"] ?? "Cafeteria",
     };
   }
 
   String _todayIst() {
-    final ist = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    final ist = DateTime.now().toUtc().add(
+      const Duration(hours: 5, minutes: 30),
+    );
     return '${ist.year.toString().padLeft(4, '0')}-${ist.month.toString().padLeft(2, '0')}-${ist.day.toString().padLeft(2, '0')}';
   }
 
   /// Parse the pickupTime ISO string for sorting. Null-safe: empty string sorts last.
   DateTime? _parsePickup(String t) => t.isEmpty ? null : DateTime.tryParse(t);
+
+  int _tokenValue(Map<String, dynamic> order) =>
+      int.tryParse(order["tokenNumber"]?.toString() ?? '') ?? -1;
+
+  // CODEX EDITS: Tiny local ordering time for vendor order cards.
+  String _formatOrderTime(String raw) {
+    final parsed = DateTime.tryParse(raw);
+    if (parsed == null) return '';
+    final local = parsed.toLocal();
+    final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+    final minute = local.minute.toString().padLeft(2, '0');
+    final ampm = local.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm';
+  }
 
   List<Map<String, dynamic>> get _filteredOrders {
     final statusFilter = _tabStatus[_selectedTab];
@@ -118,6 +155,11 @@ class _OrdersPageState extends State<OrdersPage> {
       });
     } else {
       result = orders.where((o) => o["status"] == statusFilter).toList();
+      if (statusFilter == 'Completed') {
+        // CODEX EDITS: Completed filter shows newest/highest token first.
+        result.sort((a, b) => _tokenValue(b).compareTo(_tokenValue(a)));
+        return result;
+      }
       // Sort by pickup time ascending within the tab
       result.sort((a, b) {
         final aTime = _parsePickup(a["pickupTime"] as String);
@@ -133,7 +175,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
   int _countForTab(int tabIndex) {
     final s = _tabStatus[tabIndex];
-    if (s == null) return orders.where((o) => o["status"] != 'Completed').length;
+    if (s == null) {
+      return orders.where((o) => o["status"] != 'Completed').length;
+    }
     return orders.where((o) => o["status"] == s).length;
   }
 
@@ -166,17 +210,30 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildBody(Color cardColor, Color textColor, Color subText, bool isDark) {
-    if (isLoading) return Center(child: CircularProgressIndicator(color: primaryBlue));
+  Widget _buildBody(
+    Color cardColor,
+    Color textColor,
+    Color subText,
+    bool isDark,
+  ) {
+    if (isLoading) {
+      return Center(child: CircularProgressIndicator(color: primaryBlue));
+    }
 
     if (loadError != null) {
-      return ListView(padding: const EdgeInsets.all(24), children: [
-        Text("Could not load orders", style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        Text(loadError!, style: TextStyle(color: subText)),
-        const SizedBox(height: 16),
-        ElevatedButton(onPressed: loadOrders, child: const Text("Retry")),
-      ]);
+      return ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          Text(
+            "Could not load orders",
+            style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(loadError!, style: TextStyle(color: subText)),
+          const SizedBox(height: 16),
+          ElevatedButton(onPressed: loadOrders, child: const Text("Retry")),
+        ],
+      );
     }
 
     final visible = _filteredOrders;
@@ -199,9 +256,16 @@ class _OrdersPageState extends State<OrdersPage> {
                     onTap: () => setState(() => _selectedTab = i),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
                       decoration: BoxDecoration(
-                        color: selected ? primaryBlue : (isDark ? Colors.white10 : const Color(0xFFF4F6F9)),
+                        color: selected
+                            ? primaryBlue
+                            : (isDark
+                                  ? Colors.white10
+                                  : const Color(0xFFF4F6F9)),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -213,15 +277,22 @@ class _OrdersPageState extends State<OrdersPage> {
                               fontFamily: 'Inter',
                               fontWeight: FontWeight.w700,
                               fontSize: 13,
-                              color: selected ? Colors.white : (isDark ? Colors.white70 : textColor),
+                              color: selected
+                                  ? Colors.white
+                                  : (isDark ? Colors.white70 : textColor),
                             ),
                           ),
                           if (count > 0) ...[
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
-                                color: selected ? Colors.white.withValues(alpha: 0.3) : primaryBlue,
+                                color: selected
+                                    ? Colors.white.withValues(alpha: 0.3)
+                                    : primaryBlue,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Text(
@@ -248,20 +319,46 @@ class _OrdersPageState extends State<OrdersPage> {
         Expanded(
           child: visible.isEmpty
               ? Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.shopping_bag_outlined, size: 64, color: subText),
-                    const SizedBox(height: 12),
-                    Text("No orders here", style: TextStyle(color: subText, fontWeight: FontWeight.w600)),
-                  ]),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.shopping_bag_outlined,
+                        size: 64,
+                        color: subText,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        "No orders here",
+                        style: TextStyle(
+                          color: subText,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
                 )
               : ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   itemCount: visible.length,
                   itemBuilder: (context, index) {
-                    return buildOrderCard(visible[index], cardColor, textColor, subText, isDark)
+                    return buildOrderCard(
+                          visible[index],
+                          cardColor,
+                          textColor,
+                          subText,
+                          isDark,
+                        )
                         .animate()
                         .fade(delay: (60 * index).ms)
-                        .slideY(begin: 0.15, end: 0, curve: Curves.easeOutCubic);
+                        .slideY(
+                          begin: 0.15,
+                          end: 0,
+                          curve: Curves.easeOutCubic,
+                        );
                   },
                 ),
         ),
@@ -269,7 +366,13 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget buildOrderCard(Map<String, dynamic> order, Color cardColor, Color textColor, Color subText, bool isDark) {
+  Widget buildOrderCard(
+    Map<String, dynamic> order,
+    Color cardColor,
+    Color textColor,
+    Color subText,
+    bool isDark,
+  ) {
     final pickupRaw = order["pickupTime"] as String? ?? '';
     final pickupDt = _parsePickup(pickupRaw);
     String pickupLabel = '';
@@ -279,6 +382,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final p = pickupDt.hour < 12 ? 'AM' : 'PM';
       pickupLabel = '$h:$m $p';
     }
+    final orderTime = _formatOrderTime(order["createdAt"]?.toString() ?? '');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -286,7 +390,13 @@ class _OrdersPageState extends State<OrdersPage> {
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -300,14 +410,36 @@ class _OrdersPageState extends State<OrdersPage> {
                     if ((order["tokenNumber"] as String? ?? '').isNotEmpty)
                       Container(
                         margin: const EdgeInsets.only(bottom: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(color: primaryBlue, borderRadius: BorderRadius.circular(10)),
-                        child: Text('TOKEN #${order["tokenNumber"]}',
-                          style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 14, color: Colors.white, letterSpacing: 1)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: primaryBlue,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          'TOKEN #${order["tokenNumber"]}',
+                          style: const TextStyle(
+                            fontFamily: 'Nunito',
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                            color: Colors.white,
+                            letterSpacing: 1,
+                          ),
+                        ),
                       ),
-                    Text("Order #${order["id"]}",
-                      style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w500, fontSize: 11, color: textColor.withValues(alpha: 0.5)),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      "Order #${order["id"]}",
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w500,
+                        fontSize: 11,
+                        color: textColor.withValues(alpha: 0.5),
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -316,39 +448,107 @@ class _OrdersPageState extends State<OrdersPage> {
             ],
           ),
           const SizedBox(height: 6),
-          Text("Customer: ${order["customer"]}",
-              style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w600, color: subText, fontSize: 14),
-              maxLines: 1, overflow: TextOverflow.ellipsis),
+          Text(
+            "Customer: ${order["customer"]}",
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontWeight: FontWeight.w600,
+              color: subText,
+              fontSize: 14,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           if (pickupLabel.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Row(children: [
-              Icon(Icons.access_time_rounded, size: 15, color: primaryBlue),
-              const SizedBox(width: 5),
-              Text("Pickup by $pickupLabel",
-                  style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w700, color: primaryBlue)),
-            ]),
+            Row(
+              children: [
+                Icon(Icons.access_time_rounded, size: 15, color: primaryBlue),
+                const SizedBox(width: 5),
+                Text(
+                  "Pickup by $pickupLabel",
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: primaryBlue,
+                  ),
+                ),
+              ],
+            ),
           ],
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Divider(color: isDark ? Colors.white12 : Colors.grey.shade200, thickness: 1.5),
+            child: Divider(
+              color: isDark ? Colors.white12 : Colors.grey.shade200,
+              thickness: 1.5,
+            ),
           ),
-          ...order["items"].map<Widget>((item) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(children: [
-                  Expanded(child: Text("${item["name"]}  x${item["qty"]}",
-                      style: TextStyle(fontFamily: 'Inter', color: textColor, fontWeight: FontWeight.w500))),
-                  Text("₹${item["price"]}",
-                      style: TextStyle(fontFamily: 'Nunito', color: textColor, fontWeight: FontWeight.w800)),
-                ]),
-              )),
+          ...order["items"].map<Widget>(
+            (item) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      "${item["name"]}  x${item["qty"]}",
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: textColor,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    "₹${item["price"]}",
+                    style: TextStyle(
+                      fontFamily: 'Nunito',
+                      color: textColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           const SizedBox(height: 8),
-          Row(children: [
-            Icon(Icons.location_on_rounded, size: 16, color: Colors.redAccent),
-            const SizedBox(width: 6),
-            Expanded(child: Text(order["location"],
-                style: TextStyle(fontFamily: 'Inter', color: subText, fontWeight: FontWeight.w500),
-                maxLines: 1, overflow: TextOverflow.ellipsis)),
-          ]),
+          Row(
+            children: [
+              Icon(
+                Icons.location_on_rounded,
+                size: 16,
+                color: Colors.redAccent,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  order["location"],
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    color: subText,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          if (orderTime.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Text(
+                'Ordered at $orderTime',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  color: subText.withValues(alpha: 0.72),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 18),
           buildButtons(order),
         ],
@@ -359,26 +559,64 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget buildButtons(Map<String, dynamic> order) {
     final status = order["status"] as String;
     if (status == "Pending") {
-      return Row(children: [
-        Expanded(child: _actionBtn("Accept", Colors.green, () => _setOrderStatus(order, "Preparing"))),
-        const SizedBox(width: 12),
-        Expanded(child: _actionBtn("Reject", Colors.redAccent, () => _setOrderStatus(order, "Rejected"))),
-      ]);
+      return Row(
+        children: [
+          Expanded(
+            child: _actionBtn(
+              "Accept",
+              Colors.green,
+              () => _setOrderStatus(order, "Preparing"),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _actionBtn(
+              "Reject",
+              Colors.redAccent,
+              () => _setOrderStatus(order, "Rejected"),
+            ),
+          ),
+        ],
+      );
     }
     if (status == "Preparing") {
-      return SizedBox(width: double.infinity,
-          child: _actionBtn("Mark as Ready", primaryBlue, () => _setOrderStatus(order, "Ready")));
+      return SizedBox(
+        width: double.infinity,
+        child: _actionBtn(
+          "Mark as Ready",
+          primaryBlue,
+          () => _setOrderStatus(order, "Ready"),
+        ),
+      );
     }
     if (status == "Ready") {
-      return SizedBox(width: double.infinity,
-          child: _actionBtn("Mark as Picked Up", Colors.teal, () => _setOrderStatus(order, "Completed")));
+      return SizedBox(
+        width: double.infinity,
+        child: _actionBtn(
+          "Mark as Picked Up",
+          Colors.teal,
+          () => _setOrderStatus(order, "Completed"),
+        ),
+      );
     }
     if (status == "Completed") {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
-        decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(16)),
-        child: const Center(child: Text("Order Completed", style: TextStyle(fontFamily: 'Inter', color: Colors.green, fontWeight: FontWeight.bold))),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Center(
+          child: Text(
+            "Order Completed",
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: Colors.green,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
       );
     }
     return const SizedBox();
@@ -388,15 +626,27 @@ class _OrdersPageState extends State<OrdersPage> {
     return ElevatedButton(
       onPressed: onTap,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color, foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(vertical: 14), elevation: 0,
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      child: Text(text, style: const TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 15)),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontFamily: 'Nunito',
+          fontWeight: FontWeight.bold,
+          fontSize: 15,
+        ),
+      ),
     );
   }
 
-  Future<void> _setOrderStatus(Map<String, dynamic> order, String status) async {
+  Future<void> _setOrderStatus(
+    Map<String, dynamic> order,
+    String status,
+  ) async {
     final prev = order["status"];
     setState(() => order["status"] = status);
     try {
@@ -406,10 +656,12 @@ class _OrdersPageState extends State<OrdersPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() => order["status"] = prev);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(error.toString().replaceFirst("Exception: ", "")),
-        backgroundColor: Colors.redAccent,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst("Exception: ", "")),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
     }
   }
 
@@ -424,9 +676,20 @@ class _OrdersPageState extends State<OrdersPage> {
     final color = colors[status] ?? Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
-      child: Text(status.toUpperCase(),
-          style: TextStyle(fontFamily: 'Inter', color: color, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        status.toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'Inter',
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
+        ),
+      ),
     );
   }
 }

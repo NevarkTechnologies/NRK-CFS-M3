@@ -51,6 +51,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final itemCounts = <String, Map<String, dynamic>>{};
       final revenuePerDay = <String, double>{};
       final ordersPerDay = <String, int>{};
+      final last7Days = List.generate(7, (index) {
+        final day = _toIst(DateTime.now()).subtract(Duration(days: 6 - index));
+        return _dayKey(day);
+      }).toSet();
 
       for (final order in orders) {
         final customer = order['customerName']?.toString().trim();
@@ -61,44 +65,68 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         final createdAt = order['createdAt'];
         DateTime date;
         try {
-          date = DateTime.parse(createdAt?.toString() ?? '');
+          // CODEX EDITS: MongoDB timestamps are UTC; analytics are grouped by
+          // IST business day so 1 AM orders count under today's bar.
+          date = _toIst(DateTime.parse(createdAt?.toString() ?? ''));
         } catch (_) {
-          date = DateTime.now();
+          date = _toIst(DateTime.now());
         }
-        final key = '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-        final baseAmt = order['itemTotal'] is num ? (order['itemTotal'] as num).toDouble() : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
+        final key = _dayKey(date);
+        final baseAmt = order['itemTotal'] is num
+            ? (order['itemTotal'] as num).toDouble()
+            : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
         revenuePerDay[key] = (revenuePerDay[key] ?? 0) + baseAmt;
         ordersPerDay[key] = (ordersPerDay[key] ?? 0) + 1;
 
+        // CODEX EDITS: Top-selling items should reflect the same weekly window
+        // as the revenue/order charts, not all-time cafe history.
+        if (!last7Days.contains(key)) continue;
         final items = (order['items'] as List<dynamic>?) ?? [];
         for (final itemRaw in items) {
           final item = Map<String, dynamic>.from(itemRaw as Map);
           final itemName = item['name']?.toString() ?? 'Unknown';
-          final count = item['qty'] is num ? (item['qty'] as num).toInt() : int.tryParse(item['qty']?.toString() ?? '1') ?? 1;
-          final price = item['price'] is num ? (item['price'] as num).toDouble() : double.tryParse(item['price']?.toString() ?? '0') ?? 0;
-          itemCounts[itemName] ??= {'name': itemName, 'orders': 0, 'revenue': 0.0};
-          itemCounts[itemName]!['orders'] = (itemCounts[itemName]!['orders'] as int) + count;
-          itemCounts[itemName]!['revenue'] = (itemCounts[itemName]!['revenue'] as double) + price * count;
+          final count = item['qty'] is num
+              ? (item['qty'] as num).toInt()
+              : int.tryParse(item['qty']?.toString() ?? '1') ?? 1;
+          final price = item['price'] is num
+              ? (item['price'] as num).toDouble()
+              : double.tryParse(item['price']?.toString() ?? '0') ?? 0;
+          itemCounts[itemName] ??= {
+            'name': itemName,
+            'orders': 0,
+            'revenue': 0.0,
+          };
+          itemCounts[itemName]!['orders'] =
+              (itemCounts[itemName]!['orders'] as int) + count;
+          itemCounts[itemName]!['revenue'] =
+              (itemCounts[itemName]!['revenue'] as double) + price * count;
         }
       }
 
-      final sortedItems = itemCounts.values.toList()..sort((a, b) => (b['orders'] as int).compareTo(a['orders'] as int));
-      final last7Days = List.generate(7, (index) {
-        final day = DateTime.now().subtract(Duration(days: 6 - index));
-        return '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}';
-      });
+      final sortedItems = itemCounts.values.toList()
+        ..sort((a, b) => (b['orders'] as int).compareTo(a['orders'] as int));
+      final last7DayKeys = last7Days.toList()..sort();
 
       setState(() {
         totalOrders = (data['totalOrders'] as num?)?.toInt() ?? 0;
         revenue = (data['revenue'] as num?)?.toInt() ?? 0;
         uniqueCustomers = customers.length;
-        weeklyRevenue = last7Days.map((key) => revenuePerDay[key] ?? 0).toList();
-        weeklyOrders = last7Days.map((key) => ordersPerDay[key] ?? 0).toList();
-        topItems = sortedItems.take(5).map((item) => {
-              'name': item['name'],
-              'orders': item['orders'],
-              'revenue': item['revenue'],
-            }).toList();
+        weeklyRevenue = last7DayKeys
+            .map((key) => revenuePerDay[key] ?? 0)
+            .toList();
+        weeklyOrders = last7DayKeys
+            .map((key) => ordersPerDay[key] ?? 0)
+            .toList();
+        topItems = sortedItems
+            .take(5)
+            .map(
+              (item) => {
+                'name': item['name'],
+                'orders': item['orders'],
+                'revenue': item['revenue'],
+              },
+            )
+            .toList();
         isLoading = false;
       });
     } catch (_) {
@@ -113,6 +141,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return '₹${amount.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}';
   }
 
+  // CODEX EDITS: Analytics should use IST business dates even though MongoDB
+  // stores createdAt in UTC.
+  DateTime _toIst(DateTime value) =>
+      value.toUtc().add(const Duration(hours: 5, minutes: 30));
+
+  String _dayKey(DateTime date) =>
+      '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -121,7 +157,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     Color textColor = isDark ? Colors.white : const Color(0xFF081F47);
     Color subText = isDark ? Colors.white54 : const Color(0xFF6B7280);
 
-    final averageOrderValue = totalOrders > 0 ? (revenue / totalOrders).round() : 0;
+    final averageOrderValue = totalOrders > 0
+        ? (revenue / totalOrders).round()
+        : 0;
 
     return VendorPageWrapper(
       pageTitle: 'Analytics',
@@ -133,10 +171,19 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              double availableWidth = constraints.maxWidth.clamp(0, double.infinity);
+              double availableWidth = constraints.maxWidth.clamp(
+                0,
+                double.infinity,
+              );
               bool isMobile = MediaQuery.of(context).size.width < 850;
-              double cardWidth = (isMobile ? (availableWidth - 16) / 2 : (availableWidth - 48) / 4).clamp(120.0, 400.0);
-              double graphWidth = isMobile ? availableWidth : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
+              double cardWidth =
+                  (isMobile
+                          ? (availableWidth - 16) / 2
+                          : (availableWidth - 48) / 4)
+                      .clamp(120.0, 400.0);
+              double graphWidth = isMobile
+                  ? availableWidth
+                  : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
 
               return SingleChildScrollView(
                 child: Column(
@@ -144,7 +191,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   children: [
                     Text(
                       "Track ${VendorData.displayName}'s performance",
-                      style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 14),
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: subText,
+                        fontSize: 14,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ).animate().fade(duration: 300.ms),
@@ -156,23 +207,109 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         spacing: 16,
                         runSpacing: 16,
                         children: [
-                          InteractiveScale(onTap: () {}, child: buildCard(formatRupees(revenue), 'Revenue', Icons.currency_rupee, Colors.green, cardColor, textColor, subText, isDark, cardWidth)),
-                          InteractiveScale(onTap: () {}, child: buildCard(totalOrders.toString(), 'Orders', Icons.shopping_bag, primaryBlue, cardColor, textColor, subText, isDark, cardWidth)),
-                          InteractiveScale(onTap: () {}, child: buildCard(formatRupees(averageOrderValue), 'Avg Order', Icons.show_chart, Colors.orange, cardColor, textColor, subText, isDark, cardWidth)),
-                          InteractiveScale(onTap: () {}, child: buildCard(uniqueCustomers.toString(), 'Customers', Icons.people, Colors.teal, cardColor, textColor, subText, isDark, cardWidth)),
+                          InteractiveScale(
+                            onTap: () {},
+                            child: buildCard(
+                              formatRupees(revenue),
+                              'Revenue',
+                              Icons.currency_rupee,
+                              Colors.green,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
+                          ),
+                          InteractiveScale(
+                            onTap: () {},
+                            child: buildCard(
+                              totalOrders.toString(),
+                              'Orders',
+                              Icons.shopping_bag,
+                              primaryBlue,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
+                          ),
+                          InteractiveScale(
+                            onTap: () {},
+                            child: buildCard(
+                              formatRupees(averageOrderValue),
+                              'Avg Order',
+                              Icons.show_chart,
+                              Colors.orange,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
+                          ),
+                          InteractiveScale(
+                            onTap: () {},
+                            child: buildCard(
+                              uniqueCustomers.toString(),
+                              'Customers',
+                              Icons.people,
+                              Colors.teal,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
+                          ),
                         ],
                       ),
                     const SizedBox(height: 20),
                     Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: [
-                        SizedBox(width: graphWidth, child: InteractiveScale(onTap: () {}, child: buildRevenueGraph(cardColor, textColor, isDark))),
-                        SizedBox(width: graphWidth, child: InteractiveScale(onTap: () {}, child: buildOrdersGraph(cardColor, textColor, isDark))),
-                      ],
-                    ).animate().fade(delay: 200.ms).slideY(begin: 0.1, curve: Curves.easeOutCubic),
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: [
+                            SizedBox(
+                              width: graphWidth,
+                              child: InteractiveScale(
+                                onTap: () {},
+                                child: buildRevenueGraph(
+                                  cardColor,
+                                  textColor,
+                                  isDark,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: graphWidth,
+                              child: InteractiveScale(
+                                onTap: () {},
+                                child: buildOrdersGraph(
+                                  cardColor,
+                                  textColor,
+                                  isDark,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                        .animate()
+                        .fade(delay: 200.ms)
+                        .slideY(begin: 0.1, curve: Curves.easeOutCubic),
                     const SizedBox(height: 20),
-                    InteractiveScale(onTap: () {}, child: buildTopItems(cardColor, textColor, subText, isDark)).animate().fade(delay: 400.ms).slideY(begin: 0.1, curve: Curves.easeOutCubic),
+                    InteractiveScale(
+                          onTap: () {},
+                          child: buildTopItems(
+                            cardColor,
+                            textColor,
+                            subText,
+                            isDark,
+                          ),
+                        )
+                        .animate()
+                        .fade(delay: 400.ms)
+                        .slideY(begin: 0.1, curve: Curves.easeOutCubic),
                     const SizedBox(height: 40),
                   ],
                 ),
@@ -184,19 +321,68 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget buildCard(String value, String title, IconData icon, Color color, Color card, Color text, Color sub, bool isDark, double width) {
+  Widget buildCard(
+    String value,
+    String title,
+    IconData icon,
+    Color color,
+    Color card,
+    Color text,
+    Color sub,
+    bool isDark,
+    double width,
+  ) {
     return Container(
       width: width,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(20), boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Color.fromRGBO((color.r*255.0).round().clamp(0,255), (color.g*255.0).round().clamp(0,255), (color.b*255.0).round().clamp(0,255), 0.15), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Color.fromRGBO(
+                (color.r * 255.0).round().clamp(0, 255),
+                (color.g * 255.0).round().clamp(0, 255),
+                (color.b * 255.0).round().clamp(0, 255),
+                0.15,
+              ),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
           const SizedBox(height: 16),
-          Text(value, style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 22, color: text)),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w900,
+              fontSize: 22,
+              color: text,
+            ),
+          ),
           const SizedBox(height: 4),
-          Text(title, style: TextStyle(fontFamily: 'Inter', fontSize: 13, fontWeight: FontWeight.w600, color: sub), overflow: TextOverflow.ellipsis),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: sub,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -205,7 +391,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   List<String> get _last7DayLabels {
     const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return List.generate(7, (i) {
-      final day = DateTime.now().subtract(Duration(days: 6 - i));
+      // CODEX EDITS: X-axis labels follow the same IST week as the chart data.
+      final day = _toIst(DateTime.now()).subtract(Duration(days: 6 - i));
       return names[day.weekday % 7];
     });
   }
@@ -220,7 +407,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     required bool isDark,
     required String Function(double) labelFormat,
   }) {
-    final maxValue = values.isNotEmpty ? values.reduce((a, b) => a > b ? a : b) : 0.0;
+    final maxValue = values.isNotEmpty
+        ? values.reduce((a, b) => a > b ? a : b)
+        : 0.0;
     final dayLabels = _last7DayLabels;
     final subText = Color.fromRGBO(
       (text.r * 255.0).round().clamp(0, 255),
@@ -234,19 +423,45 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: card,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))],
+        boxShadow: [
+          BoxShadow(
+            color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Container(width: 12, height: 12, margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(color: barColor, borderRadius: BorderRadius.circular(3))),
-            Text(title, style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
-          ]),
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                margin: const EdgeInsets.only(right: 8),
+                decoration: BoxDecoration(
+                  color: barColor,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              Text(
+                title,
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.w900,
+                  fontSize: 18,
+                  color: text,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           if (values.every((v) => v == 0))
-            Text(emptyMessage, style: TextStyle(color: subText, fontFamily: 'Inter'))
+            Text(
+              emptyMessage,
+              style: TextStyle(color: subText, fontFamily: 'Inter'),
+            )
           else
             SizedBox(
               height: 180,
@@ -254,30 +469,49 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: List.generate(values.length, (i) {
                   final value = values[i];
-                  final barHeight = maxValue > 0 ? (value / maxValue) * 120 : 0.0;
+                  final barHeight = maxValue > 0
+                      ? (value / maxValue) * 120
+                      : 0.0;
                   final label = labelFormat(value);
                   return Expanded(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         if (value > 0)
-                          Text(label,
-                            style: TextStyle(fontFamily: 'Inter', fontSize: 9, fontWeight: FontWeight.w700, color: barColor),
+                          Text(
+                            label,
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: barColor,
+                            ),
                             textAlign: TextAlign.center,
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         const SizedBox(height: 3),
                         Container(
                           margin: const EdgeInsets.symmetric(horizontal: 4),
                           height: barHeight,
                           decoration: BoxDecoration(
                             color: barColor,
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(6),
+                            ),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(dayLabels[i],
-                          style: TextStyle(fontFamily: 'Inter', fontSize: 11, fontWeight: FontWeight.w600, color: subText),
-                          textAlign: TextAlign.center),
+                        Text(
+                          dayLabels[i],
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: subText,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ],
                     ),
                   );
@@ -295,7 +529,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       values: weeklyRevenue,
       emptyMessage: 'No revenue data yet',
       barColor: Colors.green,
-      card: card, text: text, isDark: isDark,
+      card: card,
+      text: text,
+      isDark: isDark,
       labelFormat: (v) => '₹${v.round()}',
     );
   }
@@ -306,7 +542,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       values: weeklyOrders.map((e) => e.toDouble()).toList(),
       emptyMessage: 'No order data yet',
       barColor: primaryBlue,
-      card: card, text: text, isDark: isDark,
+      card: card,
+      text: text,
+      isDark: isDark,
       labelFormat: (v) => v.round().toString(),
     );
   }
@@ -314,14 +552,35 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget buildTopItems(Color card, Color text, Color sub, bool isDark) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: card, borderRadius: BorderRadius.circular(24), boxShadow: [BoxShadow(color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05), blurRadius: 20, offset: const Offset(0, 10))]),
+      decoration: BoxDecoration(
+        color: card,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Color.fromRGBO(0, 0, 0, isDark ? 0.3 : 0.05),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Top Selling Items', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 18, color: text)),
+          Text(
+            'Top Selling Items',
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              color: text,
+            ),
+          ),
           const SizedBox(height: 16),
           if (topItems.isEmpty)
-            Text('No sales data yet', style: TextStyle(color: sub, fontFamily: 'Inter'))
+            Text(
+              'No sales data yet',
+              style: TextStyle(color: sub, fontFamily: 'Inter'),
+            )
           else
             Column(
               children: topItems.map((item) {
@@ -333,13 +592,38 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(item['name'].toString(), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 15, color: text), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text('${item['orders']} sold', style: TextStyle(fontFamily: 'Inter', fontSize: 12, color: sub)),
+                            Text(
+                              item['name'].toString(),
+                              style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                                color: text,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${item['orders']} sold',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontSize: 12,
+                                color: sub,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(formatRupees((item['revenue'] as double).round()), style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 15, color: text)),
+                      Text(
+                        formatRupees((item['revenue'] as double).round()),
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          color: text,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -369,7 +653,16 @@ class _InteractiveScaleState extends State<InteractiveScale> {
       curve: Curves.easeOutCubic,
       child: Material(
         color: Colors.transparent,
-        child: InkWell(focusColor: Colors.transparent, hoverColor: Colors.transparent, highlightColor: Colors.transparent, splashColor: Colors.transparent, onHover: (h) => setState(() => isHovered = h), onHighlightChanged: (h) => setState(() => isPressed = h), onTap: widget.onTap, child: widget.child),
+        child: InkWell(
+          focusColor: Colors.transparent,
+          hoverColor: Colors.transparent,
+          highlightColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          onHover: (h) => setState(() => isHovered = h),
+          onHighlightChanged: (h) => setState(() => isPressed = h),
+          onTap: widget.onTap,
+          child: widget.child,
+        ),
       ),
     );
   }

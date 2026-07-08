@@ -9,6 +9,12 @@ import 'excel_export_web.dart'
     if (dart.library.io) 'excel_export_stub.dart'
     as web_helper;
 
+// CODEX EDITS: Report exports must present MongoDB UTC createdAt values in IST.
+DateTime? _createdAtIst(Map<String, dynamic> order) {
+  final parsed = DateTime.tryParse(order['createdAt']?.toString() ?? '');
+  return parsed?.toUtc().add(const Duration(hours: 5, minutes: 30));
+}
+
 /// Groups [orders] by date and saves one sheet per day into an Excel file.
 /// Returns the saved file path (or the file name on web).
 Future<String> saveExcelReport(
@@ -22,8 +28,7 @@ Future<String> saveExcelReport(
   // Group orders by date string  "YYYY-MM-DD"
   final Map<String, List<Map<String, dynamic>>> byDay = {};
   for (final order in orders) {
-    final raw = order['createdAt']?.toString() ?? '';
-    final date = DateTime.tryParse(raw);
+    final date = _createdAtIst(order);
     final key = date != null
         ? '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}'
         : 'Unknown';
@@ -62,10 +67,8 @@ Future<String> saveExcelReport(
     // ── Data rows ────────────────────────────────────────────────
     final dayOrders = byDay[day]!;
     dayOrders.sort((a, b) {
-      final aD =
-          DateTime.tryParse(a['createdAt']?.toString() ?? '') ?? DateTime(0);
-      final bD =
-          DateTime.tryParse(b['createdAt']?.toString() ?? '') ?? DateTime(0);
+      final aD = _createdAtIst(a) ?? DateTime(0);
+      final bD = _createdAtIst(b) ?? DateTime(0);
       return aD.compareTo(bD);
     });
 
@@ -82,7 +85,7 @@ Future<String> saveExcelReport(
           .map((i) => '${i['name']} x${i['qty'] ?? 1}')
           .join(', ');
 
-      final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '');
+      final createdAt = _createdAtIst(order);
       final timeStr = createdAt != null
           ? '${createdAt.hour.toString().padLeft(2, '0')}:${createdAt.minute.toString().padLeft(2, '0')}'
           : '';

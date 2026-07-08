@@ -16,6 +16,7 @@ import 'vendor_home_page.dart';
 import 'vendor_data.dart';
 import '../../services/session.dart';
 import '../../services/api_service.dart';
+import '../../widgets/smooth_marquee_text.dart';
 
 class VendorPageWrapper extends StatefulWidget {
   final Widget child;
@@ -55,7 +56,10 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
       }
     });
     _pollPendingOrders();
-    _orderPollTimer = Timer.periodic(const Duration(seconds: 10), (_) => _pollPendingOrders());
+    _orderPollTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _pollPendingOrders(),
+    );
   }
 
   @override
@@ -68,7 +72,10 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
     final cafeId = AppSession.cafe?['_id']?.toString();
     if (cafeId == null || cafeId.isEmpty) return;
     try {
-      final orders = await ApiService.getOrders(cafeId: cafeId, status: 'Pending');
+      final orders = await ApiService.getOrders(
+        cafeId: cafeId,
+        status: 'Pending',
+      );
       if (mounted) setState(() => _pendingOrderCount = orders.length);
     } catch (_) {}
   }
@@ -92,7 +99,8 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                   Navigator.pushReplacement(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => SettingsPage(toggleTheme: widget.toggleTheme),
+                      builder: (_) =>
+                          SettingsPage(toggleTheme: widget.toggleTheme),
                     ),
                   );
                 },
@@ -122,49 +130,87 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 56, height: 56,
+              width: 56,
+              height: 56,
               decoration: BoxDecoration(
                 color: Colors.redAccent.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 28),
+              child: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+                size: 28,
+              ),
             ),
             const SizedBox(height: 16),
-            Text('Confirm Logout',
-                style: TextStyle(fontFamily: 'Nunito', fontSize: 18, fontWeight: FontWeight.w900, color: textColor)),
+            Text(
+              'Confirm Logout',
+              style: TextStyle(
+                fontFamily: 'Nunito',
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: textColor,
+              ),
+            ),
             const SizedBox(height: 8),
-            Text('Are you sure you want to log out?\nYour session data will be cleared.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontFamily: 'Inter', fontSize: 13, color: subText)),
+            Text(
+              'Are you sure you want to log out?\nYour session data will be cleared.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 13,
+                color: subText,
+              ),
+            ),
             const SizedBox(height: 24),
-            Row(children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: primaryBlue,
-                    side: BorderSide(color: primaryBlue.withValues(alpha: 0.4)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: primaryBlue,
+                      side: BorderSide(
+                        color: primaryBlue.withValues(alpha: 0.4),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                  child: const Text('Cancel', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: const Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontFamily: 'Nunito',
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                  child: const Text('Logout', style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ],
         ),
       ),
@@ -223,16 +269,38 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                       alignment: Alignment.center,
                       children: [
                         IconButton(
-                          icon: Icon(Icons.notifications_active_rounded, color: primaryBlue),
-                          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => OrdersPage(toggleTheme: widget.toggleTheme))),
-                          tooltip: '$_pendingOrderCount pending order${_pendingOrderCount > 1 ? 's' : ''}',
+                          icon: Icon(
+                            Icons.notifications_active_rounded,
+                            color: primaryBlue,
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  OrdersPage(toggleTheme: widget.toggleTheme),
+                            ),
+                          ),
+                          tooltip:
+                              '$_pendingOrderCount pending order${_pendingOrderCount > 1 ? 's' : ''}',
                         ),
                         Positioned(
-                          top: 8, right: 8,
+                          top: 8,
+                          right: 8,
                           child: Container(
                             padding: const EdgeInsets.all(4),
-                            decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
-                            child: Text('$_pendingOrderCount', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold, height: 1)),
+                            decoration: const BoxDecoration(
+                              color: Colors.redAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '$_pendingOrderCount',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                height: 1,
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -282,19 +350,39 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                     color: primaryBlue.withValues(alpha: 0.1),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: Builder(builder: (context) {
-                    final src = VendorData.displayImage;
-                    if (src.startsWith('data:image/')) {
-                      final b64 = src.split(',').last;
-                      return Image.memory(base64Decode(b64), fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
-                    }
-                    if (src.isNotEmpty) {
-                      return Image.network(src, fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) => Icon(Icons.storefront_rounded, color: primaryBlue, size: 28));
-                    }
-                    return Icon(Icons.storefront_rounded, color: primaryBlue, size: 28);
-                  }),
+                  child: Builder(
+                    builder: (context) {
+                      final src = VendorData.displayImage;
+                      if (src.startsWith('data:image/')) {
+                        final b64 = src.split(',').last;
+                        return Image.memory(
+                          base64Decode(b64),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(
+                            Icons.storefront_rounded,
+                            color: primaryBlue,
+                            size: 28,
+                          ),
+                        );
+                      }
+                      if (src.isNotEmpty) {
+                        return Image.network(
+                          src,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, _, _) => Icon(
+                            Icons.storefront_rounded,
+                            color: primaryBlue,
+                            size: 28,
+                          ),
+                        );
+                      }
+                      return Icon(
+                        Icons.storefront_rounded,
+                        color: primaryBlue,
+                        size: 28,
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -312,16 +400,20 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
-                        VendorData.displayCuisine.isNotEmpty ? VendorData.displayCuisine : 'Vendor Portal',
+                      // CODEX EDITS: Long cuisine lists roll smoothly instead
+                      // of ending with ellipsis in the common vendor sidebar.
+                      SmoothMarqueeText(
+                        VendorData.displayCuisine.isNotEmpty
+                            ? VendorData.displayCuisine
+                            : 'Vendor Portal',
                         style: TextStyle(
                           fontFamily: 'Inter',
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                           color: textColor.withValues(alpha: 0.6),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
                       ),
                     ],
                   ),
@@ -394,28 +486,43 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             left: false,
             right: false,
             child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: GestureDetector(
-              onTap: widget.toggleTheme,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Row(
-                  children: [
-                    Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, color: primaryBlue, size: 22),
-                    const SizedBox(width: 16),
-                    Text(isDark ? 'Light Mode' : 'Dark Mode',
-                      style: TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600,
-                        color: isDark ? Colors.white70 : Colors.black87)),
-                  ],
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: GestureDetector(
+                onTap: widget.toggleTheme,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 16,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isDark
+                            ? Icons.light_mode_rounded
+                            : Icons.dark_mode_rounded,
+                        color: primaryBlue,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        isDark ? 'Light Mode' : 'Dark Mode',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
           ),
         ],
       ),
@@ -451,7 +558,10 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
             return;
           }
           if (isAbout) {
-            Navigator.push(context, MaterialPageRoute(builder: (_) => const AboutPage()));
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutPage()),
+            );
             return;
           }
           if (_requiresBusinessDetails && title != "Settings") {
@@ -538,14 +648,23 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
               ),
               if (title == "Orders" && _pendingOrderCount > 0)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
-                    color: isSelected ? Colors.white.withValues(alpha: 0.3) : Colors.redAccent,
+                    color: isSelected
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : Colors.redAccent,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '$_pendingOrderCount',
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
             ],

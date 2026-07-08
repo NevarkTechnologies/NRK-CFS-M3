@@ -5,7 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/api_service.dart';
 import '../../services/session.dart';
 import '../../utils/csv_export.dart';
-import '../../utils/excel_export.dart';        // ← NEW
+import '../../utils/excel_export.dart'; // ← NEW
 import 'vendor_data.dart';
 import 'vendor_page_wrapper.dart';
 
@@ -25,10 +25,22 @@ class SalesReportPage extends StatefulWidget {
 
 class _SalesReportPageState extends State<SalesReportPage> {
   final Color primaryBlue = const Color(0xFF0F4CFF);
-  static const _filterOptions = ['All Time', 'Today', 'Yesterday', '15 Days', '1 Month'];
+  static const _filterOptions = [
+    'All Time',
+    'Today',
+    'Yesterday',
+    '15 Days',
+    '1 Month',
+  ];
   static const _chartColors = [
-    Color(0xFF0F4CFF), Colors.teal, Colors.orange, Colors.purple,
-    Color(0xFFEC4899), Colors.green, Colors.cyan, Colors.amber,
+    Color(0xFF0F4CFF),
+    Colors.teal,
+    Colors.orange,
+    Colors.purple,
+    Color(0xFFEC4899),
+    Colors.green,
+    Colors.cyan,
+    Colors.amber,
   ];
 
   bool isLoading = true;
@@ -48,6 +60,9 @@ class _SalesReportPageState extends State<SalesReportPage> {
   String selectedRange = '1 Month';
   List<double> hourlyOrders = List.filled(24, 0);
   Map<String, double> pieData = {};
+  String revenueGrowth = '0%';
+  String ordersGrowth = '0%';
+  String averageGrowth = '0%';
 
   @override
   void initState() {
@@ -67,13 +82,10 @@ class _SalesReportPageState extends State<SalesReportPage> {
       totalOrders = filteredOrders.length;
       totalRevenue = filteredOrders.fold<double>(
         0,
-        (sum, order) =>
-            sum +
-            (order['itemTotal'] is num
-                ? (order['itemTotal'] as num).toDouble()
-                : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0),
+        (sum, order) => sum + _orderAmount(order),
       );
       averageOrderValue = totalOrders == 0 ? 0 : totalRevenue / totalOrders;
+      _prepareGrowth(data);
 
       final itemCounts = <String, Map<String, dynamic>>{};
       categorySales.clear();
@@ -102,27 +114,26 @@ class _SalesReportPageState extends State<SalesReportPage> {
       final sortedTopItems = itemCounts.values.toList()
         ..sort((a, b) => (b['qty'] as int).compareTo(a['qty'] as int));
 
-      final ordered = filteredOrders
-          .map((o) => Map<String, dynamic>.from(o))
-          .toList()
-        ..sort((a, b) {
-          final aDate =
-              DateTime.tryParse(a['createdAt']?.toString() ?? '') ??
-              DateTime.now();
-          final bDate =
-              DateTime.tryParse(b['createdAt']?.toString() ?? '') ??
-              DateTime.now();
-          return aDate.compareTo(bDate);
-        });
+      final ordered =
+          filteredOrders.map((o) => Map<String, dynamic>.from(o)).toList()
+            ..sort((a, b) {
+              final aDate =
+                  _createdAt(a) ?? DateTime.fromMillisecondsSinceEpoch(0);
+              final bDate =
+                  _createdAt(b) ?? DateTime.fromMillisecondsSinceEpoch(0);
+              return bDate.compareTo(aDate);
+            });
 
       recentOrders = ordered;
       topItems = sortedTopItems
           .take(5)
-          .map((i) => {
-                'name': i['name'],
-                'qty': i['qty'],
-                'revenue': i['revenue'],
-              })
+          .map(
+            (i) => {
+              'name': i['name'],
+              'qty': i['qty'],
+              'revenue': i['revenue'],
+            },
+          )
           .toList();
 
       _prepareChartData(ordered);
@@ -134,37 +145,103 @@ class _SalesReportPageState extends State<SalesReportPage> {
   }
 
   List<Map<String, dynamic>> _filterOrders(List<Map<String, dynamic>> orders) {
+    final range = _selectedRangeBounds();
+    if (range == null) return orders;
+    return orders.where((o) {
+      final d = _createdAt(o);
+      return d != null && !d.isBefore(range.start) && d.isBefore(range.end);
+    }).toList();
+  }
+
+  // CODEX EDITS: Centralized IST parsing keeps filters, charts, growth,
+  // and the transaction list consistent for the selected sales period.
+  DateTime? _createdAt(Map<String, dynamic> order) {
+    final parsed = DateTime.tryParse(order['createdAt']?.toString() ?? '');
+    return parsed?.toUtc().add(const Duration(hours: 5, minutes: 30));
+  }
+
+  double _orderAmount(Map<String, dynamic> order) {
+    final raw = order['itemTotal'];
+    if (raw is num) return raw.toDouble();
+    return double.tryParse(raw?.toString() ?? '0') ?? 0;
+  }
+
+  DateTimeRange? _selectedRangeBounds() {
     final now = DateTime.now();
     switch (selectedRange) {
       case 'All Time':
-        return orders;
+        return null;
       case 'Today':
-        final todayStart = DateTime(now.year, now.month, now.day);
-        return orders.where((o) {
-          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-          return d != null && !d.isBefore(todayStart);
-        }).toList();
+        return DateTimeRange(
+          start: DateTime(now.year, now.month, now.day),
+          end: now,
+        );
       case 'Yesterday':
-        final yestStart = DateTime(now.year, now.month, now.day - 1);
-        final yestEnd = DateTime(now.year, now.month, now.day);
-        return orders.where((o) {
-          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-          return d != null && !d.isBefore(yestStart) && d.isBefore(yestEnd);
-        }).toList();
+        final todayStart = DateTime(now.year, now.month, now.day);
+        return DateTimeRange(
+          start: todayStart.subtract(const Duration(days: 1)),
+          end: todayStart,
+        );
       case '15 Days':
-        final cutoff = now.subtract(const Duration(days: 15));
-        return orders.where((o) {
-          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-          return d != null && d.isAfter(cutoff);
-        }).toList();
+        return DateTimeRange(
+          start: now.subtract(const Duration(days: 15)),
+          end: now,
+        );
       case '1 Month':
       default:
-        final cutoff = now.subtract(const Duration(days: 30));
-        return orders.where((o) {
-          final d = DateTime.tryParse(o['createdAt']?.toString() ?? '');
-          return d != null && d.isAfter(cutoff);
-        }).toList();
+        return DateTimeRange(
+          start: now.subtract(const Duration(days: 30)),
+          end: now,
+        );
     }
+  }
+
+  DateTimeRange? _previousRangeBounds() {
+    final current = _selectedRangeBounds();
+    if (current == null) return null;
+    final span = current.end.difference(current.start);
+    return DateTimeRange(
+      start: current.start.subtract(span),
+      end: current.start,
+    );
+  }
+
+  void _prepareGrowth(List<Map<String, dynamic>> orders) {
+    final previous = _previousRangeBounds();
+    if (previous == null) {
+      revenueGrowth = 'All time';
+      ordersGrowth = 'All time';
+      averageGrowth = 'All time';
+      return;
+    }
+
+    final previousOrders = orders.where((o) {
+      final d = _createdAt(o);
+      return d != null &&
+          !d.isBefore(previous.start) &&
+          d.isBefore(previous.end);
+    }).toList();
+    final previousRevenue = previousOrders.fold<double>(
+      0,
+      (sum, order) => sum + _orderAmount(order),
+    );
+    final previousAverage = previousOrders.isEmpty
+        ? 0.0
+        : previousRevenue / previousOrders.length;
+
+    revenueGrowth = _growthLabel(totalRevenue, previousRevenue);
+    ordersGrowth = _growthLabel(
+      totalOrders.toDouble(),
+      previousOrders.length.toDouble(),
+    );
+    averageGrowth = _growthLabel(averageOrderValue, previousAverage);
+  }
+
+  String _growthLabel(double current, double previous) {
+    if (previous == 0) return current == 0 ? '0%' : '+100%';
+    final growth = ((current - previous) / previous) * 100;
+    final sign = growth > 0 ? '+' : '';
+    return '$sign${growth.toStringAsFixed(growth.abs() >= 10 ? 0 : 1)}%';
   }
 
   void _prepareChartData(List<Map<String, dynamic>> orders) {
@@ -187,9 +264,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
     for (var i = 0; i < sorted.length; i++) {
       final order = sorted[i];
-      final createdAt =
-          DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
-          DateTime.now();
+      final createdAt = _createdAt(order) ?? DateTime.now();
       final total = order['itemTotal'] is num
           ? (order['itemTotal'] as num).toDouble()
           : double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0;
@@ -202,22 +277,39 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
       if (order['items'] != null) {
         for (var item in order['items']) {
-          final itemName = item['name'] ?? 'Unknown';
-          final qty = item['qty'] ?? 1;
-          pieData[itemName] = (pieData[itemName] ?? 0) + qty.toDouble();
+          final itemName = item['name']?.toString() ?? 'Unknown';
+          final qty = item['qty'] is num
+              ? (item['qty'] as num).toDouble()
+              : double.tryParse(item['qty']?.toString() ?? '1') ?? 1;
+          pieData[itemName] = (pieData[itemName] ?? 0) + qty;
         }
       }
     }
 
+    final sortedPie = pieData.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    pieData = {for (final entry in sortedPie.take(6)) entry.key: entry.value};
+    final others = sortedPie.skip(6).fold<double>(0, (sum, e) => sum + e.value);
+    if (others > 0) pieData['Others'] = others;
+
     final buckets = <String, int>{};
-    for (final order in sorted) {
-      final createdAt =
-          DateTime.tryParse(order['createdAt']?.toString() ?? '') ??
-          DateTime.now();
-      final key = (selectedRange == 'Today' || selectedRange == 'Yesterday')
-          ? '${createdAt.hour}:00'
-          : '${createdAt.month}/${createdAt.day}';
-      buckets[key] = (buckets[key] ?? 0) + 1;
+    if (selectedRange == 'Today' || selectedRange == 'Yesterday') {
+      for (var hour = 0; hour < 24; hour++) {
+        buckets['${hour.toString().padLeft(2, '0')}:00'] = 0;
+      }
+      for (final order in sorted) {
+        final createdAt = _createdAt(order) ?? DateTime.now();
+        final key = '${createdAt.hour.toString().padLeft(2, '0')}:00';
+        buckets[key] = (buckets[key] ?? 0) + 1;
+      }
+    } else {
+      for (final order in sorted) {
+        final createdAt = _createdAt(order) ?? DateTime.now();
+        final key = selectedRange == 'All Time'
+            ? '${createdAt.month}/${createdAt.year}'
+            : '${createdAt.day}/${createdAt.month}';
+        buckets[key] = (buckets[key] ?? 0) + 1;
+      }
     }
 
     barLabels = buckets.keys.toList();
@@ -247,13 +339,23 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
 
     final rows = <List<dynamic>>[
-      ['Order ID', 'Token', 'Customer', 'Items', 'Item Total (₹)', 'Status', 'Date', 'Time'],
+      [
+        'Order ID',
+        'Token',
+        'Customer',
+        'Items',
+        'Item Total (₹)',
+        'Status',
+        'Date',
+        'Time',
+      ],
     ];
     for (final order in filteredOrders) {
       final items = ((order['items'] as List<dynamic>?) ?? [])
           .map((i) => '${i['name']} x${i['qty'] ?? 1}')
           .join(' | ');
-      final createdAt = DateTime.tryParse(order['createdAt']?.toString() ?? '');
+      // CODEX EDITS: Export MongoDB UTC timestamps as IST date/time.
+      final createdAt = _createdAt(order);
       final dateStr = createdAt != null
           ? '${createdAt.day}/${createdAt.month}/${createdAt.year}'
           : '';
@@ -262,7 +364,8 @@ class _SalesReportPageState extends State<SalesReportPage> {
           : '';
       final amount = (order['itemTotal'] is num)
           ? (order['itemTotal'] as num).toStringAsFixed(2)
-          : (double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0).toStringAsFixed(2);
+          : (double.tryParse(order['itemTotal']?.toString() ?? '0') ?? 0)
+                .toStringAsFixed(2);
 
       rows.add([
         order['orderId'] ?? order['_id'] ?? '',
@@ -276,20 +379,24 @@ class _SalesReportPageState extends State<SalesReportPage> {
       ]);
     }
 
-    final csvData =
-        rows.map((row) => row.map((cell) => '"$cell"').join(',')).join('\n');
+    final csvData = rows
+        .map((row) => row.map((cell) => '"$cell"').join(','))
+        .join('\n');
     final now = DateTime.now();
-    final fileName = 'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.csv';
+    final fileName =
+        'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.csv';
 
     try {
       final savedPath = await saveCsvFile(fileName, csvData);
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('CSV saved: $savedPath')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV saved: $savedPath')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('CSV export failed: $error')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV export failed: $error')));
     }
   }
 
@@ -303,28 +410,26 @@ class _SalesReportPageState extends State<SalesReportPage> {
     }
 
     final now = DateTime.now();
-    final fileName = 'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
+    final fileName =
+        'benchbites-report-${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}.xlsx';
 
     try {
       final savedPath = await saveExcelReport(fileName, filteredOrders);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Excel saved: $savedPath')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Excel saved: $savedPath')));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Excel export failed: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Excel export failed: $error')));
     }
   }
 
   String formatRupees(double amount) {
     final rounded = amount.round();
-    return '₹${rounded.toString().replaceAllMapped(
-          RegExp(r'\B(?=(\d{3})+(?!\d))'),
-          (match) => ',',
-        )}';
+    return '₹${rounded.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}';
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -346,33 +451,51 @@ class _SalesReportPageState extends State<SalesReportPage> {
           padding: const EdgeInsets.all(16),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              double availableWidth = constraints.maxWidth.clamp(0, double.infinity);
+              double availableWidth = constraints.maxWidth.clamp(
+                0,
+                double.infinity,
+              );
               bool isMobile = MediaQuery.of(context).size.width < 850;
-              double cardWidth = (isMobile
-                  ? (availableWidth - 16) / 2
-                  : (availableWidth - 32) / 3).clamp(120.0, 400.0);
-              double halfWidth =
-                  isMobile ? availableWidth : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
+              double cardWidth =
+                  (isMobile
+                          ? (availableWidth - 16) / 2
+                          : (availableWidth - 32) / 3)
+                      .clamp(120.0, 400.0);
+              double halfWidth = isMobile
+                  ? availableWidth
+                  : ((availableWidth - 16) / 2).clamp(200.0, double.infinity);
 
               // ── Shared toolbar actions ────────────────────────────────────
               Widget dropdownWidget = Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: cardColor,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: primaryBlue.withValues(alpha: 0.25)),
+                  border: Border.all(
+                    color: primaryBlue.withValues(alpha: 0.25),
+                  ),
                 ),
                 child: DropdownButton<String>(
                   value: selectedRange,
                   elevation: 4,
                   underline: const SizedBox(),
                   dropdownColor: cardColor,
-                  style: TextStyle(color: textColor, fontFamily: 'Inter', fontWeight: FontWeight.bold, fontSize: 14),
+                  style: TextStyle(
+                    color: textColor,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
                   items: _filterOptions
-                      .map((option) => DropdownMenuItem(
-                            value: option,
-                            child: Text(option),
-                          ))
+                      .map(
+                        (option) => DropdownMenuItem(
+                          value: option,
+                          child: Text(option),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value == null) return;
@@ -386,14 +509,19 @@ class _SalesReportPageState extends State<SalesReportPage> {
               Widget csvButton = ElevatedButton.icon(
                 onPressed: _downloadCsvReport,
                 icon: const Icon(Icons.download_rounded, size: 16),
-                label: const Text('CSV',
-                    style: TextStyle(
-                        fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'CSV',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: primaryBlue,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   elevation: 0,
                 ),
               );
@@ -402,14 +530,19 @@ class _SalesReportPageState extends State<SalesReportPage> {
               Widget excelButton = ElevatedButton.icon(
                 onPressed: _downloadExcelReport,
                 icon: const Icon(Icons.table_chart_rounded, size: 16),
-                label: const Text('Excel',
-                    style: TextStyle(
-                        fontFamily: 'Nunito', fontWeight: FontWeight.bold)),
+                label: const Text(
+                  'Excel',
+                  style: TextStyle(
+                    fontFamily: 'Nunito',
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF1D6F42), // Excel green
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
                   elevation: 0,
                 ),
               );
@@ -419,33 +552,33 @@ class _SalesReportPageState extends State<SalesReportPage> {
                   children: [
                     // ── Toolbar ───────────────────────────────────────────
                     isMobile
-    ? Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            "Track ${VendorData.displayName}'s performance",
-            style: TextStyle(
-              fontFamily: 'Inter',
-              color: subText,
-              fontSize: 14,
-            ),
-          ),
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Track ${VendorData.displayName}'s performance",
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  color: subText,
+                                  fontSize: 14,
+                                ),
+                              ),
 
-          const SizedBox(height: 12),
+                              const SizedBox(height: 12),
 
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            alignment: WrapAlignment.start,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              dropdownWidget,
-              csvButton,
-              excelButton,
-            ],
-          ),
-        ],
-      )
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                alignment: WrapAlignment.start,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  dropdownWidget,
+                                  csvButton,
+                                  excelButton,
+                                ],
+                              ),
+                            ],
+                          )
                         : Wrap(
                             alignment: WrapAlignment.spaceBetween,
                             crossAxisAlignment: WrapCrossAlignment.center,
@@ -454,7 +587,11 @@ class _SalesReportPageState extends State<SalesReportPage> {
                             children: [
                               Text(
                                 "Track ${VendorData.displayName}'s performance",
-                                style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 14),
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  color: subText,
+                                  fontSize: 14,
+                                ),
                               ),
                               Wrap(
                                 spacing: 8,
@@ -481,21 +618,42 @@ class _SalesReportPageState extends State<SalesReportPage> {
                         children: [
                           InteractiveScale(
                             onTap: () {},
-                            child: _topCard(formatRupees(totalRevenue),
-                                "Total Revenue", "+0%", cardColor, textColor,
-                                subText, isDark, cardWidth),
+                            child: _topCard(
+                              formatRupees(totalRevenue),
+                              "Total Revenue",
+                              revenueGrowth,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
                           ),
                           InteractiveScale(
                             onTap: () {},
-                            child: _topCard(totalOrders.toString(),
-                                "Total Orders", "+0%", cardColor, textColor,
-                                subText, isDark, cardWidth),
+                            child: _topCard(
+                              totalOrders.toString(),
+                              "Total Orders",
+                              ordersGrowth,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
                           ),
                           InteractiveScale(
                             onTap: () {},
-                            child: _topCard(formatRupees(averageOrderValue),
-                                "Avg Order Value", "+0%", cardColor, textColor,
-                                subText, isDark, cardWidth),
+                            child: _topCard(
+                              formatRupees(averageOrderValue),
+                              "Avg Order Value",
+                              averageGrowth,
+                              cardColor,
+                              textColor,
+                              subText,
+                              isDark,
+                              cardWidth,
+                            ),
                           ),
                         ],
                       ),
@@ -504,25 +662,29 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
                     // ── Charts ────────────────────────────────────────────
                     Wrap(
-                      spacing: 16,
-                      runSpacing: 16,
-                      children: [
-                        SizedBox(
-                          width: halfWidth,
-                          child: InteractiveScale(
-                            onTap: () {},
-                            child: _hourlyOrdersChart(cardColor, textColor, isDark),
-                          ),
-                        ),
-                        SizedBox(
-                          width: halfWidth,
-                          child: InteractiveScale(
-                            onTap: () {},
-                            child: _pieChart(cardColor, textColor, isDark),
-                          ),
-                        ),
-                      ],
-                    )
+                          spacing: 16,
+                          runSpacing: 16,
+                          children: [
+                            SizedBox(
+                              width: halfWidth,
+                              child: InteractiveScale(
+                                onTap: () {},
+                                child: _hourlyOrdersChart(
+                                  cardColor,
+                                  textColor,
+                                  isDark,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: halfWidth,
+                              child: InteractiveScale(
+                                onTap: () {},
+                                child: _pieChart(cardColor, textColor, isDark),
+                              ),
+                            ),
+                          ],
+                        )
                         .animate()
                         .fade(delay: 200.ms)
                         .slideY(begin: 0.1, curve: Curves.easeOutCubic),
@@ -531,10 +693,14 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
                     // ── Transactions ──────────────────────────────────────
                     InteractiveScale(
-                      onTap: () {},
-                      child: _transactionsTable(
-                          cardColor, textColor, subText, isDark),
-                    )
+                          onTap: () {},
+                          child: _transactionsTable(
+                            cardColor,
+                            textColor,
+                            subText,
+                            isDark,
+                          ),
+                        )
                         .animate()
                         .fade(delay: 400.ms)
                         .slideY(begin: 0.1, curve: Curves.easeOutCubic),
@@ -552,8 +718,28 @@ class _SalesReportPageState extends State<SalesReportPage> {
 
   // ── Widgets (unchanged) ───────────────────────────────────────────────────
 
-  Widget _topCard(String value, String title, String growth, Color card,
-      Color text, Color sub, bool isDark, double width) {
+  Widget _topCard(
+    String value,
+    String title,
+    String growth,
+    Color card,
+    Color text,
+    Color sub,
+    bool isDark,
+    double width,
+  ) {
+    final isNegative = growth.startsWith('-');
+    final isNeutral = growth == '0%' || growth == 'All time';
+    final growthColor = isNeutral
+        ? sub
+        : isNegative
+        ? Colors.redAccent
+        : Colors.green;
+    final growthIcon = isNeutral
+        ? Icons.remove_rounded
+        : isNegative
+        ? Icons.trending_down_rounded
+        : Icons.trending_up_rounded;
     return Container(
       width: width,
       padding: const EdgeInsets.all(20),
@@ -571,40 +757,48 @@ class _SalesReportPageState extends State<SalesReportPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(value,
-              style: TextStyle(
-                  fontFamily: 'Nunito',
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  color: text),
-              overflow: TextOverflow.ellipsis),
+          Text(
+            value,
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: text,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 8),
-          Text(title,
-              style: TextStyle(
-                  fontFamily: 'Inter',
-                  color: sub,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13),
-              overflow: TextOverflow.ellipsis),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Inter',
+              color: sub,
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.green.withAlpha(26),
+              color: growthColor.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.trending_up_rounded,
-                    color: Colors.green, size: 14),
+                Icon(growthIcon, color: growthColor, size: 14),
                 const SizedBox(width: 4),
-                Text(growth,
-                    style: const TextStyle(
-                        fontFamily: 'Inter',
-                        color: Colors.green,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12)),
+                Text(
+                  growth,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    color: growthColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
               ],
             ),
           ),
@@ -621,22 +815,24 @@ class _SalesReportPageState extends State<SalesReportPage> {
       text,
       isDark,
       pieData.isEmpty
-          ? Center(child: Text('No data', style: TextStyle(color: text)))
-          : Row(
+          ? Center(
+              child: Text('No data', style: TextStyle(color: text)),
+            )
+          : Column(
               children: [
                 Expanded(
-                  flex: 3,
                   child: PieChart(
                     PieChartData(
                       sectionsSpace: 3,
-                      centerSpaceRadius: 28,
+                      centerSpaceRadius: 34,
                       sections: keys.asMap().entries.map((entry) {
-                        final color = _chartColors[entry.key % _chartColors.length];
+                        final color =
+                            _chartColors[entry.key % _chartColors.length];
                         final val = pieData[entry.value]!;
                         return PieChartSectionData(
                           value: val,
                           title: '${val.toInt()}',
-                          radius: 80,
+                          radius: 70,
                           color: color,
                           titleStyle: const TextStyle(
                             color: Colors.white,
@@ -648,35 +844,37 @@ class _SalesReportPageState extends State<SalesReportPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: SingleChildScrollView(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: keys.asMap().entries.map((entry) {
-                        final color = _chartColors[entry.key % _chartColors.length];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 3),
-                          child: Row(
-                            children: [
-                              Container(width: 10, height: 10,
-                                decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  entry.value,
-                                  style: TextStyle(fontSize: 11, color: text),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
+                  children: keys.asMap().entries.map((entry) {
+                    final color = _chartColors[entry.key % _chartColors.length];
+                    return ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 150),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                            ),
                           ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              entry.value,
+                              style: TextStyle(fontSize: 11, color: text),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
                 ),
               ],
             ),
@@ -684,6 +882,14 @@ class _SalesReportPageState extends State<SalesReportPage> {
   }
 
   Widget _hourlyOrdersChart(Color card, Color text, bool isDark) {
+    final maxOrders = barGroups.fold<double>(
+      0,
+      (max, group) =>
+          group.barRods.first.toY > max ? group.barRods.first.toY : max,
+    );
+    final labelEvery = barLabels.length <= 8
+        ? 1
+        : (barLabels.length / 6).ceil();
     return _box(
       'Orders by Time',
       card,
@@ -693,43 +899,52 @@ class _SalesReportPageState extends State<SalesReportPage> {
         height: 300,
         child: BarChart(
           BarChartData(
-            maxY: hourlyOrders.reduce((a, b) => a > b ? a : b) + 2,
+            maxY: maxOrders + 2,
+            gridData: FlGridData(
+              drawVerticalLine: false,
+              horizontalInterval: maxOrders <= 6 ? 1 : null,
+              getDrawingHorizontalLine: (_) => FlLine(
+                color: isDark ? Colors.white10 : Colors.black12,
+                strokeWidth: 1,
+              ),
+            ),
+            borderData: FlBorderData(show: false),
             titlesData: FlTitlesData(
-              topTitles:
-                  AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles:
-                  AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
               leftTitles: AxisTitles(
                 sideTitles: SideTitles(
-                    showTitles: true, reservedSize: 45, interval: 2),
+                  showTitles: true,
+                  reservedSize: 34,
+                  interval: maxOrders <= 6 ? 1 : null,
+                ),
               ),
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
-                  reservedSize: 35,
+                  reservedSize: 42,
                   getTitlesWidget: (value, meta) {
-                    if (value.toInt() % 3 != 0) {
+                    final index = value.toInt();
+                    if (index < 0 ||
+                        index >= barLabels.length ||
+                        index % labelEvery != 0) {
                       return const SizedBox.shrink();
                     }
-                    return Transform.rotate(
-                      angle: -0.5,
-                      child: Text('${value.toInt()}h',
-                          style: const TextStyle(fontSize: 10)),
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        barLabels[index],
+                        style: TextStyle(fontSize: 10, color: text),
+                        textAlign: TextAlign.center,
+                      ),
                     );
                   },
                 ),
               ),
             ),
-            barGroups: hourlyOrders
-                .asMap()
-                .entries
-                .map((e) => BarChartGroupData(
-                      x: e.key,
-                      barRods: [
-                        BarChartRodData(toY: e.value, width: 10)
-                      ],
-                    ))
-                .toList(),
+            barGroups: barGroups,
           ),
         ),
       ),
@@ -737,19 +952,28 @@ class _SalesReportPageState extends State<SalesReportPage> {
   }
 
   Widget _transactionsTable(
-      Color card, Color text, Color subText, bool isDark) {
+    Color card,
+    Color text,
+    Color subText,
+    bool isDark,
+  ) {
     return _box(
-      'Recent Transactions',
+      'Orders in $selectedRange',
       card,
       text,
       isDark,
       recentOrders.isEmpty
           ? Center(
-              child: Text('No recent transactions yet',
-                  style: TextStyle(color: text)))
+              child: Text(
+                'No orders in this period',
+                style: TextStyle(color: text),
+              ),
+            )
           : ListView.separated(
               padding: EdgeInsets.zero,
-              shrinkWrap: true,
+              // CODEX EDITS: The selected-period order list can be long; use
+              // the card's bounded viewport instead of measuring every row.
+              primary: false,
               itemCount: recentOrders.length,
               separatorBuilder: (_, _) => Divider(
                 color: isDark ? Colors.white12 : Colors.grey.shade200,
@@ -764,18 +988,45 @@ class _SalesReportPageState extends State<SalesReportPage> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(order['orderId']?.toString() ?? 'Unknown',
-                                style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.bold, fontSize: 14, color: text),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text(order['customerName']?.toString() ?? 'Customer',
-                                style: TextStyle(fontFamily: 'Inter', color: subText, fontSize: 12),
-                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(
+                              order['orderId']?.toString() ?? 'Unknown',
+                              style: TextStyle(
+                                fontFamily: 'Nunito',
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: text,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              order['customerName']?.toString() ?? 'Customer',
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                color: subText,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ],
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Text(formatRupees(((order['itemTotal'] as num?) ?? 0).toDouble().round().toDouble()),
-                          style: TextStyle(fontFamily: 'Nunito', fontWeight: FontWeight.w900, fontSize: 15, color: text)),
+                      Text(
+                        formatRupees(
+                          ((order['itemTotal'] as num?) ?? 0)
+                              .toDouble()
+                              .round()
+                              .toDouble(),
+                        ),
+                        style: TextStyle(
+                          fontFamily: 'Nunito',
+                          fontWeight: FontWeight.w900,
+                          fontSize: 15,
+                          color: text,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -784,8 +1035,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
     );
   }
 
-  Widget _box(
-      String title, Color card, Color text, bool isDark, Widget child) {
+  Widget _box(String title, Color card, Color text, bool isDark, Widget child) {
     return Container(
       height: 350,
       padding: const EdgeInsets.all(24),
@@ -803,12 +1053,15 @@ class _SalesReportPageState extends State<SalesReportPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title,
-              style: TextStyle(
-                  fontFamily: 'Nunito',
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
-                  color: text)),
+          Text(
+            title,
+            style: TextStyle(
+              fontFamily: 'Nunito',
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+              color: text,
+            ),
+          ),
           const SizedBox(height: 24),
           Expanded(child: child),
         ],
@@ -820,8 +1073,7 @@ class _SalesReportPageState extends State<SalesReportPage> {
 class InteractiveScale extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
-  const InteractiveScale(
-      {super.key, required this.child, required this.onTap});
+  const InteractiveScale({super.key, required this.child, required this.onTap});
   @override
   State<InteractiveScale> createState() => _InteractiveScaleState();
 }

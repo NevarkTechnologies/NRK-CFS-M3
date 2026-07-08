@@ -14,6 +14,7 @@ import 'order_page.dart';
 import 'vendor_data.dart';
 import '../../services/api_service.dart';
 import '../../services/session.dart';
+import '../../widgets/smooth_marquee_text.dart';
 
 class VendorHomePage extends StatefulWidget {
   final VoidCallback toggleTheme;
@@ -381,7 +382,9 @@ class _VendorHomePageState extends State<VendorHomePage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      Text(
+                      // CODEX EDITS: Long cuisine lists roll smoothly instead
+                      // of ending with ellipsis in the dashboard sidebar.
+                      SmoothMarqueeText(
                         VendorData.displayCuisine.isNotEmpty
                             ? VendorData.displayCuisine
                             : 'Vendor Portal',
@@ -391,8 +394,8 @@ class _VendorHomePageState extends State<VendorHomePage> {
                           fontWeight: FontWeight.w500,
                           color: textColor.withValues(alpha: 0.6),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        overflow: TextOverflow.clip,
                       ),
                     ],
                   ),

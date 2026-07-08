@@ -63,6 +63,9 @@ Future<void> openRazorpayCheckout(
       'order_id': razorpayOrder['id'],
       'description': 'Food Order',
       'prefill': prefill,
+      // CODEX EDITS: Disable Razorpay's in-checkout retry so repeated UPI taps
+      // do not create multiple failed attempts/emails for the same order id.
+      'retry': {'enabled': false},
       'config': {
         'display': {
           'blocks': {
