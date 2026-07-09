@@ -435,18 +435,20 @@ class ApiService {
   }
 
   static Map<String, dynamic> _decodeObject(http.Response response) {
-    final decoded = jsonDecode(response.body);
+    // CODEX EDITS: Nginx/AWS can return HTML/plain-text 502/503/504 when the
+    // Node server is down; decode safely so users never see JSON parser errors.
+    final decoded = _safeDecode(response);
     if (response.statusCode == 401) {
       _onAuthError?.call();
       throw const AuthException();
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = decoded is Map && decoded['message'] != null
-          ? decoded['message'].toString()
-          : 'Request failed with status ${response.statusCode}';
-      throw Exception(message);
+      throw Exception(_messageFromResponse(response, decoded));
     }
-    return Map<String, dynamic>.from(decoded as Map);
+    if (decoded is! Map) {
+      throw Exception('Invalid server response. Please try again.');
+    }
+    return Map<String, dynamic>.from(decoded);
   }
 
   static Future<Map<String, String>> _jsonHeaders({
@@ -468,19 +470,43 @@ class ApiService {
   }
 
   static List<Map<String, dynamic>> _decodeList(http.Response response) {
-    final decoded = jsonDecode(response.body);
+    // CODEX EDITS: Safely handle proxy/server-down responses before parsing a
+    // list, otherwise HTML 503 pages surface as "Unexpected character".
+    final decoded = _safeDecode(response);
     if (response.statusCode == 401) {
       _onAuthError?.call();
       throw const AuthException();
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      final message = decoded is Map && decoded['message'] != null
-          ? decoded['message'].toString()
-          : 'Request failed with status ${response.statusCode}';
-      throw Exception(message);
+      throw Exception(_messageFromResponse(response, decoded));
     }
-    return (decoded as List)
+    if (decoded is! List) {
+      throw Exception('Invalid server response. Please try again.');
+    }
+    return decoded
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
+  }
+
+  static dynamic _safeDecode(http.Response response) {
+    try {
+      final body = response.body.trim();
+      if (body.isEmpty) return null;
+      return jsonDecode(body);
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static String _messageFromResponse(http.Response response, dynamic decoded) {
+    if (decoded is Map && decoded['message'] != null) {
+      return decoded['message'].toString();
+    }
+    if (response.statusCode == 502 ||
+        response.statusCode == 503 ||
+        response.statusCode == 504) {
+      return 'Server is currently unavailable. Please try again.';
+    }
+    return 'Request failed with status ${response.statusCode}';
   }
 }

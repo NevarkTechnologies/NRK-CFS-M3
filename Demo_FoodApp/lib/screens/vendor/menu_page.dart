@@ -234,6 +234,8 @@ class _MenuPageState extends State<MenuPage> {
                                 ? customOption
                                 : selectedCategory,
                             isExpanded: true,
+                            dropdownColor: cardColor,
+                            iconEnabledColor: textColor,
                             items: categoryItems.map((categoryValue) {
                               return DropdownMenuItem<String>(
                                 value: categoryValue,
@@ -593,6 +595,8 @@ class _MenuPageState extends State<MenuPage> {
                               ? customOption
                               : selectedCategory,
                           isExpanded: true,
+                          dropdownColor: cardColor,
+                          iconEnabledColor: textColor,
                           items: categoryItems.map((categoryValue) {
                             return DropdownMenuItem<String>(
                               value: categoryValue,
@@ -744,7 +748,9 @@ class _MenuPageState extends State<MenuPage> {
                     image: selectedImageDataUrl.isNotEmpty
                         ? selectedImageDataUrl
                         : null,
-                    imageType: selectedImageDataUrl.isNotEmpty ? 'base64' : null,
+                    imageType: selectedImageDataUrl.isNotEmpty
+                        ? 'base64'
+                        : null,
                   );
 
                   if (!mounted) return;
@@ -1015,13 +1021,13 @@ class _MenuPageState extends State<MenuPage> {
           const SizedBox(height: 16),
           Text(
             item.name,
-            maxLines: 2,
+            maxLines: 3,
             softWrap: true,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontFamily: 'Nunito',
               fontWeight: FontWeight.w900,
-              fontSize: 16,
+              fontSize: 14,
               color: textColor,
               height: 1.2,
             ),
@@ -1080,8 +1086,11 @@ class _MenuPageState extends State<MenuPage> {
                                     color: Colors.blue,
                                     size: 18,
                                   ),
-                                  onPressed: () =>
-                                      openEditDialog(item, cardColor, textColor),
+                                  onPressed: () => openEditDialog(
+                                    item,
+                                    cardColor,
+                                    textColor,
+                                  ),
                                 ),
                               ),
                             ),

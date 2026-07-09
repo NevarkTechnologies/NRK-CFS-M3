@@ -357,7 +357,7 @@ class _LoginPageState extends State<LoginPage> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: const Color.fromARGB(139, 15, 23, 42),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(
@@ -383,7 +383,7 @@ class _LoginPageState extends State<LoginPage> {
               ],
             ),
             content: const Text(
-              'Please ensure your selected pickup time is accurate. Canteen staff prepare orders based on the time provided. Once prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.',
+              'Please ensure your selected pickup time is accurate. Canteen prepares order based on the time provided.\nOnce prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.\nThank you for your understanding.',
               style: TextStyle(
                 color: Color(0xFFCBD5E1),
                 fontSize: 13.5,
