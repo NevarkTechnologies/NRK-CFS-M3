@@ -878,11 +878,25 @@ class _CheckoutPageState extends State<CheckoutPage>
   Future<void> _handleRazorpayError(Map<String, dynamic> sdkError) async {
     if (_paymentTerminalHandled) return;
     _setAwaitingPayment(true);
-    await _reconcilePendingPayment(
+    // CODEX EDITS 2026-07-09 11:22:21 IST: Reconcile cancellation/errors
+    // silently first; only then decide whether to show resume, expire, or
+    // user-abandon options.
+    final result = await _reconcilePendingPayment(
       sdkError: sdkError,
       pollAttempts: 6,
-      showPendingMessage: true,
+      showPendingMessage: false,
     );
+    if (!mounted || _paymentTerminalHandled) return;
+    final state = result?['state']?.toString();
+    if (state == 'expired') {
+      _showError('Payment session expired. Please tap Pay again.');
+      return;
+    }
+    if (_isUserCancelledPayment(sdkError)) {
+      _showPaymentCancelledPending();
+    } else {
+      _showPaymentPending();
+    }
   }
 
   // CODEX EDITS: Selecting an external wallet is a continuation, not failure.
@@ -971,6 +985,52 @@ class _CheckoutPageState extends State<CheckoutPage>
     } finally {
       _isReconcilingPayment = false;
     }
+  }
+
+  // CODEX EDITS 2026-07-09 11:22:21 IST: Razorpay cancellation is still
+  // reconciled first, but after no capture is found the user may explicitly
+  // abandon this local pending pointer and start a fresh cart payment.
+  bool _isUserCancelledPayment(Map<String, dynamic> sdkError) {
+    final code = sdkError['code']?.toString();
+    final message = sdkError['message']?.toString().toLowerCase() ?? '';
+    final nested = sdkError['error'];
+    final nestedReason = nested is Map
+        ? (nested['reason'] ?? nested['error_reason'] ?? '')
+              .toString()
+              .toLowerCase()
+        : '';
+    return code == '2' ||
+        message.contains('cancel') ||
+        nestedReason.contains('cancel');
+  }
+
+  // CODEX EDITS 2026-07-09 11:22:21 IST: This action only clears the client
+  // resume token. The backend session remains auditable/reconcilable, and any
+  // truly captured payment can still be recovered by webhook/reconcile.
+  void _showPaymentCancelledPending() {
+    if (!mounted) return;
+    final pendingOrderId = _razorpayOrder?['id']?.toString();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'Payment cancelled. We verified no payment capture yet.',
+        ),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'Start new',
+          textColor: Colors.white,
+          onPressed: () {
+            unawaited(
+              PendingPaymentService.clear(expectedOrderId: pendingOrderId),
+            );
+            _razorpayOrder = null;
+            _razorpayKeyId = null;
+            _setAwaitingPayment(false);
+          },
+        ),
+      ),
+    );
   }
 
   // CODEX EDITS: Pending is deliberately neutral and instructs against a

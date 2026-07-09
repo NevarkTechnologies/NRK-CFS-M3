@@ -18,6 +18,14 @@ const PaymentSessionSchema = new mongoose.Schema({
   lastPaymentId: { type: String, default: '' },
   lastError: { type: mongoose.Schema.Types.Mixed, default: null },
   createdAt: { type: Date, default: Date.now },
+  // CODEX EDITS 2026-07-09 11:22:21 IST: Active checkout retry window is
+  // separate from seven-day audit retention, so cancelled sessions stop
+  // blocking a fresh cart after 15 minutes.
+  activeUntil: {
+    type: Date,
+    default: () => new Date(Date.now() + 15 * 60 * 1000),
+    index: true,
+  },
   expiresAt: {
     type: Date,
     default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

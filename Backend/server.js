@@ -35,6 +35,9 @@ let razorpayClient;
 const PAYMENT_PROCESSING_LEASE_MS = 30 * 1000;
 const WEBHOOK_PROCESSING_LEASE_MS = 60 * 1000;
 const OUTBOX_PROCESSING_LEASE_MS = 60 * 1000;
+// CODEX EDITS 2026-07-09 11:22:21 IST: A Razorpay checkout can be safely
+// resumed only for 15 minutes; the Mongo document still remains for audit.
+const PAYMENT_SESSION_ACTIVE_MS = 15 * 60 * 1000;
 const PAYMENT_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 let notificationOutboxTimer;
 
@@ -508,6 +511,33 @@ async function migratePaymentSessionIndexes() {
     { expiresAt: { $exists: false } },
     { $set: { expiresAt: defaultExpiry } }
   );
+  // CODEX EDITS 2026-07-09 11:22:21 IST: Backfill the 15-minute active
+  // checkout window from each session's original creation time. This makes
+  // old cancelled sessions stop blocking new carts immediately after deploy.
+  const sessionsWithoutActiveUntil = await PaymentSession.find(
+    { activeUntil: { $exists: false } },
+    { _id: 1, createdAt: 1 }
+  ).lean();
+  if (sessionsWithoutActiveUntil.length > 0) {
+    await PaymentSession.bulkWrite(
+      sessionsWithoutActiveUntil.map(session => {
+        const createdAt = session.createdAt instanceof Date
+          ? session.createdAt
+          : new Date();
+        return {
+          updateOne: {
+            filter: { _id: session._id },
+            update: {
+              $set: {
+                activeUntil: new Date(createdAt.getTime() + PAYMENT_SESSION_ACTIVE_MS),
+              },
+            },
+          },
+        };
+      }),
+      { ordered: false }
+    );
+  }
   await PaymentSession.collection.createIndex(
     { expiresAt: 1 },
     { expireAfterSeconds: 0, name: 'expiresAt_1' }
@@ -1014,6 +1044,9 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     // CODEX EDITS: Explicit state/expiry keeps old and new workers compatible
     // during a rolling PM2 reload.
     status: 'pending',
+    // CODEX EDITS 2026-07-09 11:22:21 IST: This order can be resumed/retried
+    // for 15 minutes only; after that a changed cart may start a new payment.
+    activeUntil: new Date(Date.now() + PAYMENT_SESSION_ACTIVE_MS),
     expiresAt: new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS),
     cart: {
       // CODEX EDITS: Bind the payment owner to the verified Firebase identity;
@@ -1284,6 +1317,16 @@ function sanitizeSdkError(value) {
   };
 }
 
+// CODEX EDITS 2026-07-09 11:22:21 IST: Compute the operational payment
+// window even for pre-migration sessions that may not have activeUntil stored.
+function paymentSessionActiveUntil(paymentSession) {
+  if (paymentSession?.activeUntil instanceof Date) return paymentSession.activeUntil;
+  const createdAt = paymentSession?.createdAt instanceof Date
+    ? paymentSession.createdAt
+    : new Date();
+  return new Date(createdAt.getTime() + PAYMENT_SESSION_ACTIVE_MS);
+}
+
 // CODEX EDITS: Never fulfil from a captured webhook/API object unless its
 // immutable amount, currency, and provider order ID match the server-side cart.
 function assertCapturedPaymentIntegrity(paymentSession, razorpayOrder, payment) {
@@ -1390,6 +1433,39 @@ app.post(
         'server_reconcile'
       );
       if (order) return res.json({ state: 'captured', order });
+    }
+
+    const activeUntil = paymentSessionActiveUntil(paymentSession);
+    if (activeUntil <= new Date()) {
+      // CODEX EDITS 2026-07-09 11:22:21 IST: If Razorpay has no captured
+      // payment after 15 minutes, expire this checkout so the app can clear
+      // the local pending pointer and create a fresh order for the current cart.
+      await PaymentSession.updateOne(
+        { _id: paymentSession._id, status: { $ne: 'completed' } },
+        {
+          $set: {
+            status: 'failed',
+            activeUntil,
+            lastError: {
+              code: 'session_expired',
+              message: 'Payment session expired after 15 minutes with no captured payment',
+              at: new Date(),
+              source: 'server_reconcile',
+            },
+          },
+        }
+      );
+      paymentLog('payment.reconcile_expired_active_window', {
+        razorpayOrderId,
+        gatewayStatus: String(razorpayOrder?.status || 'created'),
+        paymentAttempts: payments.length,
+        activeUntil: activeUntil.toISOString(),
+      }, 'warn');
+      return res.json({
+        state: 'expired',
+        retryable: false,
+        message: 'Payment session expired. Please start a new payment.',
+      });
     }
 
     const gatewayStatus = capturedPayment
