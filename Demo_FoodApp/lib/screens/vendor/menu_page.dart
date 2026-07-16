@@ -1,3 +1,4 @@
+import '../../utils/b64_image_cache.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -820,7 +821,7 @@ class _MenuPageState extends State<MenuPage> {
     if (imageUrl.startsWith('data:')) {
       final base64Part = imageUrl.split(',').last;
       try {
-        final bytes = base64Decode(base64Part);
+        final bytes = B64ImageCache.decode(base64Part);
         return Image.memory(
           bytes,
           fit: BoxFit.cover,

@@ -4,7 +4,19 @@ const mongoose = require('mongoose');
 // long enough for Razorpay late-authorisation and are never deleted before the
 // paid order is safely persisted.
 const PaymentSessionSchema = new mongoose.Schema({
+  // Unique provider-side order key. Named for the original Razorpay-only flow;
+  // for provider 'paytm' it stores our Paytm merchant orderId (PTM...). Kept
+  // under the old name so live production sessions keep working across deploys.
   razorpayOrderId: { type: String, required: true, unique: true, index: true },
+  provider: {
+    type: String,
+    enum: ['razorpay', 'paytm'],
+    default: 'razorpay',
+    index: true,
+  },
+  // Paytm-only checkout state: { txnToken, callbackUrl, channel }. The token is
+  // required to resume the same Paytm order within the 15-minute active window.
+  paytm: { type: mongoose.Schema.Types.Mixed, default: null },
   cart: { type: mongoose.Schema.Types.Mixed, required: true },
   status: {
     type: String,

@@ -1,3 +1,4 @@
+import '../../utils/b64_image_cache.dart';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -329,7 +330,7 @@ class _VendorHomePageState extends State<VendorHomePage> {
                     if (src.startsWith('data:image/')) {
                       final b64 = src.split(',').last;
                       imgChild = Image.memory(
-                        base64Decode(b64),
+                        B64ImageCache.decode(b64),
                         fit: BoxFit.cover,
                         errorBuilder: (_, _, _) => Icon(
                           Icons.storefront_rounded,

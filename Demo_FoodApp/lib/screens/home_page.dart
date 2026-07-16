@@ -1,3 +1,4 @@
+import '../utils/b64_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'dart:typed_data';
@@ -1224,7 +1225,7 @@ class _MenuItemImageState extends State<_MenuItemImage> {
     if (_decodedSource == imageUrl && _bytes != null) return;
     _decodedSource = imageUrl;
     try {
-      _bytes = base64Decode(imageUrl.split(',').last);
+      _bytes = B64ImageCache.decode(imageUrl.split(',').last);
     } catch (_) {
       _bytes = null;
     }

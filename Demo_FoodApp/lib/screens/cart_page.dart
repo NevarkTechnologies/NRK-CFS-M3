@@ -1,3 +1,4 @@
+import '../utils/b64_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'checkout_page.dart';
@@ -118,14 +119,6 @@ class _CartPageState extends State<CartPage> {
       0,
       (sum, item) => sum + ((item["price"] as num) * (item["qty"] as int)),
     );
-  }
-
-  double get _platformFee =>
-      double.parse((getTotal() * 0.03).toStringAsFixed(2));
-  double get _convenienceFee => 1.5;
-
-  double getFinalTotal() {
-    return getTotal().toDouble() + _platformFee + _convenienceFee;
   }
 
   void updateQty(Map<String, dynamic> item, int delta) {
@@ -373,7 +366,7 @@ class _CartPageState extends State<CartPage> {
       );
     } else if (imageValue.startsWith('data:image')) {
       try {
-        final bytes = base64Decode(imageValue.split(',').last);
+        final bytes = B64ImageCache.decode(imageValue.split(',').last);
 
         imageWidget = Image.memory(
           bytes,
@@ -709,9 +702,10 @@ class _CartPageState extends State<CartPage> {
             ),
           ),
           const SizedBox(height: 16),
+          // Fees (platform/convenience) are intentionally not shown here —
+          // they depend on the payment gateway chosen at checkout, where the
+          // full breakdown is displayed from the live fee config.
           _billRow("Item Total", getTotal(), subTextColor, textColor),
-          _billRow("Platform Fee (3%)", _platformFee, subTextColor, textColor),
-          _billRow("Convenience Fee", _convenienceFee, subTextColor, textColor),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Divider(
@@ -723,7 +717,7 @@ class _CartPageState extends State<CartPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Total Pay",
+                "Total Cost",
                 style: TextStyle(
                   fontFamily: 'Nunito',
                   color: textColor,
@@ -732,7 +726,7 @@ class _CartPageState extends State<CartPage> {
                 ),
               ),
               Text(
-                "₹${getFinalTotal().toStringAsFixed(2)}",
+                "₹${getTotal().toStringAsFixed(2)}",
                 style: TextStyle(
                   fontFamily: 'Inter',
                   color: textColor,
@@ -741,6 +735,15 @@ class _CartPageState extends State<CartPage> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            "Platform & convenience fees are added at checkout",
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 11.5,
+              color: subTextColor,
+            ),
           ),
         ],
       ),

@@ -18,6 +18,12 @@ const Notification = require('./models/notification');
 const CafeCounter = require('./models/cafeCounter');
 const PaymentSession = require('./models/paymentSession');
 const AuditLog = require('./models/auditLog');
+// Per-gateway fee structure, editable directly in MongoDB (see models/feeConfig).
+const FeeConfig = require('./models/feeConfig');
+// Operational settings (pickup window, ...) editable directly in MongoDB.
+const AppConfig = require('./models/appConfig');
+// Official Paytm checksum implementation (vendored, lib/paytmChecksum.js).
+const PaytmChecksum = require('./lib/paytmChecksum');
 // CODEX EDITS: Durable webhook receipts and notification outbox are shared by
 // every PM2 worker through MongoDB.
 const PaymentWebhookEvent = require('./models/paymentWebhookEvent');
@@ -30,6 +36,23 @@ console.log('Co-owner Bug Fixed');
 app.set('trust proxy', 1);
 const allowedStatuses = ['Pending', 'Preparing', 'Ready', 'Completed', 'Rejected'];
 let razorpayClient;
+// Supported payment gateways. Paytm is the preferred option shown first and
+// auto-selected in the app; Razorpay remains fully supported.
+const PAYMENT_GATEWAYS = ['razorpay', 'paytm'];
+const PREFERRED_GATEWAY = 'paytm';
+// Seed values for the fee_configs collection and fallback if a document is
+// ever deleted — matches the previously hardcoded 3% + ₹1.5 structure.
+const FEE_DEFAULTS = {
+  razorpay: { platformFeePercent: 3, platformFeeFlat: 0, convenienceFee: 1.5, active: true },
+  paytm: { platformFeePercent: 3, platformFeeFlat: 0, convenienceFee: 1.5, active: true },
+};
+// Same-day pickup window, enforced server-side so no client (old builds
+// included) can place an order outside it. Defaults to 11:00–13:30 IST; the
+// live values come from the app_configs document {key: 'pickup_window'} and
+// can be edited directly in MongoDB (reflects immediately, no restart):
+//   db.app_configs.updateOne({key:'pickup_window'},
+//     {$set:{'value.start':'11:00','value.end':'13:30'}})
+const PICKUP_WINDOW_DEFAULTS = { start: '11:00', end: '13:30' };
 // CODEX EDITS: Processing leases allow another worker to safely resume work
 // after a crash without deleting the payment cart.
 const PAYMENT_PROCESSING_LEASE_MS = 30 * 1000;
@@ -75,6 +98,13 @@ app.use(express.json({
   verify: (req, res, buf) => { req.rawBody = buf; },
 }));
 
+// Paytm posts its payment callback as application/x-www-form-urlencoded.
+app.use(express.urlencoded({
+  extended: false,
+  limit: '1mb',
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
+
 // express-mongo-sanitize is incompatible with Express 5 (req.query is read-only).
 // Inline sanitizer: strips keys starting with $ or containing . from body and query.
 function stripMongo(obj) {
@@ -112,7 +142,8 @@ const generalLimiter = rateLimit({
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:general:' }),
   // CODEX EDITS: Razorpay deliveries use a dedicated, higher-capacity limiter;
   // sharing the public API bucket could reject valid captures during bursts.
-  skip: req => req.path === '/razorpay/webhook',
+  // Paytm's payment callback gets the same treatment.
+  skip: req => req.path === '/razorpay/webhook' || req.path === '/paytm/callback',
 });
 
 // Strict limit for order writes (place/confirm/status) — 10 per minute
@@ -122,7 +153,8 @@ const orderLimiter = rateLimit({
   message: { message: 'Too many order requests, please slow down.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:order:' }),
   // CODEX EDITS: Reconciliation has its own authenticated read-style limiter.
-  skip: req => req.path === '/reconcile',
+  // /fees is a public read hit on every cart/checkout open — never write-limited.
+  skip: req => req.path === '/reconcile' || req.path === '/fees',
 });
 // Generous limit for order reads — per Firebase UID so accounts don't share a bucket
 const orderReadLimiter = rateLimit({
@@ -269,6 +301,224 @@ async function createRazorpayOrder(orderId, amount) {
     receipt: orderId,
     notes: { orderId },
   });
+}
+
+// ── Paytm gateway helpers ─────────────────────────────────────────────────────
+
+function getPaytmConfig() {
+  const mid = process.env.PAYTM_MID;
+  const key = process.env.PAYTM_MERCHANT_KEY;
+  if (!mid || !key) {
+    const error = new Error('Paytm credentials are not configured');
+    error.statusCode = 503;
+    throw error;
+  }
+  const baseUrl = (process.env.PAYTM_BASE_URL || 'https://securestage.paytmpayments.com')
+    .replace(/\/+$/, '');
+  return {
+    mid,
+    key,
+    website: process.env.PAYTM_WEBSITE || 'WEBSTAGING',
+    baseUrl,
+    // Staging hosts drive the SDK's isStaging flag and webview-only checkout.
+    isStaging: /securestage\.|securegw-stage\./.test(baseUrl),
+  };
+}
+
+function makePaytmOrderId() {
+  return `PTM${Date.now()}${Math.floor(Math.random() * 900 + 100)}`;
+}
+
+async function paytmApiPost(url, payload, timeoutMs = 20000) {
+  if (typeof fetch !== 'function') {
+    const error = new Error('Paytm integration requires Node 18+ (global fetch)');
+    error.statusCode = 503;
+    throw error;
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data) {
+      throw new Error(`Paytm API responded with HTTP ${response.status}`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Creates the Paytm transaction token that opens checkout. The signature is
+// computed over the exact JSON body with the merchant key (official checksum).
+async function createPaytmTransactionToken(orderId, amount, { custId, email, callbackUrl }) {
+  const cfg = getPaytmConfig();
+  const body = {
+    requestType: 'Payment',
+    mid: cfg.mid,
+    websiteName: cfg.website,
+    orderId,
+    callbackUrl,
+    txnAmount: { value: toMoney(amount).toFixed(2), currency: 'INR' },
+    userInfo: {
+      custId: String(custId || 'guest').slice(0, 64),
+      ...(email ? { email: String(email).slice(0, 100) } : {}),
+    },
+  };
+  const signature = await PaytmChecksum.generateSignature(JSON.stringify(body), cfg.key);
+  const data = await paytmApiPost(
+    `${cfg.baseUrl}/theia/api/v1/initiateTransaction?mid=${encodeURIComponent(cfg.mid)}&orderId=${encodeURIComponent(orderId)}`,
+    { body, head: { signature } }
+  );
+  const resultStatus = data?.body?.resultInfo?.resultStatus;
+  const txnToken = data?.body?.txnToken;
+  if (resultStatus !== 'S' || !txnToken) {
+    paymentLog('payment.paytm_initiate_failed', {
+      paytmOrderId: orderId,
+      resultCode: data?.body?.resultInfo?.resultCode,
+      resultMsg: data?.body?.resultInfo?.resultMsg,
+    }, 'error');
+    const error = new Error(
+      data?.body?.resultInfo?.resultMsg || 'Paytm transaction could not be initiated'
+    );
+    error.statusCode = 502;
+    throw error;
+  }
+  return { txnToken, config: cfg };
+}
+
+// Authoritative payment truth for Paytm — the Transaction Status API. Client
+// results and callback params are never trusted without this check.
+async function fetchPaytmTransactionStatus(orderId) {
+  const cfg = getPaytmConfig();
+  const body = { mid: cfg.mid, orderId };
+  const signature = await PaytmChecksum.generateSignature(JSON.stringify(body), cfg.key);
+  const data = await paytmApiPost(`${cfg.baseUrl}/v3/order/status`, { body, head: { signature } });
+  const info = data?.body?.resultInfo || {};
+  return {
+    resultStatus: String(info.resultStatus || 'UNKNOWN'),
+    resultCode: String(info.resultCode || ''),
+    resultMsg: String(info.resultMsg || ''),
+    txnId: String(data?.body?.txnId || ''),
+    txnAmount: data?.body?.txnAmount,
+    orderId: String(data?.body?.orderId || orderId),
+  };
+}
+
+// Mirror of assertCapturedPaymentIntegrity for Paytm: fulfil only when the
+// gateway-confirmed amount and order id match the server-side cart exactly.
+function assertPaytmCapturedIntegrity(paymentSession, statusResult) {
+  const expected = toMoney(paymentSession.cart.total);
+  const paid = toMoney(statusResult.txnAmount);
+  if (paid !== expected || statusResult.orderId !== paymentSession.razorpayOrderId) {
+    const error = new Error('Captured Paytm payment does not match the initiated order');
+    error.statusCode = 409;
+    throw error;
+  }
+}
+
+// ── Fee configuration (DB-driven, real-time) ─────────────────────────────────
+
+// Insert default fee documents once; existing documents are never overwritten,
+// so direct DB edits survive every deploy/restart.
+async function seedFeeConfigs() {
+  for (const [gateway, defaults] of Object.entries(FEE_DEFAULTS)) {
+    await FeeConfig.updateOne(
+      { gateway },
+      { $setOnInsert: { gateway, ...defaults } },
+      { upsert: true }
+    );
+  }
+  // Pickup window document — inserted once, then owned by direct DB edits.
+  await AppConfig.updateOne(
+    { key: 'pickup_window' },
+    { $setOnInsert: { key: 'pickup_window', value: { ...PICKUP_WINDOW_DEFAULTS } } },
+    { upsert: true }
+  );
+}
+
+// Read live on every request — a direct MongoDB edit reflects immediately in
+// both the fees endpoint and the amounts actually charged at initiation.
+async function getFeeConfig(gateway) {
+  const doc = await FeeConfig.findOne({ gateway }).lean();
+  if (doc) return doc;
+  return { gateway, ...(FEE_DEFAULTS[gateway] || FEE_DEFAULTS.razorpay) };
+}
+
+function computeOrderFees(itemTotal, feeConfig) {
+  const percent = Number(feeConfig.platformFeePercent) || 0;
+  const flat = Number(feeConfig.platformFeeFlat) || 0;
+  const platformFee = toMoney(itemTotal * (percent / 100) + flat);
+  const convenienceFee = toMoney(
+    feeConfig.convenienceFee === undefined ? 1.5 : feeConfig.convenienceFee
+  );
+  return { platformFee, convenienceFee };
+}
+
+// ── Pickup window validation ──────────────────────────────────────────────────
+
+function parseHHMM(value) {
+  const match = /^([01]?\d|2[0-3]):([0-5]\d)$/.exec(String(value || '').trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function formatMinutes12h(minutes) {
+  const h24 = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  const period = h24 < 12 ? 'AM' : 'PM';
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+// Live-read the pickup window from app_configs; malformed or missing values
+// fall back to the defaults so ordering is never bricked by a bad edit.
+async function getPickupWindow() {
+  let start = PICKUP_WINDOW_DEFAULTS.start;
+  let end = PICKUP_WINDOW_DEFAULTS.end;
+  try {
+    const doc = await AppConfig.findOne({ key: 'pickup_window' }).lean();
+    if (doc?.value?.start !== undefined) start = doc.value.start;
+    if (doc?.value?.end !== undefined) end = doc.value.end;
+  } catch {
+    // Fall through to defaults.
+  }
+  let startMinutes = parseHHMM(start);
+  let endMinutes = parseHHMM(end);
+  if (startMinutes === null || endMinutes === null || startMinutes > endMinutes) {
+    startMinutes = parseHHMM(PICKUP_WINDOW_DEFAULTS.start);
+    endMinutes = parseHHMM(PICKUP_WINDOW_DEFAULTS.end);
+  }
+  return {
+    start: formatMinutes12h(startMinutes),
+    end: formatMinutes12h(endMinutes),
+    startMinutes,
+    endMinutes,
+  };
+}
+
+// pickupTime arrives as the device's local wall-clock ISO string
+// (YYYY-MM-DDTHH:mm:ss). Components are compared against IST "today" directly —
+// never via Date parsing — so the server's own timezone cannot skew the rule.
+async function validatePickupWindow(pickupTime) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(String(pickupTime || ''));
+  if (!match) return 'A valid pickup time is required.';
+  const [, year, month, day, hour, minute] = match;
+  const istToday = new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
+  if (`${year}-${month}-${day}` !== istToday) {
+    return 'Pickup must be scheduled for today.';
+  }
+  const window = await getPickupWindow();
+  const minutes = Number(hour) * 60 + Number(minute);
+  if (minutes < window.startMinutes || minutes > window.endMinutes) {
+    return `Pickup time must be between ${window.start} and ${window.end}.`;
+  }
+  return null;
 }
 
 async function sendPushNotification(userIds, title, message, data = {}) {
@@ -481,7 +731,11 @@ async function connectDatabase() {
     NotificationOutbox.init(),
     Notification.init(),
     Order.init(),
+    FeeConfig.init(),
+    AppConfig.init(),
   ]);
+  // Seed per-gateway fee documents (no-op when they already exist).
+  await seedFeeConfigs();
   console.log('MongoDB connected');
 }
 
@@ -974,6 +1228,33 @@ app.delete('/api/menu/:id', requireFirebaseAuth, validateObjectId('id'), require
 
 // ── Payment ───────────────────────────────────────────────────────────────────
 
+// Public, read live from MongoDB: the app fetches this on cart/checkout open so
+// direct fee_configs edits reflect in real time without a deploy.
+app.get('/api/payment/fees', asyncHandler(async (req, res) => {
+  const [configs, pickupWindow] = await Promise.all([
+    Promise.all(PAYMENT_GATEWAYS.map(gateway => getFeeConfig(gateway))),
+    getPickupWindow(),
+  ]);
+  res.json({
+    preferredGateway: PREFERRED_GATEWAY,
+    gateways: configs.map(config => ({
+      gateway: config.gateway,
+      active: config.active !== false,
+      platformFeePercent: Number(config.platformFeePercent) || 0,
+      platformFeeFlat: Number(config.platformFeeFlat) || 0,
+      convenienceFee: Number(config.convenienceFee) || 0,
+    })),
+    // Same-day pickup window (minutes since midnight + display labels) — the
+    // app builds its slot picker from this instead of hardcoded values.
+    pickupWindow: {
+      startMinutes: pickupWindow.startMinutes,
+      endMinutes: pickupWindow.endMinutes,
+      startLabel: pickupWindow.start,
+      endLabel: pickupWindow.end,
+    },
+  });
+}));
+
 // Step 1: compute totals server-side, create Razorpay order, persist cart to DB.
 app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const {
@@ -1026,14 +1307,106 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     }
   }
 
-  const itemTotal      = toMoney(normalizedItems.reduce((s, i) => s + i.price * i.qty, 0));
-  const platformFee    = toMoney(itemTotal * 0.03);
-  const convenienceFee = 1.5;
+  // Gateway selection — Paytm is the preferred default in the app; requests
+  // from older builds that omit it keep the original Razorpay behaviour.
+  const gateway = String(req.body.gateway || 'razorpay').toLowerCase();
+  if (!PAYMENT_GATEWAYS.includes(gateway)) {
+    return res.status(400).json({ message: `gateway must be one of: ${PAYMENT_GATEWAYS.join(', ')}` });
+  }
+
+  // Same-day pickup window (DB-configurable), enforced regardless of client version.
+  const pickupError = await validatePickupWindow(pickupTime);
+  if (pickupError) return res.status(400).json({ message: pickupError });
+
+  const itemTotal = toMoney(normalizedItems.reduce((s, i) => s + i.price * i.qty, 0));
+  // Fees come from the fee_configs collection (live read) — see models/feeConfig.
+  const feeConfig = await getFeeConfig(gateway);
+  if (feeConfig.active === false) {
+    return res.status(409).json({ message: 'This payment method is currently unavailable. Please choose another.' });
+  }
+  const { platformFee, convenienceFee } = computeOrderFees(itemTotal, feeConfig);
   // Discounts are not accepted from the client — there is no server-validated coupon
   // system yet. Forcing 0 prevents price manipulation via an arbitrary discount value.
   const discountAmt    = 0;
   const total          = toMoney(itemTotal + platformFee + convenienceFee);
   if (total <= 0) return res.status(400).json({ message: 'Order total must be greater than zero' });
+
+  // Server-side cart persisted with the session — survives crashes and
+  // multi-instance deployments. Shared by both gateways.
+  const cart = {
+    // CODEX EDITS: Bind the payment owner to the verified Firebase identity;
+    // never trust a client-supplied email for reconciliation access control.
+    userId: resolvedUserId,
+    customerName,
+    customerEmail: (req.firebaseUser.email || customerEmail || '').toLowerCase(),
+    cafeId: resolvedCafeId, cafeteriaName,
+    items: normalizedItems,
+    itemTotal, platformFee, convenienceFee, discount: discountAmt, total,
+    location: location || 'Pickup counter',
+    pickupTime: pickupTime || '',
+    notes: notes || '',
+  };
+  // Authoritative fee breakdown echoed to the client so the summary it renders
+  // always matches the amount actually charged.
+  const fees = { gateway, itemTotal, platformFee, convenienceFee, discount: discountAmt, total };
+
+  if (gateway === 'paytm') {
+    const paytmConfig = getPaytmConfig();
+    const paytmOrderId = makePaytmOrderId();
+    const channel = req.body.channel === 'web' ? 'web' : 'app';
+    let callbackUrl;
+    if (channel === 'web') {
+      // Web checkout is a full-page redirect: Paytm must return the browser to
+      // our callback page, which finalises the order and links back to the app.
+      const publicBase = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+      if (!publicBase) {
+        return res.status(503).json({ message: 'Paytm web payments are not configured (PUBLIC_BASE_URL missing)' });
+      }
+      callbackUrl = `${publicBase}/api/paytm/callback`;
+    } else {
+      // All-in-One SDK flow: Paytm's own callback returns the result to the app;
+      // the Transaction Status API remains the only source of truth server-side.
+      callbackUrl = `${paytmConfig.baseUrl}/theia/paytmCallback?ORDER_ID=${paytmOrderId}`;
+    }
+
+    const { txnToken } = await createPaytmTransactionToken(paytmOrderId, total, {
+      custId: req.firebaseUser.uid,
+      email: cart.customerEmail,
+      callbackUrl,
+    });
+
+    await PaymentSession.create({
+      razorpayOrderId: paytmOrderId,
+      provider: 'paytm',
+      status: 'pending',
+      activeUntil: new Date(Date.now() + PAYMENT_SESSION_ACTIVE_MS),
+      expiresAt: new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS),
+      paytm: { txnToken, callbackUrl, channel },
+      cart,
+    });
+
+    paymentLog('payment.initiated', {
+      gateway: 'paytm',
+      providerOrderId: paytmOrderId,
+      amountPaise: toPaise(total),
+      cafeId: resolvedCafeId ? String(resolvedCafeId) : '',
+    });
+
+    return res.json({
+      gateway: 'paytm',
+      fees,
+      paytmOrder: {
+        orderId: paytmOrderId,
+        txnToken,
+        amount: total.toFixed(2),
+        currency: 'INR',
+        mid: paytmConfig.mid,
+        callbackUrl,
+        isStaging: paytmConfig.isStaging,
+        showPaymentPageUrl: `${paytmConfig.baseUrl}/theia/api/v1/showPaymentPage`,
+      },
+    });
+  }
 
   const receipt      = `init_${makeOrderId()}`;
   const razorpayOrder = await createRazorpayOrder(receipt, total);
@@ -1041,6 +1414,7 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   // Persist cart to MongoDB — survives crashes and multi-instance deployments.
   await PaymentSession.create({
     razorpayOrderId: razorpayOrder.id,
+    provider: 'razorpay',
     // CODEX EDITS: Explicit state/expiry keeps old and new workers compatible
     // during a rolling PM2 reload.
     status: 'pending',
@@ -1048,30 +1422,19 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     // for 15 minutes only; after that a changed cart may start a new payment.
     activeUntil: new Date(Date.now() + PAYMENT_SESSION_ACTIVE_MS),
     expiresAt: new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS),
-    cart: {
-      // CODEX EDITS: Bind the payment owner to the verified Firebase identity;
-      // never trust a client-supplied email for reconciliation access control.
-      userId: resolvedUserId,
-      customerName,
-      customerEmail: (req.firebaseUser.email || customerEmail || '').toLowerCase(),
-      cafeId: resolvedCafeId, cafeteriaName,
-      items: normalizedItems,
-      itemTotal, platformFee, convenienceFee, discount: discountAmt, total,
-      location: location || 'Pickup counter',
-      pickupTime: pickupTime || '',
-      notes: notes || '',
-    },
+    cart,
   });
 
   // CODEX EDITS: Correlate initiation without logging cart contents or PII.
   paymentLog('payment.initiated', {
+    gateway: 'razorpay',
     razorpayOrderId: razorpayOrder.id,
     amountPaise: razorpayOrder.amount,
     cafeId: resolvedCafeId ? String(resolvedCafeId) : '',
   });
 
   // Return key ID so the Flutter client doesn't need to hardcode it.
-  res.json({ razorpayOrder, razorpayKeyId: process.env.RAZORPAY_KEY_ID });
+  res.json({ gateway: 'razorpay', fees, razorpayOrder, razorpayKeyId: process.env.RAZORPAY_KEY_ID });
 }));
 
 // Create the DB order for a paid Razorpay order — shared by the client confirm
@@ -1248,7 +1611,7 @@ async function persistPaidOrder(paymentSession, razorpayOrderId, razorpayPayment
     status: 'Pending',
     payment: {
       method: 'Online',
-      provider: 'Razorpay',
+      provider: paymentSession.provider === 'paytm' ? 'Paytm' : 'Razorpay',
       providerOrderId: razorpayOrderId,
       transactionId: razorpayPaymentId,
       status: 'Paid',
@@ -1347,6 +1710,111 @@ function assertCapturedPaymentIntegrity(paymentSession, razorpayOrder, payment) 
   }
 }
 
+// Paytm counterpart of the Razorpay reconcile flow below. Same response
+// contract (captured/pending/expired) so the app's recovery machinery is
+// shared. Differences: Paytm truth comes from the Transaction Status API, and
+// a TXN_FAILURE order id is terminal — it can never be retried, so the client
+// must start a fresh payment.
+async function reconcilePaytmSession(res, paymentSession, sdkError) {
+  const paytmOrderId = paymentSession.razorpayOrderId;
+  let statusResult;
+  try {
+    statusResult = await fetchPaytmTransactionStatus(paytmOrderId);
+  } catch (error) {
+    // A gateway/network outage is indeterminate, never a customer-facing failure.
+    paymentLog('payment.reconcile_gateway_unavailable', {
+      gateway: 'paytm',
+      providerOrderId: paytmOrderId,
+      sdkErrorCode: sdkError?.code,
+      error: safeErrorMessage(error),
+    }, 'warn');
+    return res.json({
+      state: 'pending',
+      gatewayStatus: 'unavailable',
+      retryable: true,
+      message: 'Payment status is temporarily unavailable',
+    });
+  }
+
+  if (statusResult.resultStatus === 'TXN_SUCCESS') {
+    assertPaytmCapturedIntegrity(paymentSession, statusResult);
+    const order = await createOrderFromPaymentSession(
+      paytmOrderId,
+      statusResult.txnId,
+      'server_reconcile'
+    );
+    if (order) return res.json({ state: 'captured', order });
+    // A peer worker holds the processing lease — report pending, never failure.
+    return res.json({
+      state: 'pending',
+      gatewayStatus: 'captured_processing',
+      retryable: true,
+      message: 'Payment is awaiting final confirmation',
+    });
+  }
+
+  const activeUntil = paymentSessionActiveUntil(paymentSession);
+  const failed = statusResult.resultStatus === 'TXN_FAILURE';
+  if (failed || activeUntil <= new Date()) {
+    await PaymentSession.updateOne(
+      { _id: paymentSession._id, status: { $ne: 'completed' } },
+      {
+        $set: {
+          status: 'failed',
+          activeUntil,
+          lastError: {
+            code: failed ? statusResult.resultCode || 'txn_failure' : 'session_expired',
+            message: failed
+              ? statusResult.resultMsg || 'Paytm reported the transaction as failed'
+              : 'Payment session expired with no successful Paytm transaction',
+            at: new Date(),
+            source: 'server_reconcile',
+          },
+        },
+      }
+    );
+    paymentLog('payment.reconcile_terminal', {
+      gateway: 'paytm',
+      providerOrderId: paytmOrderId,
+      gatewayStatus: statusResult.resultStatus,
+      resultCode: statusResult.resultCode,
+    }, 'warn');
+    return res.json({
+      state: 'expired',
+      retryable: false,
+      message: failed
+        ? 'Payment failed. No amount was captured — please start a new payment.'
+        : 'Payment session expired. Please start a new payment.',
+    });
+  }
+
+  // PENDING / NO_RECORD_FOUND inside the active window: the same order can be
+  // resumed with its original txnToken (valid for the same 15 minutes).
+  const paytmConfig = getPaytmConfig();
+  paymentLog('payment.reconcile_pending', {
+    gateway: 'paytm',
+    providerOrderId: paytmOrderId,
+    gatewayStatus: statusResult.resultStatus,
+    sdkErrorCode: sdkError?.code,
+  });
+  return res.json({
+    state: 'pending',
+    gatewayStatus: statusResult.resultStatus.toLowerCase(),
+    retryable: true,
+    paytmCheckout: {
+      orderId: paytmOrderId,
+      txnToken: paymentSession.paytm?.txnToken || '',
+      amount: toMoney(paymentSession.cart.total).toFixed(2),
+      currency: 'INR',
+      mid: paytmConfig.mid,
+      callbackUrl: paymentSession.paytm?.callbackUrl || '',
+      isStaging: paytmConfig.isStaging,
+      showPaymentPageUrl: `${paytmConfig.baseUrl}/theia/api/v1/showPaymentPage`,
+    },
+    message: 'Payment is awaiting final confirmation',
+  });
+}
+
 // CODEX EDITS: Authoritative reconciliation is used for SDK errors, lifecycle
 // resumes, cold starts, and safe retries of the same Razorpay order.
 app.post(
@@ -1354,9 +1822,13 @@ app.post(
   requireFirebaseAuth,
   paymentReconcileLimiter,
   asyncHandler(async (req, res) => {
-    const razorpayOrderId = String(req.body?.razorpay_order_id || '').trim();
-    if (!/^order_[A-Za-z0-9]+$/.test(razorpayOrderId)) {
-      return res.status(400).json({ message: 'A valid razorpay_order_id is required' });
+    // Accepts either a Razorpay order id (order_...) or a Paytm merchant order
+    // id (PTM...). The client keeps sending it under the historical param name.
+    const razorpayOrderId = String(
+      req.body?.razorpay_order_id || req.body?.provider_order_id || ''
+    ).trim();
+    if (!/^(order_[A-Za-z0-9]+|PTM[0-9]+)$/.test(razorpayOrderId)) {
+      return res.status(400).json({ message: 'A valid payment order id is required' });
     }
 
     const existingOrder = await Order.findOne({ 'payment.providerOrderId': razorpayOrderId });
@@ -1393,6 +1865,11 @@ app.post(
         { _id: paymentSession._id },
         { $set: { lastError: { ...sdkError, at: new Date(), source: 'mobile_sdk' } } }
       );
+    }
+
+    // Paytm sessions reconcile against the Transaction Status API.
+    if (paymentSession.provider === 'paytm') {
+      return reconcilePaytmSession(res, paymentSession, sdkError);
     }
 
     let razorpayOrder;
@@ -1672,6 +2149,171 @@ app.post('/api/razorpay/webhook', webhookLimiter, asyncHandler(async (req, res) 
   // failures reach the error handler so Razorpay retries them.
   res.json({ ok: true });
 }));
+
+// Minimal HTML page returned by the Paytm callback. In the web flow the user's
+// browser lands here after Paytm's redirect; app-flow server notifications
+// simply ignore the body. Links (and auto-redirects) back to the web app.
+function paytmCallbackPage(outcome, orderId) {
+  const appUrl = (process.env.CLIENT_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean)[0] || '';
+  const copy = {
+    success: ['Payment received 🎉', 'Your payment was successful. Return to BenchBites to see your order token.'],
+    pending: ['Payment processing…', 'Your payment is being verified. Return to BenchBites — your order will appear once it is confirmed.'],
+    failed: ['Payment failed', 'No amount was captured. Return to BenchBites and try the payment again.'],
+    invalid: ['Invalid request', 'This payment callback could not be verified.'],
+  }[outcome] || ['Payment update', 'Return to BenchBites to continue.'];
+  const safeOrder = String(orderId || '').replace(/[^A-Za-z0-9_-]/g, '');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${copy[0]} — BenchBites</title>
+<style>body{font-family:system-ui,sans-serif;background:#f4f6f9;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#fff;border-radius:16px;padding:32px;max-width:360px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.08)}
+h1{font-size:20px;color:#0f172a;margin:0 0 8px}p{font-size:14px;color:#475569;line-height:1.5}
+a{display:inline-block;margin-top:16px;background:#0F4CFF;color:#fff;text-decoration:none;padding:10px 24px;border-radius:10px;font-weight:600}
+.oid{font-size:12px;color:#94a3b8;margin-top:14px}</style>
+${appUrl ? `<script>setTimeout(function(){window.location.replace(${JSON.stringify(appUrl)});},2500);</script>` : ''}
+</head><body><div class="card"><h1>${copy[0]}</h1><p>${copy[1]}</p>
+${appUrl ? `<a href="${appUrl}">Return to app</a>` : ''}
+${safeOrder ? `<div class="oid">Ref: ${safeOrder}</div>` : ''}
+</div></body></html>`;
+}
+
+// Paytm payment callback — the web-flow browser redirect and any dashboard-
+// configured server notification both land here as a form POST with a
+// CHECKSUMHASH. Signature is verified with the merchant key, the event is
+// leased through PaymentWebhookEvent exactly like Razorpay webhooks, and the
+// order is only ever fulfilled from the Transaction Status API — callback
+// params alone are never trusted. No Firebase auth: checksum authenticates.
+app.post('/api/paytm/callback', webhookLimiter, asyncHandler(async (req, res) => {
+  const params = { ...(req.body || {}) };
+  const checksum = String(params.CHECKSUMHASH || '');
+  const paytmOrderId = String(params.ORDERID || '');
+  res.set('Content-Type', 'text/html; charset=utf-8');
+
+  if (!paytmOrderId || !checksum) {
+    return res.status(400).send(paytmCallbackPage('invalid', paytmOrderId));
+  }
+
+  let paytmConfig;
+  try {
+    paytmConfig = getPaytmConfig();
+  } catch {
+    return res.status(503).send(paytmCallbackPage('invalid', paytmOrderId));
+  }
+
+  let signatureValid = false;
+  try {
+    // verifySignature strips CHECKSUMHASH from the params object itself.
+    signatureValid = await PaytmChecksum.verifySignature(params, paytmConfig.key, checksum);
+  } catch {
+    signatureValid = false;
+  }
+  if (!signatureValid) {
+    paymentLog('payment.paytm_callback_invalid_signature', { providerOrderId: paytmOrderId }, 'warn');
+    return res.status(400).send(paytmCallbackPage('invalid', paytmOrderId));
+  }
+
+  const callbackStatus = String(params.STATUS || 'UNKNOWN');
+  const callbackTxnId = String(params.TXNID || '');
+  const eventKey = `paytm:${crypto.createHash('sha256').update(req.rawBody || Buffer.from(paytmOrderId)).digest('hex')}`;
+  try {
+    await PaymentWebhookEvent.updateOne(
+      { eventKey },
+      {
+        $setOnInsert: {
+          eventKey,
+          eventType: `paytm.${callbackStatus}`,
+          razorpayOrderId: paytmOrderId,
+          razorpayPaymentId: callbackTxnId,
+          status: 'received',
+        },
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    if (error?.code !== 11000) throw error;
+  }
+
+  const receipt = await PaymentWebhookEvent.findOneAndUpdate(
+    {
+      eventKey,
+      $or: [
+        { status: { $in: ['received', 'failed'] } },
+        {
+          status: 'processing',
+          processingStartedAt: { $lt: new Date(Date.now() - WEBHOOK_PROCESSING_LEASE_MS) },
+        },
+      ],
+    },
+    {
+      $set: { status: 'processing', processingStartedAt: new Date(), lastError: '' },
+      $inc: { attempts: 1 },
+    },
+    { returnDocument: 'after' }
+  );
+
+  if (!receipt) {
+    paymentLog('payment.webhook_duplicate', { eventKey, event: `paytm.${callbackStatus}`, providerOrderId: paytmOrderId });
+    return res.send(paytmCallbackPage(callbackStatus === 'TXN_SUCCESS' ? 'success' : 'pending', paytmOrderId));
+  }
+
+  let outcome = 'pending';
+  try {
+    // Authoritative check — never fulfil from the posted params.
+    const statusResult = await fetchPaytmTransactionStatus(paytmOrderId);
+    if (statusResult.resultStatus === 'TXN_SUCCESS') {
+      const existingOrder = await Order.findOne({ 'payment.providerOrderId': paytmOrderId });
+      if (!existingOrder) {
+        const paymentSession = await PaymentSession.findOne({ razorpayOrderId: paytmOrderId });
+        if (!paymentSession) throw new Error('Payment session not found for Paytm callback');
+        assertPaytmCapturedIntegrity(paymentSession, statusResult);
+        const order = await createOrderFromPaymentSession(
+          paytmOrderId,
+          statusResult.txnId,
+          'paytm_callback'
+        );
+        if (!order) throw new Error('Paid order is still unavailable after processing lease');
+      }
+      outcome = 'success';
+    } else if (statusResult.resultStatus === 'TXN_FAILURE') {
+      outcome = 'failed';
+    }
+
+    await PaymentWebhookEvent.updateOne(
+      { _id: receipt._id },
+      { $set: { status: 'processed', processedAt: new Date(), processingStartedAt: null, lastError: '' } }
+    );
+    paymentLog('payment.webhook_processed', {
+      eventKey,
+      event: `paytm.${callbackStatus}`,
+      providerOrderId: paytmOrderId,
+      gatewayStatus: statusResult.resultStatus,
+      attempts: receipt.attempts,
+    });
+  } catch (error) {
+    await PaymentWebhookEvent.updateOne(
+      { _id: receipt._id },
+      { $set: { status: 'failed', processingStartedAt: null, lastError: safeErrorMessage(error) } }
+    );
+    paymentLog('payment.webhook_failed', {
+      eventKey,
+      event: `paytm.${callbackStatus}`,
+      providerOrderId: paytmOrderId,
+      error: safeErrorMessage(error),
+    }, 'error');
+    // Unlike Razorpay's webhook there is no retrying caller behind this POST —
+    // the browser is. Reconciliation from the app completes the recovery, so
+    // always show the neutral pending page instead of an error dump.
+    outcome = 'pending';
+  }
+
+  res.send(paytmCallbackPage(outcome, paytmOrderId));
+}));
+
+// Users occasionally refresh or revisit the callback URL — show the neutral
+// page instead of a 404.
+app.get('/api/paytm/callback', webhookLimiter, (req, res) => {
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  res.send(paytmCallbackPage('pending', String(req.query?.ORDERID || '')));
+});
 
 // Recovery lookup: after a lost success callback the app polls this with the
 // Razorpay order id to find the order the webhook created, instead of showing

@@ -26,6 +26,7 @@
         "image_picker",
         "lottie",
         "path_provider",
+        "paytm_allinonesdk",
         "qr_flutter",
         "razorpay_flutter",
         "shared_preferences",
@@ -235,6 +236,13 @@
       "dependencies": [
         "flutter",
         "qr"
+      ]
+    },
+    {
+      "name": "paytm_allinonesdk",
+      "version": "1.2.8",
+      "dependencies": [
+        "flutter"
       ]
     },
     {

@@ -1,3 +1,4 @@
+import '../utils/b64_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:animated_text_kit/animated_text_kit.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -861,7 +862,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                           if (imagePath.startsWith('data:image/')) {
                             final b64 = imagePath.split(',').last;
                             return Image.memory(
-                              base64Decode(b64),
+                              B64ImageCache.decode(b64),
                               height: 190,
                               width: double.infinity,
                               fit: BoxFit.cover,

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'success_page.dart';
 import 'detail_page.dart';
@@ -8,6 +9,8 @@ import '../model/cart_model.dart';
 import '../services/api_service.dart';
 import '../services/session.dart';
 import '../services/razorpay_helper.dart';
+import '../services/paytm_helper.dart';
+import '../services/fee_service.dart';
 // CODEX EDITS: Durable payment recovery across UPI redirects and process death.
 import '../services/pending_payment_service.dart';
 
@@ -35,14 +38,16 @@ class _CheckoutPageState extends State<CheckoutPage>
     with WidgetsBindingObserver {
   final Color primaryColor = const Color(0xFF0F4CFF);
 
-  String selectedMethod = "";
+  // Selected payment gateway — Paytm is the preferred option and auto-selected.
+  String selectedGateway = 'paytm';
   bool isSubmitting = false;
-  final TextEditingController upiController = TextEditingController();
   TimeOfDay? _pickupTime;
 
   // No _currentOrder field — the DB order is only created after payment succeeds.
   Map<String, dynamic>? _razorpayOrder;
   String? _razorpayKeyId; // Received from server — never hardcoded client-side
+  // Paytm checkout payload from the server (orderId, txnToken, mid, ...).
+  Map<String, dynamic>? _paytmOrder;
 
   // True from the moment Razorpay checkout opens until a terminal outcome:
   // SuccessPage navigation, payment failure, or recovery giving up. Drives the
@@ -81,13 +86,50 @@ class _CheckoutPageState extends State<CheckoutPage>
     ).toIso8601String();
   }
 
+  // Pickup must fall inside a same-day window served by the backend (MongoDB
+  // app_configs 'pickup_window', fetched with the fees on checkout open;
+  // defaults 11:00 AM – 1:30 PM). The original clock dial picker is kept —
+  // the window is enforced on the picked value here and again server-side at
+  // payment initiation.
+  int get _pickupStartMinutes => FeeService.pickupStartMinutes;
+  int get _pickupEndMinutes => FeeService.pickupEndMinutes;
+
   Future<void> _selectPickupTime() async {
     final now = TimeOfDay.now();
+    final nowMinutes = now.hour * 60 + now.minute;
+    if (nowMinutes >= _pickupEndMinutes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pickup is available between ${FeeService.pickupStartLabel} and ${FeeService.pickupEndLabel}. Today\'s window has closed.',
+            ),
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Original 15-minute-rounded suggestion, clamped into the pickup window so
+    // the dial opens on a selectable time.
+    int suggestedMinutes = now.hour * 60 + ((now.minute ~/ 15 + 1) * 15);
+    if (suggestedMinutes < _pickupStartMinutes) {
+      suggestedMinutes = _pickupStartMinutes;
+    }
+    if (suggestedMinutes > _pickupEndMinutes) {
+      suggestedMinutes = _pickupEndMinutes;
+    }
+
     final picked = await showTimePicker(
       context: context,
       initialTime:
           _pickupTime ??
-          TimeOfDay(hour: now.hour, minute: (now.minute ~/ 15 + 1) * 15 % 60),
+          TimeOfDay(
+            hour: (suggestedMinutes ~/ 60) % 24,
+            minute: suggestedMinutes % 60,
+          ),
       helpText: 'SELECT PICKUP TIME',
       builder: (context, child) {
         return Theme(
@@ -149,7 +191,6 @@ class _CheckoutPageState extends State<CheckoutPage>
     );
     if (picked == null) return;
     // Reject times in the past (same-day only comparison).
-    final nowMinutes = now.hour * 60 + now.minute;
     final pickedMinutes = picked.hour * 60 + picked.minute;
     if (pickedMinutes <= nowMinutes) {
       if (mounted) {
@@ -165,96 +206,21 @@ class _CheckoutPageState extends State<CheckoutPage>
       }
       return;
     }
-    // Warn if pickup is more than 4 hours away
-    final diffMinutes = pickedMinutes - nowMinutes;
-    if (diffMinutes > 240) {
-      if (!mounted) return;
-      final confirm = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) {
-          return AlertDialog(
-            backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-              side: BorderSide(
-                color: const Color(0xFF0F4CFF).withValues(alpha: 0.25),
-              ),
-            ),
-            title: Row(
-              children: [
-                Icon(
-                  Icons.schedule_rounded,
-                  color: const Color(0xFF0F4CFF),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Confirm Pickup Time',
-                  style: TextStyle(
-                    fontFamily: 'Nunito',
-                    fontWeight: FontWeight.w800,
-                    fontSize: 16,
-                    color: isDark ? Colors.white : const Color(0xFF0F172A),
-                  ),
-                ),
-              ],
-            ),
+    // Enforce the configured pickup window on the picked value.
+    if (pickedMinutes < _pickupStartMinutes ||
+        pickedMinutes > _pickupEndMinutes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text(
-              'Your selected pickup time is more than 4 hours from now. Please ensure this is intentional — canteen staff will prepare your order based on this time.',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 13.5,
-                height: 1.55,
-                color: isDark
-                    ? const Color(0xFFCBD5E1)
-                    : const Color(0xFF475569),
-              ),
+              'Pickup Time Must Be Between ${FeeService.pickupStartLabel} and ${FeeService.pickupEndLabel}.',
             ),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            actions: [
-              OutlinedButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF0F4CFF),
-                  side: const BorderSide(color: Color(0xFF0F4CFF)),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-                child: const Text(
-                  'Change Time',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F4CFF),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                ),
-                child: const Text(
-                  'Confirm',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          );
-        },
-      );
-      if (confirm != true) return;
+            backgroundColor: Colors.redAccent,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
     }
 
     if (mounted) setState(() => _pickupTime = picked);
@@ -270,9 +236,11 @@ class _CheckoutPageState extends State<CheckoutPage>
     );
   }
 
-  double get _platformFee =>
-      double.parse((_itemTotal * 0.03).toStringAsFixed(2));
-  double get _convenienceFee => 1.5;
+  // Fees are DB-driven per gateway (fee_configs collection) and re-fetched on
+  // every checkout open, so direct MongoDB edits reflect here in real time.
+  GatewayFees get _fees => FeeService.feesFor(selectedGateway);
+  double get _platformFee => _fees.platformFeeFor(_itemTotal);
+  double get _convenienceFee => _fees.convenienceFee;
   double get _grandTotal => _itemTotal + _platformFee + _convenienceFee;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
@@ -280,17 +248,31 @@ class _CheckoutPageState extends State<CheckoutPage>
   @override
   void initState() {
     super.initState();
-    selectedMethod = "upi";
     // CODEX EDITS: Wallet selection has its own non-failure callback.
     initRazorpay(
       _handleRazorpaySuccess,
       _handleRazorpayError,
       onExternalWallet: _handleExternalWallet,
     );
+    initPaytm(_handlePaytmResult, _handlePaytmError);
+    _loadFees();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // CODEX EDITS: Reconcile when Checkout is reopened after process death.
       _restorePendingPayment();
+    });
+  }
+
+  Future<void> _loadFees() async {
+    await FeeService.refresh(force: true);
+    if (!mounted) return;
+    setState(() {
+      // If the selected gateway was disabled in the DB, fall back to the
+      // first active one so the user can still pay.
+      final active = FeeService.activeGateways.map((g) => g.gateway).toList();
+      if (active.isNotEmpty && !active.contains(selectedGateway)) {
+        selectedGateway = active.first;
+      }
     });
   }
 
@@ -300,6 +282,7 @@ class _CheckoutPageState extends State<CheckoutPage>
     WidgetsBinding.instance.removeObserver(this);
     _resumeReconcileTimer?.cancel();
     disposeRazorpay();
+    disposePaytm();
     super.dispose();
   }
 
@@ -442,7 +425,7 @@ class _CheckoutPageState extends State<CheckoutPage>
                   ],
                   _orderSummaryCard(cardColor, textColor),
                   _pickupTimeCard(cardColor, textColor),
-                  _section("UPI", "upi", _upiUI(), cardColor, textColor),
+                  _paymentMethodCard(cardColor, textColor),
                   const SizedBox(height: 100),
                 ],
               ),
@@ -564,7 +547,9 @@ class _CheckoutPageState extends State<CheckoutPage>
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        set ? _pickupTimeLabel : 'Required - Tap to Set',
+                        set
+                            ? _pickupTimeLabel
+                            : 'Required · ${FeeService.pickupStartLabel} – ${FeeService.pickupEndLabel}',
                         style: TextStyle(
                           fontSize: 13,
                           color: set ? primaryColor : Colors.redAccent,
@@ -586,13 +571,11 @@ class _CheckoutPageState extends State<CheckoutPage>
     );
   }
 
-  Widget _section(
-    String title,
-    String value,
-    Widget child,
-    Color cardColor,
-    Color textColor,
-  ) {
+  /// Payment method selector — Paytm is listed first and pre-selected as the
+  /// preferred gateway; Razorpay remains available. Gateways disabled in the
+  /// fee_configs collection disappear from this list automatically.
+  Widget _paymentMethodCard(Color cardColor, Color textColor) {
+    final gateways = FeeService.activeGateways;
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
@@ -608,35 +591,102 @@ class _CheckoutPageState extends State<CheckoutPage>
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ListTile(
-            title: Text(
-              title,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(
+              "Payment Method",
               style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: child,
-          ),
+          ...gateways.map((g) => _gatewayTile(g.gateway, textColor)),
+          const SizedBox(height: 8),
         ],
       ),
     );
   }
 
-  Widget _upiUI() {
-    return Row(
-      children: [
-        Icon(Icons.verified, color: primaryColor, size: 18),
-        const SizedBox(width: 8),
-        Text(
-          "via Razorpay",
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: isDark ? Colors.white70 : Colors.black87,
-          ),
+  Widget _gatewayTile(String gateway, Color textColor) {
+    final bool selected = selectedGateway == gateway;
+    final bool preferred = gateway == FeeService.preferredGateway;
+    final bool locked = isSubmitting || _awaitingPayment;
+    final title = gateway == 'paytm' ? 'Paytm' : 'Razorpay';
+    final subtitle = gateway == 'paytm'
+        ? 'UPI · Cards · Wallet · NetBanking'
+        : 'UPI · Cards · NetBanking';
+    return InkWell(
+      onTap: locked || selected
+          ? null
+          : () => setState(() => selectedGateway = gateway),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_off_rounded,
+              color: selected
+                  ? primaryColor
+                  : (isDark ? Colors.white38 : Colors.black26),
+              size: 22,
+            ),
+            const SizedBox(width: 12),
+            Icon(
+              gateway == 'paytm'
+                  ? Icons.account_balance_wallet_rounded
+                  : Icons.bolt_rounded,
+              color: selected
+                  ? primaryColor
+                  : (isDark ? Colors.white54 : Colors.black45),
+              size: 20,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: textColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: isDark ? Colors.white54 : Colors.black45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (preferred)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: primaryColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'Preferred',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: primaryColor,
+                  ),
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -672,7 +722,7 @@ class _CheckoutPageState extends State<CheckoutPage>
           ),
           const SizedBox(height: 8),
           _summaryRow(
-            "Platform Fee (3%)",
+            _fees.platformFeeLabel,
             "₹${_platformFee.toStringAsFixed(2)}",
             subColor,
           ),
@@ -744,6 +794,10 @@ class _CheckoutPageState extends State<CheckoutPage>
     try {
       final pending = await PendingPaymentService.loadForCurrentUser();
       if (pending != null) {
+        // Gateway the pending session belongs to (Paytm ids are PTM-prefixed).
+        final pendingGateway = pending.razorpayOrderId.startsWith('PTM')
+            ? 'paytm'
+            : 'razorpay';
         _setAwaitingPayment(true);
         final result = await _reconcilePendingPayment(
           pollAttempts: 1,
@@ -754,8 +808,28 @@ class _CheckoutPageState extends State<CheckoutPage>
           return;
         }
         final state = result?['state']?.toString();
-        if (state != 'expired') {
-          if (_razorpayOrder != null && (_razorpayKeyId?.isNotEmpty ?? false)) {
+        if (state != 'expired' && pendingGateway != selectedGateway) {
+          // The user explicitly chose the other gateway and reconciliation
+          // found no captured payment on the old session. Abandon the local
+          // pointer (the server session stays auditable, and a late capture
+          // is still recovered by the gateway callback/webhook) and fall
+          // through to a fresh payment with the selected gateway.
+          await PendingPaymentService.clear(
+            expectedOrderId: pending.razorpayOrderId,
+          );
+          _paytmOrder = null;
+          _razorpayOrder = null;
+          _razorpayKeyId = null;
+          _setAwaitingPayment(false);
+        } else if (state != 'expired') {
+          // Same gateway — resume the existing session instead of creating a
+          // second chargeable order.
+          if (_paytmOrder != null &&
+              (_paytmOrder?['txnToken']?.toString().isNotEmpty ?? false)) {
+            _setAwaitingPayment(true);
+            await _openPaytmCheckout();
+          } else if (_razorpayOrder != null &&
+              (_razorpayKeyId?.isNotEmpty ?? false)) {
             _setAwaitingPayment(true);
             await _openRazorpayCheckout();
           } else {
@@ -802,7 +876,8 @@ class _CheckoutPageState extends State<CheckoutPage>
     }
 
     try {
-      // Step 1: server computes totals, creates Razorpay order, stashes cart.
+      // Step 1: server computes totals from the DB fee config, creates the
+      // gateway order (Paytm or Razorpay), and stashes the cart server-side.
       // No DB order is written here.
       final data = await ApiService.initiatePayment(
         customerName: AppSession.name,
@@ -813,15 +888,42 @@ class _CheckoutPageState extends State<CheckoutPage>
         items: orderItems,
         location: widget.pickupLocation ?? "Pickup Counter",
         pickupTime: _pickupTimeISO,
+        gateway: selectedGateway,
+        channel: kIsWeb ? 'web' : 'app',
       );
 
-      _razorpayOrder = Map<String, dynamic>.from(data['razorpayOrder'] as Map);
-      _razorpayKeyId = data['razorpayKeyId']?.toString();
-      // CODEX EDITS: Persist before opening native Checkout so immediate
-      // process death or UPI switching cannot orphan the payment.
-      await PendingPaymentService.save(_razorpayOrder?['id']?.toString() ?? '');
-      _setAwaitingPayment(true);
-      await _openRazorpayCheckout();
+      if (data['gateway']?.toString() == 'paytm' && data['paytmOrder'] is Map) {
+        _paytmOrder = Map<String, dynamic>.from(data['paytmOrder'] as Map);
+        _razorpayOrder = null;
+        _razorpayKeyId = null;
+        // CODEX EDITS: Persist before opening checkout so immediate process
+        // death or app switching cannot orphan the payment.
+        await PendingPaymentService.save(
+          _paytmOrder?['orderId']?.toString() ?? '',
+        );
+        _setAwaitingPayment(true);
+        await _openPaytmCheckout();
+      } else {
+        final razorpayOrder = data['razorpayOrder'];
+        if (razorpayOrder is! Map) {
+          // Never blind-cast the server payload — a missing order must surface
+          // as a readable message, not a Null type-cast error.
+          throw Exception(
+            data['message']?.toString() ??
+                'Payment could not be started. Please try again.',
+          );
+        }
+        _razorpayOrder = Map<String, dynamic>.from(razorpayOrder);
+        _razorpayKeyId = data['razorpayKeyId']?.toString();
+        _paytmOrder = null;
+        // CODEX EDITS: Persist before opening native Checkout so immediate
+        // process death or UPI switching cannot orphan the payment.
+        await PendingPaymentService.save(
+          _razorpayOrder?['id']?.toString() ?? '',
+        );
+        _setAwaitingPayment(true);
+        await _openRazorpayCheckout();
+      }
     } catch (error) {
       _setAwaitingPayment(false);
       _showError(error.toString().replaceFirst("Exception: ", ""));
@@ -899,6 +1001,43 @@ class _CheckoutPageState extends State<CheckoutPage>
     }
   }
 
+  // Paytm SDK finished and returned a result map. The map is never trusted —
+  // the backend's Transaction Status reconciliation decides the real outcome.
+  Future<void> _handlePaytmResult(Map<String, dynamic> result) async {
+    if (_paymentTerminalHandled) return;
+    _setAwaitingPayment(true);
+    await _reconcilePendingPayment(pollAttempts: 6, showPendingMessage: true);
+  }
+
+  // Paytm SDK errors (cancel, back-press, network) are indeterminate until the
+  // backend checks the Transaction Status API — mirrors the Razorpay handler.
+  Future<void> _handlePaytmError(Map<String, dynamic> sdkError) async {
+    if (_paymentTerminalHandled) return;
+    _setAwaitingPayment(true);
+    final result = await _reconcilePendingPayment(
+      sdkError: sdkError,
+      pollAttempts: 4,
+      showPendingMessage: false,
+    );
+    if (!mounted || _paymentTerminalHandled) return;
+    final state = result?['state']?.toString();
+    if (state == 'expired') {
+      // Terminal for this Paytm order (failed or window over) — the pending
+      // pointer is already cleared, so the next Pay starts a fresh payment.
+      _paytmOrder = null;
+      _razorpayOrder = null;
+      _razorpayKeyId = null;
+      _setAwaitingPayment(false);
+      _showError('Payment did not complete. Please tap Pay to try again.');
+      return;
+    }
+    if (_isUserCancelledPayment(sdkError)) {
+      _showPaymentCancelledPending();
+    } else {
+      _showPaymentPending();
+    }
+  }
+
   // CODEX EDITS: Selecting an external wallet is a continuation, not failure.
   void _handleExternalWallet(String walletName) {
     if (!mounted || _paymentTerminalHandled) return;
@@ -965,6 +1104,12 @@ class _CheckoutPageState extends State<CheckoutPage>
         if (returnedKey != null && returnedKey.isNotEmpty) {
           _razorpayKeyId = returnedKey;
         }
+        // Paytm sessions return their own resumable checkout payload (same
+        // orderId + txnToken, valid for the 15-minute active window).
+        final paytmCheckout = latest['paytmCheckout'];
+        if (paytmCheckout is Map) {
+          _paytmOrder = Map<String, dynamic>.from(paytmCheckout);
+        }
 
         if (attempt + 1 < pollAttempts) {
           await Future.delayed(const Duration(seconds: 2));
@@ -1009,7 +1154,8 @@ class _CheckoutPageState extends State<CheckoutPage>
   // truly captured payment can still be recovered by webhook/reconcile.
   void _showPaymentCancelledPending() {
     if (!mounted) return;
-    final pendingOrderId = _razorpayOrder?['id']?.toString();
+    final pendingOrderId =
+        _paytmOrder?['orderId']?.toString() ?? _razorpayOrder?['id']?.toString();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: const Text(
@@ -1026,6 +1172,7 @@ class _CheckoutPageState extends State<CheckoutPage>
             );
             _razorpayOrder = null;
             _razorpayKeyId = null;
+            _paytmOrder = null;
             _setAwaitingPayment(false);
           },
         ),
@@ -1056,7 +1203,8 @@ class _CheckoutPageState extends State<CheckoutPage>
     _resumeReconcileTimer?.cancel();
     final providerOrderId = order['payment'] is Map
         ? (order['payment'] as Map)['providerOrderId']?.toString()
-        : _razorpayOrder?['id']?.toString();
+        : (_paytmOrder?['orderId']?.toString() ??
+              _razorpayOrder?['id']?.toString());
     await PendingPaymentService.clear(expectedOrderId: providerOrderId);
     globalCartItems.clear();
     CartModel.clear();
@@ -1095,22 +1243,17 @@ class _CheckoutPageState extends State<CheckoutPage>
     }
   }
 
-  // --- THIS IS THE ONLY CHANGED METHOD ---
   Future<void> _openRazorpayCheckout() async {
     if (_razorpayOrder == null) return;
-
-    // Grab the UPI ID from the text field
-    String? enteredUpiId = upiController.text.trim();
-    if (enteredUpiId.isEmpty) {
-      enteredUpiId = null;
-    }
-
-    // Pass the upiId to the razorpay helper
     await openRazorpayCheckout(
       _razorpayOrder!,
       AppSession.email,
       keyId: _razorpayKeyId,
-      upiId: enteredUpiId,
     );
+  }
+
+  Future<void> _openPaytmCheckout() async {
+    if (_paytmOrder == null) return;
+    await openPaytmCheckout(_paytmOrder!);
   }
 }

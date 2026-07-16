@@ -11,7 +11,7 @@
 
 // Select the database to use.
 use('Main');
-db.cafes.updateOne(
-  { vendorId: "PERSON_A_FIREBASE_UID" },
-  { $push: { coOwnerIds: "PERSON_B_FIREBASE_UID" } }
+db.app_configs.updateOne(
+  { key: 'pickup_window' },
+  { $set: { 'value.start': '00:00', 'value.end': '23:45' } }
 )

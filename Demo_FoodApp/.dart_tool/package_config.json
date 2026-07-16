@@ -566,6 +566,12 @@
       "languageVersion": "3.2"
     },
     {
+      "name": "paytm_allinonesdk",
+      "rootUri": "../packages/paytm_allinonesdk",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "petitparser",
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-7.0.2",
       "packageUri": "lib/",

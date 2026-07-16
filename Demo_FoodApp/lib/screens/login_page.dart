@@ -357,7 +357,7 @@ class _LoginPageState extends State<LoginPage> {
           context: context,
           barrierDismissible: false,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color.fromARGB(139, 15, 23, 42),
+            backgroundColor: const Color.fromARGB(220, 15, 23, 42),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
               side: BorderSide(

@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show compute, kIsWeb;
 import 'package:http/http.dart' as http;
 
 /// Thrown when the server returns 401 — triggers a global sign-out.
@@ -104,7 +105,7 @@ class ApiService {
       }),
     );
 
-    final decoded = _decodeObject(response);
+    final decoded = await _decodeObject(response);
     final order = decoded['order'];
     if (order is Map) return Map<String, dynamic>.from(order);
     return decoded;
@@ -150,7 +151,7 @@ class ApiService {
       headers: await _jsonHeaders(),
       body: jsonEncode({'active': active}),
     );
-    _decodeObject(response);
+    await _decodeObject(response);
   }
 
   static Future<List<Map<String, dynamic>>> getMenu({String? cafeId}) async {
@@ -245,8 +246,9 @@ class ApiService {
     return _decodeObject(response);
   }
 
-  /// Step 1: compute totals server-side and create a Razorpay order.
-  /// No DB order is created yet — returns only the razorpayOrder.
+  /// Step 1: compute totals server-side and create a gateway order.
+  /// No DB order is created yet — returns razorpayOrder or paytmOrder
+  /// depending on the selected gateway.
   static Future<Map<String, dynamic>> initiatePayment({
     required String customerName,
     required String customerEmail,
@@ -256,6 +258,8 @@ class ApiService {
     required List<Map<String, dynamic>> items,
     String location = 'Pickup counter',
     String pickupTime = '',
+    String gateway = 'razorpay',
+    String channel = 'app',
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/payment/initiate'),
@@ -269,8 +273,17 @@ class ApiService {
         'items': items,
         'location': location,
         'pickupTime': pickupTime,
+        'gateway': gateway,
+        'channel': channel,
       }),
     );
+    return _decodeObject(response);
+  }
+
+  /// Per-gateway fee structure, read live from the backend's fee_configs
+  /// collection. Public endpoint — no auth header needed.
+  static Future<Map<String, dynamic>> getPaymentFees() async {
+    final response = await http.get(Uri.parse('$baseUrl/payment/fees'));
     return _decodeObject(response);
   }
 
@@ -354,7 +367,7 @@ class ApiService {
       Uri.parse('$baseUrl/users/$userId/ratings'),
       headers: await _jsonHeaders(),
     );
-    final raw = _decodeObject(response);
+    final raw = await _decodeObject(response);
     return raw.map((k, v) => MapEntry(k, (v as num).toInt()));
   }
 
@@ -434,10 +447,12 @@ class ApiService {
     }
   }
 
-  static Map<String, dynamic> _decodeObject(http.Response response) {
+  static Future<Map<String, dynamic>> _decodeObject(
+    http.Response response,
+  ) async {
     // CODEX EDITS: Nginx/AWS can return HTML/plain-text 502/503/504 when the
     // Node server is down; decode safely so users never see JSON parser errors.
-    final decoded = _safeDecode(response);
+    final decoded = await _safeDecode(response);
     if (response.statusCode == 401) {
       _onAuthError?.call();
       throw const AuthException();
@@ -469,10 +484,12 @@ class ApiService {
     return headers;
   }
 
-  static List<Map<String, dynamic>> _decodeList(http.Response response) {
+  static Future<List<Map<String, dynamic>>> _decodeList(
+    http.Response response,
+  ) async {
     // CODEX EDITS: Safely handle proxy/server-down responses before parsing a
     // list, otherwise HTML 503 pages surface as "Unexpected character".
-    final decoded = _safeDecode(response);
+    final decoded = await _safeDecode(response);
     if (response.statusCode == 401) {
       _onAuthError?.call();
       throw const AuthException();
@@ -488,10 +505,21 @@ class ApiService {
         .toList();
   }
 
-  static dynamic _safeDecode(http.Response response) {
+  // Payloads above this size (menu/cafe lists carry inline base64 images and
+  // easily reach hundreds of KB) are parsed in a background isolate so the UI
+  // thread never janks mid-scroll. Below it, isolate spawn overhead would
+  // exceed the parse cost. Web has no isolates — it parses inline as before.
+  static const int _isolateDecodeThreshold = 64 * 1024;
+
+  static dynamic _jsonParse(String source) => jsonDecode(source);
+
+  static Future<dynamic> _safeDecode(http.Response response) async {
     try {
       final body = response.body.trim();
       if (body.isEmpty) return null;
+      if (!kIsWeb && body.length > _isolateDecodeThreshold) {
+        return await compute(_jsonParse, body);
+      }
       return jsonDecode(body);
     } on FormatException {
       return null;

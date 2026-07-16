@@ -1,3 +1,4 @@
+import '../../utils/b64_image_cache.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -356,7 +357,7 @@ class _VendorPageWrapperState extends State<VendorPageWrapper> {
                       if (src.startsWith('data:image/')) {
                         final b64 = src.split(',').last;
                         return Image.memory(
-                          base64Decode(b64),
+                          B64ImageCache.decode(b64),
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) => Icon(
                             Icons.storefront_rounded,

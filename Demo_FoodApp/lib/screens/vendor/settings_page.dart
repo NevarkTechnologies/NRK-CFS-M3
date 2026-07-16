@@ -1,3 +1,4 @@
+import '../../utils/b64_image_cache.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:convert';
@@ -265,7 +266,7 @@ class _SettingsPageState extends State<SettingsPage> {
     if (src.startsWith('data:image/')) {
       final base64Data = src.split(',').last;
       return Image.memory(
-        base64Decode(base64Data),
+        B64ImageCache.decode(base64Data),
         width: width,
         height: height,
         fit: BoxFit.cover,

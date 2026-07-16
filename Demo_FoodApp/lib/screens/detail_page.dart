@@ -1,3 +1,4 @@
+import '../utils/b64_image_cache.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
@@ -563,7 +564,7 @@ class _DetailPageState extends State<DetailPage> {
 
                             if (imageUrl.startsWith('data:image')) {
                               try {
-                                final bytes = base64Decode(
+                                final bytes = B64ImageCache.decode(
                                   imageUrl.split(',').last,
                                 );
                                 return Image.memory(
@@ -1034,7 +1035,7 @@ class _DetailPageState extends State<DetailPage> {
     if (src.startsWith('data:image/')) {
       final b64 = src.split(',').last;
       return Image.memory(
-        base64Decode(b64),
+        B64ImageCache.decode(b64),
         width: size,
         height: size,
         fit: BoxFit.cover,
@@ -1116,8 +1117,15 @@ class _DetailPageState extends State<DetailPage> {
       0.0,
       (sum, item) => sum + item.price * item.quantity,
     );
-    final double tax = itemTotalSum * 0.03;
-    final double billTotal = itemTotalSum + tax + _convenienceFee;
+    // Past orders show the fees that were actually charged (stored on the
+    // order document) — never recomputed from current fee config.
+    final double tax =
+        (order['platformFee'] as num?)?.toDouble() ?? itemTotalSum * 0.03;
+    final double orderConvenienceFee =
+        (order['convenienceFee'] as num?)?.toDouble() ?? _convenienceFee;
+    final double billTotal =
+        (order['total'] as num?)?.toDouble() ??
+        (itemTotalSum + tax + orderConvenienceFee);
     final status = order['status']?.toString() ?? 'Pending';
 
     final now = DateTime.now();
@@ -1607,11 +1615,13 @@ class _DetailPageState extends State<DetailPage> {
             isBold: true,
           ),
           const SizedBox(height: 12),
-          _billRow("Platform Fee (3%)", "₹ ${tax.toStringAsFixed(2)}", subText),
+          _billRow("Platform Fee", "₹ ${tax.toStringAsFixed(2)}", subText),
           const SizedBox(height: 12),
           _billRow(
             "Convenience Fee",
-            "₹ ${_convenienceFee.toStringAsFixed(2)}",
+            // Derived from the order's stored totals so historical bills show
+            // what was actually charged, not the current fee config.
+            "₹ ${(billTotal - itemTotalSum - tax).clamp(0, double.infinity).toStringAsFixed(2)}",
             subText,
           ),
           const SizedBox(height: 24),
