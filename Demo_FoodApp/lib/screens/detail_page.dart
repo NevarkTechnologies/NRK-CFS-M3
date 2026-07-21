@@ -16,7 +16,16 @@ class OrderItem {
   final String name;
   final double price;
   final int quantity;
-  OrderItem({required this.name, required this.price, required this.quantity});
+  // FIX 2026-07-19: carries the menu item's Mongo id through the reorder flow.
+  // The backend now requires every cart line to resolve to a real menu item
+  // (server-side price enforcement), so reorders must send it too.
+  final String? menuItemId;
+  OrderItem({
+    required this.name,
+    required this.price,
+    required this.quantity,
+    this.menuItemId,
+  });
 }
 
 class DetailPage extends StatefulWidget {
@@ -1091,6 +1100,8 @@ class _DetailPageState extends State<DetailPage> {
       final itemMap = Map<String, dynamic>.from(item as Map);
       return OrderItem(
         name: itemMap['name']?.toString() ?? '',
+        // FIX 2026-07-19: pass the stored menu item id along for reorders.
+        menuItemId: itemMap['menuItemId']?.toString(),
         price: double.tryParse(itemMap['price']?.toString() ?? '0') ?? 0,
         quantity:
             int.tryParse(

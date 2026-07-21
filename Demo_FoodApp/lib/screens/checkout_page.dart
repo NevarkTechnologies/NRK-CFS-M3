@@ -945,9 +945,13 @@ class _CheckoutPageState extends State<CheckoutPage>
 
   List<Map<String, dynamic>> _orderItems() {
     if (widget.isReorder && widget.items != null) {
+      // FIX 2026-07-19: include the menu item id — the backend now rejects
+      // cart lines that don't resolve to a real menu item (server-side price
+      // enforcement), which had silently broken the reorder flow.
       return widget.items!
           .map(
             (item) => {
+              "id": item.menuItemId,
               "name": item.name,
               "qty": item.quantity,
               "price": item.price,
@@ -1118,7 +1122,15 @@ class _CheckoutPageState extends State<CheckoutPage>
 
       if (mounted && !_paymentTerminalHandled) {
         _setAwaitingPayment(false);
-        if (showPendingMessage) _showPaymentPending();
+        // CHANGE 2026-07-19: feed the server-reported resume window into the
+        // live countdown snackbar.
+        if (showPendingMessage) {
+          _showPaymentPending(
+            expiresInSeconds: int.tryParse(
+              latest?['expiresInSeconds']?.toString() ?? '',
+            ),
+          );
+        }
       }
       return latest;
     } catch (error) {
@@ -1182,15 +1194,21 @@ class _CheckoutPageState extends State<CheckoutPage>
 
   // CODEX EDITS: Pending is deliberately neutral and instructs against a
   // second charge while webhook/API confirmation is still in flight.
-  void _showPaymentPending() {
+  // CHANGE 2026-07-19: Message shortened; when the server reports how long the
+  // pending session stays resumable (expiresInSeconds), a live m:ss countdown
+  // ticks inside the snackbar until the session expires.
+  void _showPaymentPending({int? expiresInSeconds}) {
     if (!mounted) return;
+    final hasCountdown = expiresInSeconds != null && expiresInSeconds > 0;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Payment is still being verified. Do not start a new payment; tap Pay to safely resume this same order.',
-        ),
-        backgroundColor: Color(0xFFF59E0B),
-        duration: Duration(seconds: 6),
+      SnackBar(
+        content: hasCountdown
+            ? _PendingExpiryCountdown(secondsLeft: expiresInSeconds)
+            : const Text('Payment pending — tap Pay to resume this order.'),
+        backgroundColor: const Color(0xFFF59E0B),
+        duration: hasCountdown
+            ? Duration(seconds: expiresInSeconds.clamp(1, 15))
+            : const Duration(seconds: 6),
       ),
     );
   }
@@ -1255,5 +1273,49 @@ class _CheckoutPageState extends State<CheckoutPage>
   Future<void> _openPaytmCheckout() async {
     if (_paytmOrder == null) return;
     await openPaytmCheckout(_paytmOrder!);
+  }
+}
+
+// CHANGE 2026-07-19: Live snackbar content for a resumable pending payment —
+// ticks down once per second from the server-reported resume window so the
+// user sees exactly how long the existing order can still be resumed.
+class _PendingExpiryCountdown extends StatefulWidget {
+  final int secondsLeft;
+  const _PendingExpiryCountdown({required this.secondsLeft});
+
+  @override
+  State<_PendingExpiryCountdown> createState() =>
+      _PendingExpiryCountdownState();
+}
+
+class _PendingExpiryCountdownState extends State<_PendingExpiryCountdown> {
+  late int _remaining;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _remaining = widget.secondsLeft;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      setState(() => _remaining = _remaining > 0 ? _remaining - 1 : 0);
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final m = _remaining ~/ 60;
+    final s = (_remaining % 60).toString().padLeft(2, '0');
+    return Text(
+      _remaining > 0
+          ? 'Payment pending — tap Pay to resume. Expires in $m:$s'
+          : 'Payment expired — tap Pay to start a new payment.',
+    );
   }
 }

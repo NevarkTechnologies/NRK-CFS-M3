@@ -58,9 +58,14 @@ const PICKUP_WINDOW_DEFAULTS = { start: '11:00', end: '13:30' };
 const PAYMENT_PROCESSING_LEASE_MS = 30 * 1000;
 const WEBHOOK_PROCESSING_LEASE_MS = 60 * 1000;
 const OUTBOX_PROCESSING_LEASE_MS = 60 * 1000;
-// CODEX EDITS 2026-07-09 11:22:21 IST: A Razorpay checkout can be safely
-// resumed only for 15 minutes; the Mongo document still remains for audit.
-const PAYMENT_SESSION_ACTIVE_MS = 15 * 60 * 1000;
+// CODEX EDITS 2026-07-09 11:22:21 IST: A checkout can be safely resumed only
+// within this window; the Mongo document still remains for audit.
+// CHANGE 2026-07-19: Reduced 15 → 5 minutes per business decision — an
+// abandoned checkout now frees the user for a fresh payment after 5 minutes.
+// (Paytm txnTokens stay valid 15 min gateway-side, so 5-minute resumes are
+// always within token validity; a capture that lands after expiry is still
+// fulfilled because the order-creation lease claims 'failed' sessions.)
+const PAYMENT_SESSION_ACTIVE_MS = 5 * 60 * 1000;
 const PAYMENT_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 let notificationOutboxTimer;
 
@@ -133,11 +138,29 @@ app.use((req, res, next) => {
 // ── Rate limiting ─────────────────────────────────────────────────────────────
 // Each limiter gets its own Redis store with a distinct prefix so their counters
 // never collide. All workers share the same Redis counter — limits are global.
+
+// SECURITY/SCALE FIX 2026-07-19: The general and order limiters were keyed by
+// client IP only. On a campus network every student egresses through the same
+// NAT IP, so at lunch rush the ENTIRE campus shared one 200-req/15-min bucket
+// and one 10-payments/min bucket — the app would appear down exactly at peak.
+// Authenticated requests are now bucketed per bearer token (a stable per-user
+// proxy; the hash keeps tokens out of Redis keys). Unauthenticated requests
+// still fall back to the IP bucket. These limiters run before Firebase
+// verification, so the raw header — not req.firebaseUser — is the only source.
+function perUserRateKey(req) {
+  const authHeader = req.get('Authorization') || '';
+  if (authHeader.startsWith('Bearer ') && authHeader.length > 27) {
+    return 'tk:' + crypto.createHash('sha256').update(authHeader.slice(7)).digest('base64url').slice(0, 32);
+  }
+  return ipKeyGenerator(req);
+}
+
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 min
-  max: 200,
+  max: 300, // per user (token) — shared per-IP only for unauthenticated browsing
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: perUserRateKey,
   message: { message: 'Too many requests, please try again later.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:general:' }),
   // CODEX EDITS: Razorpay deliveries use a dedicated, higher-capacity limiter;
@@ -146,10 +169,11 @@ const generalLimiter = rateLimit({
   skip: req => req.path === '/razorpay/webhook' || req.path === '/paytm/callback',
 });
 
-// Strict limit for order writes (place/confirm/status) — 10 per minute
+// Strict limit for order writes (place/confirm/status) — 10 per minute PER USER
 const orderLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 10,
+  keyGenerator: perUserRateKey, // SECURITY/SCALE FIX 2026-07-19 (see above)
   message: { message: 'Too many order requests, please slow down.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:order:' }),
   // CODEX EDITS: Reconciliation has its own authenticated read-style limiter.
@@ -167,7 +191,11 @@ const orderReadLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  // SCALE FIX 2026-07-19: 30/15min per IP was shared by the whole campus NAT —
+  // sign-in storms at lunch would lock everyone out. Stays IP-keyed (login has
+  // no stable per-user key an attacker doesn't control) but sized for a shared
+  // egress IP; each request is still bounded by Firebase token verification.
+  max: 240,
   message: { message: 'Too many auth requests, please try again later.' },
   store: new RedisStore({ sendCommand: (...args) => redisClient.call(...args), prefix: 'rl:auth:' }),
 });
@@ -427,19 +455,27 @@ function assertPaytmCapturedIntegrity(paymentSession, statusResult) {
 // Insert default fee documents once; existing documents are never overwritten,
 // so direct DB edits survive every deploy/restart.
 async function seedFeeConfigs() {
+  // CONCURRENCY FIX 2026-07-19: All PM2 cluster workers seed concurrently at
+  // boot. A well-known MongoDB caveat: two racing upserts on the same missing
+  // key can BOTH attempt the insert, and the loser throws E11000 — which
+  // previously aborted that worker's startup. The duplicate error itself
+  // proves the document exists, so it is safe to ignore.
+  const ignoreDuplicate = (error) => {
+    if (error?.code !== 11000) throw error;
+  };
   for (const [gateway, defaults] of Object.entries(FEE_DEFAULTS)) {
     await FeeConfig.updateOne(
       { gateway },
       { $setOnInsert: { gateway, ...defaults } },
       { upsert: true }
-    );
+    ).catch(ignoreDuplicate);
   }
   // Pickup window document — inserted once, then owned by direct DB edits.
   await AppConfig.updateOne(
     { key: 'pickup_window' },
     { $setOnInsert: { key: 'pickup_window', value: { ...PICKUP_WINDOW_DEFAULTS } } },
     { upsert: true }
-  );
+  ).catch(ignoreDuplicate);
 }
 
 // Read live on every request — a direct MongoDB edit reflects immediately in
@@ -518,6 +554,16 @@ async function validatePickupWindow(pickupTime) {
   if (minutes < window.startMinutes || minutes > window.endMinutes) {
     return `Pickup time must be between ${window.start} and ${window.end}.`;
   }
+  // SECURITY FIX 2026-07-19: pickupTime is a client-claimed wall-clock string,
+  // so after the window closed a tampered client could still order by claiming
+  // an in-window time. The claimed time must not be in the past relative to
+  // the SERVER's IST clock (5-minute grace for device skew). Pre-ordering
+  // before the window opens remains allowed.
+  const istNow = new Date(Date.now() + 330 * 60 * 1000);
+  const nowMinutes = istNow.getUTCHours() * 60 + istNow.getUTCMinutes();
+  if (minutes < nowMinutes - 5) {
+    return 'Pickup time cannot be in the past.';
+  }
   return null;
 }
 
@@ -581,6 +627,17 @@ async function requireFirebaseAuth(req, res, next) {
     req.firebaseUser = await verifyFirebaseIdentity(token);
     if (!req.firebaseUser) {
       return res.status(401).json({ message: 'Invalid Firebase auth token' });
+    }
+    // SECURITY FIX 2026-07-19: Several ownership checks (orders list/read,
+    // payment reconcile/recovery) compare req.firebaseUser.email against the
+    // order's customerEmail. Tokens whose email is NOT verified must not gain
+    // email-based access — an attacker can mint a Firebase account with an
+    // arbitrary unverified email and would otherwise read that customer's
+    // orders. Stripping the email makes every email-based check fail closed
+    // while uid-based access (vendor/profile/notifications) is unaffected.
+    // Google sign-in always yields email_verified: true.
+    if (req.firebaseUser.email && req.firebaseUser.email_verified !== true) {
+      delete req.firebaseUser.email;
     }
     return next();
   } catch (err) {
@@ -753,7 +810,13 @@ async function migratePaymentSessionIndexes() {
     }
   } catch (error) {
     // NamespaceNotFound means this is a clean deployment with no collection yet.
-    if (error?.code !== 26 && error?.codeName !== 'NamespaceNotFound') throw error;
+    // CONCURRENCY FIX 2026-07-19: IndexNotFound (code 27) added — every PM2
+    // cluster worker runs this migration at boot; when two workers both see
+    // the old TTL index, the loser's dropIndex throws IndexNotFound and would
+    // previously crash that worker at startup (boot-loop under pm2 -i N).
+    const tolerated = error?.code === 26 || error?.codeName === 'NamespaceNotFound' ||
+      error?.code === 27 || error?.codeName === 'IndexNotFound';
+    if (!tolerated) throw error;
   }
 
   const defaultExpiry = new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS);
@@ -960,6 +1023,16 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
   if (decodedToken.email?.toLowerCase() !== normalizedEmail) {
     return res.status(403).json({ message: 'Firebase token email does not match request email' });
   }
+  // SECURITY FIX 2026-07-19: Email is this system's identity key (the upsert
+  // below rebinds googleId to whoever presents a token carrying that email).
+  // Without this check, a Firebase account created with an UNVERIFIED email
+  // (e.g. email/password signup via the Firebase REST API — possible even if
+  // the app only offers Google sign-in) could take over any existing user,
+  // including vendor accounts. Google sign-in tokens always carry
+  // email_verified: true, so no legitimate login is affected.
+  if (decodedToken.email_verified !== true) {
+    return res.status(403).json({ message: 'Email address is not verified' });
+  }
 
   // Resolve role from a trusted source — never from the client-supplied request body.
   // Priority: Firestore (authoritative) -> existing DB user's role -> default 'customer'.
@@ -996,12 +1069,27 @@ app.post('/api/auth/google', asyncHandler(async (req, res) => {
       user = await User.findByIdAndUpdate(user._id, { vendorId }, { returnDocument: 'after' }).populate('cafeId');
     }
     if (!user.cafeId) {
-      let cafe = await Cafe.findOne({ vendorId });
-      if (!cafe) {
-        const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || `vendor-${Date.now()}`;
-        const slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`; // Collision-safe
-        cafe = await Cafe.create({ name: `${name}'s Cafe`, slug, cuisine: 'General', description: '', location: '', city: '', pin: '', vendorId, active: true });
-      }
+      // CONCURRENCY FIX 2026-07-19: The previous findOne → create pair raced
+      // when the same new vendor logged in concurrently (two devices, an app
+      // retry, or two PM2 workers): both saw "no cafe", both created one, and
+      // the vendor ended up split across two cafes (menu/orders divergence —
+      // the "Cafe ID not found" family of bugs). The atomic upsert closes that
+      // window, and the deterministic oldest-cafe re-read makes any residual
+      // racers converge on the SAME cafe. No unique index on vendorId is
+      // possible because legacy admin-seeded cafes share vendorId 'ADMIN_01'.
+      const baseSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || `vendor-${Date.now()}`;
+      const slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`; // Collision-safe
+      await Cafe.findOneAndUpdate(
+        { vendorId },
+        {
+          $setOnInsert: {
+            name: `${name}'s Cafe`, slug, cuisine: 'General', description: '',
+            location: '', city: '', pin: '', vendorId, active: true,
+          },
+        },
+        { upsert: true, returnDocument: 'after' }
+      );
+      const cafe = await Cafe.findOne({ vendorId }).sort({ createdAt: 1, _id: 1 });
       user = await User.findByIdAndUpdate(user._id, { cafeId: cafe._id, vendorId }, { returnDocument: 'after' }).populate('cafeId');
     }
   }
@@ -1018,8 +1106,13 @@ app.patch('/api/users/:id', requireFirebaseAuth, asyncHandler(async (req, res) =
     return res.status(403).json({ message: 'Forbidden: you can only update your own profile' });
   }
 
+  // SECURITY FIX 2026-07-19: 'email' removed from the editable set. Email is
+  // the identity/join key for login upserts and order ownership — letting a
+  // user rewrite it detaches their auth linkage and pollutes email-scoped
+  // queries. Unknown keys were already ignored, so older clients that still
+  // send email simply have it dropped (no error, no contract break).
   const allowed = {};
-  for (const key of ['name', 'email', 'avatar', 'phone', 'paymentLabel']) {
+  for (const key of ['name', 'avatar', 'phone', 'paymentLabel']) {
     if (req.body[key] !== undefined) allowed[key] = req.body[key];
   }
   const user = await User.findByIdAndUpdate(req.params.id, allowed, { returnDocument: 'after', runValidators: true }).populate('cafeId');
@@ -1065,7 +1158,13 @@ app.post('/api/cafes', requireFirebaseAuth, asyncHandler(async (req, res) => {
   if (!user || (user.role !== 'vendor' && user.role !== 'admin')) {
     return res.status(403).json({ message: 'Forbidden: only vendors can create cafes' });
   }
-  const cafe = await Cafe.create(req.body);
+  // SECURITY FIX 2026-07-19: Cafe.create(req.body) accepted every schema field,
+  // letting a vendor seed fake rating/reviews/ratings or assign the cafe to a
+  // different vendorId. Reputation fields are stripped, and only admins may
+  // create a cafe on behalf of another vendor.
+  const { rating, reviews, ratings, ...cafeBody } = req.body;
+  if (user.role !== 'admin') cafeBody.vendorId = req.firebaseUser.uid;
+  const cafe = await Cafe.create(cafeBody);
   audit('cafe.created', req.firebaseUser.uid, 'cafe', cafe._id.toString(), { name: cafe.name });
   res.status(201).json(cafe);
 }));
@@ -1073,7 +1172,10 @@ app.post('/api/cafes', requireFirebaseAuth, asyncHandler(async (req, res) => {
 // Vendor can only update their own cafe
 app.patch('/api/cafes/:id', requireFirebaseAuth, validateObjectId('id'), requireCafeOwner, asyncHandler(async (req, res) => {
   // Strip fields that vendors must not self-set
-  const { vendorId, ratings, ...safeBody } = req.body;
+  // SECURITY FIX 2026-07-19: rating/reviews added to the strip list — they are
+  // computed from customer ratings; a vendor could previously PATCH themselves
+  // to a fake 5.0★ with any review count.
+  const { vendorId, ratings, rating, reviews, ...safeBody } = req.body;
   const cafe = await Cafe.findByIdAndUpdate(req.params.id, safeBody, { returnDocument: 'after', runValidators: true });
   audit('cafe.updated', req.firebaseUser.uid, 'cafe', req.params.id, { fields: Object.keys(safeBody) });
   res.json(cafe);
@@ -1196,7 +1298,11 @@ app.post('/api/menu', requireFirebaseAuth, asyncHandler(async (req, res) => {
   if (!await canManageCafe(req.firebaseUser, cafe)) {
     return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
   }
-  const item = await MenuItem.create(req.body);
+  // SECURITY FIX 2026-07-19: vendorId is pinned to the owning cafe's vendorId
+  // (was client-assignable) and customer-driven reputation fields are stripped.
+  const { rating, reviews, ...menuBody } = req.body;
+  menuBody.vendorId = cafe.vendorId;
+  const item = await MenuItem.create(menuBody);
   res.status(201).json(item);
 }));
 
@@ -1210,12 +1316,18 @@ app.post('/api/menu/add', requireFirebaseAuth, asyncHandler(async (req, res) => 
   if (!await canManageCafe(req.firebaseUser, cafe)) {
     return res.status(403).json({ message: 'Forbidden: you do not own this cafe' });
   }
-  const item = await MenuItem.create(req.body);
+  // SECURITY FIX 2026-07-19: vendorId is pinned to the owning cafe's vendorId
+  // (was client-assignable) and customer-driven reputation fields are stripped.
+  const { rating, reviews, ...menuBody } = req.body;
+  menuBody.vendorId = cafe.vendorId;
+  const item = await MenuItem.create(menuBody);
   res.status(201).json(item);
 }));
 
 app.patch('/api/menu/:id', requireFirebaseAuth, validateObjectId('id'), requireMenuItemOwner, asyncHandler(async (req, res) => {
-  const { cafeId, ...safeBody } = req.body; // Prevent moving item to another cafe
+  // SECURITY FIX 2026-07-19: rating/reviews/vendorId stripped alongside cafeId —
+  // reputation fields are customer-driven and ownership must not be reassigned.
+  const { cafeId, rating, reviews, vendorId, ...safeBody } = req.body; // Prevent moving item to another cafe
   const item = await MenuItem.findByIdAndUpdate(req.params.id, safeBody, { returnDocument: 'after', runValidators: true });
   if (!item) return res.status(404).json({ message: 'Menu item not found' });
   res.json(item);
@@ -1297,14 +1409,35 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     }
   }
 
-  // Reject if any item is currently disabled by the vendor
-  const menuItemIds = normalizedItems.map(i => i.menuItemId).filter(id => id && mongoose.Types.ObjectId.isValid(String(id)));
-  if (menuItemIds.length > 0) {
-    const unavailable = await MenuItem.find({ _id: { $in: menuItemIds }, available: false }).select('name').lean();
-    if (unavailable.length > 0) {
-      const names = unavailable.map(i => i.name).join(', ');
-      return res.status(409).json({ message: `Some items are no longer available: ${names}. Please update your cart.` });
+  // SECURITY FIX 2026-07-19: The server previously trusted the client-supplied
+  // item price (only checking price >= 0), so a replayed API call could buy any
+  // item for as little as ₹0. Every cart line must now resolve to a real
+  // menu_items document; the authoritative name and price are taken from the
+  // database, and the availability check rides the same lookup. Client-sent
+  // price/name are ignored for totals.
+  if (normalizedItems.some(i => !i.menuItemId)) {
+    return res.status(400).json({ message: 'Each item must reference a valid menu item. Please refresh your cart.' });
+  }
+  const menuItemIds = normalizedItems.map(i => i.menuItemId);
+  const menuDocs = await MenuItem.find({ _id: { $in: menuItemIds } })
+    .select('name price available cafeId').lean();
+  const menuDocById = new Map(menuDocs.map(doc => [String(doc._id), doc]));
+  const unavailableNames = [];
+  for (const item of normalizedItems) {
+    const doc = menuDocById.get(String(item.menuItemId));
+    if (!doc || doc.available === false) {
+      unavailableNames.push(doc ? doc.name : item.name);
+      continue;
     }
+    // Cross-cafe carts are not a supported flow — reject rather than bill wrong.
+    if (resolvedCafeId && String(doc.cafeId) !== String(resolvedCafeId)) {
+      return res.status(400).json({ message: 'All items must belong to the selected cafeteria.' });
+    }
+    item.name = doc.name;
+    item.price = toMoney(doc.price);
+  }
+  if (unavailableNames.length > 0) {
+    return res.status(409).json({ message: `Some items are no longer available: ${unavailableNames.join(', ')}. Please update your cart.` });
   }
 
   // Gateway selection — Paytm is the preferred default in the app; requests
@@ -1349,6 +1482,31 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
   // Authoritative fee breakdown echoed to the client so the summary it renders
   // always matches the amount actually charged.
   const fees = { gateway, itemTotal, platformFee, convenienceFee, discount: discountAmt, total };
+
+  // CONCURRENCY FIX 2026-07-19: One live checkout per user. Previously a user
+  // could hold several concurrently payable sessions (second device, initiate
+  // retry after a slow response, gateway switch) and pay more than once for the
+  // same cart. Older pending sessions are marked failed here so client
+  // reconciliation reports them 'expired' and clears stale pointers. Money
+  // stays safe either way: a payment captured against a superseded session
+  // still fulfils, because the order-creation lease claims sessions in status
+  // 'failed' as well as 'pending'.
+  if (resolvedUserId) {
+    await PaymentSession.updateMany(
+      { 'cart.userId': resolvedUserId, status: 'pending' },
+      {
+        $set: {
+          status: 'failed',
+          lastError: {
+            code: 'superseded',
+            message: 'Replaced by a newer payment attempt',
+            at: new Date(),
+            source: 'payment_initiate',
+          },
+        },
+      }
+    );
+  }
 
   if (gateway === 'paytm') {
     const paytmConfig = getPaytmConfig();
@@ -1419,7 +1577,8 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     // during a rolling PM2 reload.
     status: 'pending',
     // CODEX EDITS 2026-07-09 11:22:21 IST: This order can be resumed/retried
-    // for 15 minutes only; after that a changed cart may start a new payment.
+    // only within PAYMENT_SESSION_ACTIVE_MS (5 min as of 2026-07-19); after
+    // that a changed cart may start a new payment.
     activeUntil: new Date(Date.now() + PAYMENT_SESSION_ACTIVE_MS),
     expiresAt: new Date(Date.now() + PAYMENT_SESSION_RETENTION_MS),
     cart,
@@ -1755,8 +1914,13 @@ async function reconcilePaytmSession(res, paymentSession, sdkError) {
 
   const activeUntil = paymentSessionActiveUntil(paymentSession);
   const failed = statusResult.resultStatus === 'TXN_FAILURE';
-  if (failed || activeUntil <= new Date()) {
-    await PaymentSession.updateOne(
+  // SECURITY FIX 2026-07-19: A session already marked failed (e.g. superseded
+  // by a newer initiate from another device) must never be handed back as a
+  // resumable checkout — that would reopen the double-payment window the
+  // supersede logic closes. Gateway-captured money is still honoured above.
+  const alreadyFailed = paymentSession.status === 'failed';
+  if (failed || alreadyFailed || activeUntil <= new Date()) {
+    if (!alreadyFailed) await PaymentSession.updateOne(
       { _id: paymentSession._id, status: { $ne: 'completed' } },
       {
         $set: {
@@ -1789,7 +1953,7 @@ async function reconcilePaytmSession(res, paymentSession, sdkError) {
   }
 
   // PENDING / NO_RECORD_FOUND inside the active window: the same order can be
-  // resumed with its original txnToken (valid for the same 15 minutes).
+  // resumed with its original txnToken (Paytm tokens outlive our 5-min window).
   const paytmConfig = getPaytmConfig();
   paymentLog('payment.reconcile_pending', {
     gateway: 'paytm',
@@ -1801,6 +1965,9 @@ async function reconcilePaytmSession(res, paymentSession, sdkError) {
     state: 'pending',
     gatewayStatus: statusResult.resultStatus.toLowerCase(),
     retryable: true,
+    // CHANGE 2026-07-19: seconds until this session's activeUntil lapses —
+    // the app shows a live expiry countdown when a pending payment is resumed.
+    expiresInSeconds: Math.max(0, Math.floor((activeUntil.getTime() - Date.now()) / 1000)),
     paytmCheckout: {
       orderId: paytmOrderId,
       txnToken: paymentSession.paytm?.txnToken || '',
@@ -1913,11 +2080,16 @@ app.post(
     }
 
     const activeUntil = paymentSessionActiveUntil(paymentSession);
-    if (activeUntil <= new Date()) {
+    // SECURITY FIX 2026-07-19: same superseded-session guard as the Paytm
+    // branch — a failed (e.g. superseded) session is never resumable, only
+    // its captured money is (handled above via createOrderFromPaymentSession).
+    const alreadyFailed = paymentSession.status === 'failed';
+    if (alreadyFailed || activeUntil <= new Date()) {
       // CODEX EDITS 2026-07-09 11:22:21 IST: If Razorpay has no captured
-      // payment after 15 minutes, expire this checkout so the app can clear
-      // the local pending pointer and create a fresh order for the current cart.
-      await PaymentSession.updateOne(
+      // payment within the active window, expire this checkout so the app can
+      // clear the local pending pointer and create a fresh order for the
+      // current cart.
+      if (!alreadyFailed) await PaymentSession.updateOne(
         { _id: paymentSession._id, status: { $ne: 'completed' } },
         {
           $set: {
@@ -1925,7 +2097,8 @@ app.post(
             activeUntil,
             lastError: {
               code: 'session_expired',
-              message: 'Payment session expired after 15 minutes with no captured payment',
+              // CHANGE 2026-07-19: message derives from the constant (15 → 5 min).
+              message: `Payment session expired after ${PAYMENT_SESSION_ACTIVE_MS / 60000} minutes with no captured payment`,
               at: new Date(),
               source: 'server_reconcile',
             },
@@ -1958,6 +2131,8 @@ app.post(
       state: 'pending',
       gatewayStatus,
       retryable: true,
+      // CHANGE 2026-07-19: live expiry countdown source (see Paytm branch).
+      expiresInSeconds: Math.max(0, Math.floor((activeUntil.getTime() - Date.now()) / 1000)),
       checkoutOrder: {
         id: razorpayOrderId,
         amount: Number(razorpayOrder?.amount || toPaise(paymentSession.cart.total)),
@@ -2187,6 +2362,12 @@ app.post('/api/paytm/callback', webhookLimiter, asyncHandler(async (req, res) =>
   const checksum = String(params.CHECKSUMHASH || '');
   const paytmOrderId = String(params.ORDERID || '');
   res.set('Content-Type', 'text/html; charset=utf-8');
+  // BUG FIX 2026-07-19: helmet's default CSP (script-src 'self') silently
+  // blocked this page's inline <style>/<script>, so the web-flow auto-redirect
+  // back to the app never fired. Relaxed only for this self-contained page —
+  // it embeds no external resources and all interpolated values are sanitized.
+  res.set('Content-Security-Policy',
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
 
   if (!paytmOrderId || !checksum) {
     return res.status(400).send(paytmCallbackPage('invalid', paytmOrderId));
@@ -2312,6 +2493,9 @@ app.post('/api/paytm/callback', webhookLimiter, asyncHandler(async (req, res) =>
 // page instead of a 404.
 app.get('/api/paytm/callback', webhookLimiter, (req, res) => {
   res.set('Content-Type', 'text/html; charset=utf-8');
+  // BUG FIX 2026-07-19: same CSP relaxation as the POST handler above.
+  res.set('Content-Security-Policy',
+    "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
   res.send(paytmCallbackPage('pending', String(req.query?.ORDERID || '')));
 });
 
@@ -2403,15 +2587,21 @@ app.patch('/api/orders/:orderId/status', requireFirebaseAuth, requireOrderCafeOw
     return res.status(400).json({ message: `status must be one of: ${allowedStatuses.join(', ')}` });
   }
 
+  // CONCURRENCY FIX 2026-07-19: Fetch the pre-update document so a repeated
+  // set of the SAME status (vendor double-click, request retry, or two PM2
+  // workers applying the same click) no longer re-sends the customer
+  // notification and push. The response still reflects the applied status.
   const order = await Order.findOneAndUpdate(
     { orderId: req.params.orderId },
     { status },
-    { returnDocument: 'after', runValidators: true }
+    { returnDocument: 'before', runValidators: true }
   );
   if (!order) return res.status(404).json({ message: 'Order not found' });
+  const statusChanged = order.status !== status;
+  order.status = status;
   audit('order.status_changed', req.firebaseUser.uid, 'order', order.orderId, { status, cafeId: order.cafeId?.toString() });
 
-  if (order.userId) {
+  if (statusChanged && order.userId) {
     // Don't notify the vendor if they are also the customer (same Firebase account — test scenario)
     const orderUser = await User.findById(order.userId).select('googleId').lean();
     const isVendorAlsoCustomer = orderUser?.googleId === req.firebaseUser.uid;
@@ -2440,42 +2630,18 @@ app.post('/api/payment/verify', requireFirebaseAuth, asyncHandler(async (req, re
   res.json({ ok: true });
 }));
 
+// SECURITY FIX 2026-07-19: Client-driven payment mutation is disabled. This
+// legacy endpoint let the order's customer rewrite payment.status (self-mark
+// Refunded/Failed) and payment.transactionId/providerOrderId with no gateway
+// verification unless status was exactly 'Paid'. Overwriting providerOrderId
+// to another user's in-flight session id would also hijack that session's
+// order-id lookup and block the victim's paid order from ever being created.
+// Payment state is owned exclusively by the verified state machine
+// (initiate → confirm/webhook/callback → reconcile). No app build calls this.
 app.patch('/api/orders/:orderId/payment', requireFirebaseAuth, asyncHandler(async (req, res) => {
-  const { transactionId, status, providerOrderId, razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-  const allowedPaymentStatuses = ['Pending', 'Paid', 'Failed', 'Refunded'];
-  if (status && !allowedPaymentStatuses.includes(status)) {
-    return res.status(400).json({ message: `status must be one of: ${allowedPaymentStatuses.join(', ')}` });
-  }
-
-  const existingOrder = await Order.findOne({ orderId: req.params.orderId });
-  if (!existingOrder) return res.status(404).json({ message: 'Order not found' });
-
-  // Ownership check: only the customer who placed the order may update payment status.
-  const requesterEmail = (req.firebaseUser.email || '').toLowerCase();
-  if (!existingOrder.customerEmail || existingOrder.customerEmail.toLowerCase() !== requesterEmail) {
-    return res.status(403).json({ message: 'Forbidden' });
-  }
-
-  // Always verify Razorpay signature when setting Paid — regardless of current status
-  if (status === 'Paid') {
-    const signedOrderId   = razorpay_order_id  || existingOrder.payment.providerOrderId;
-    const signedPaymentId = razorpay_payment_id || transactionId;
-    if (signedOrderId !== existingOrder.payment.providerOrderId) {
-      return res.status(400).json({ message: 'Razorpay order id does not match this order' });
-    }
-    if (!verifyRazorpaySignature({ razorpay_order_id: signedOrderId, razorpay_payment_id: signedPaymentId, razorpay_signature })) {
-      return res.status(400).json({ message: 'Invalid Razorpay signature' });
-    }
-  }
-
-  const update = {};
-  if (transactionId   !== undefined) update['payment.transactionId']   = transactionId;
-  if (providerOrderId !== undefined) update['payment.providerOrderId'] = providerOrderId;
-  if (status          !== undefined) update['payment.status']          = status;
-
-  const order = await Order.findOneAndUpdate({ orderId: req.params.orderId }, { $set: update }, { returnDocument: 'after', runValidators: true });
-  if (!order) return res.status(404).json({ message: 'Order not found' });
-  res.json(order);
+  return res.status(410).json({
+    message: 'Payment updates are managed automatically. Use the standard payment flow.',
+  });
 }));
 
 // User can only read their own notifications
@@ -2539,11 +2705,16 @@ app.delete('/api/notifications/:notificationId', requireFirebaseAuth, asyncHandl
 app.get('/api/vendor/:vendorId/dashboard', requireFirebaseAuth, asyncHandler(async (req, res) => {
   const cafeIds = (await manageableCafeIds(req.firebaseUser, req.params.vendorId))
     .map(id => new mongoose.Types.ObjectId(id));
-  if (req.firebaseUser.uid !== req.params.vendorId && cafeIds.length === 0) {
+  // SECURITY FIX 2026-07-19: Previously a requester passing their OWN uid as
+  // :vendorId bypassed this guard even with zero owned cafes, and the empty
+  // cafeIds list fell through to an unscoped query ({}) that aggregated and
+  // returned recent orders across ALL cafes to any authenticated customer.
+  // A dashboard is only served to accounts that actually manage >= 1 cafe.
+  if (cafeIds.length === 0) {
     return res.status(403).json({ message: 'Forbidden: you can only access your own dashboard' });
   }
 
-  const orderQuery = cafeIds.length ? { cafeId: { $in: cafeIds } } : {};
+  const orderQuery = { cafeId: { $in: cafeIds } };
 
   const [summary] = await Order.aggregate([
     { $match: orderQuery },

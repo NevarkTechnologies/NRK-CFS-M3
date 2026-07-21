@@ -24,6 +24,13 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
   // fallback timeout fired) — drives the "Order is being created" footer.
   bool _orderPushReceived = false;
   Timer? _pushFallbackTimer;
+  // FIX 2026-07-21: The confirmation popup is now driven by the same signal as
+  // the footer loader (order-created push / fallback) instead of a blind 4s
+  // timer, so the loader stays visible right up until the popup appears.
+  // _successAnimationDone gates it behind the "Payment Successful!" step; both
+  // conditions met → popup shown exactly once.
+  bool _successAnimationDone = false;
+  bool _popupShown = false;
 
   bool get isDark => Theme.of(context).brightness == Brightness.dark;
 
@@ -32,7 +39,29 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
     final pushedId = NotificationService.lastOrderPushOrderId.value;
     if (pushedId != null && pushedId == widget.order['orderId']?.toString()) {
       if (mounted) setState(() => _orderPushReceived = true);
+      _maybeShowConfirmationPopup();
     }
+  }
+
+  // FIX 2026-07-21: Shows the "Order Confirmed!" popup once, only after both the
+  // success animation has played AND the order-created signal has arrived (real
+  // FCM push or the 60s fallback). Replaces the previous fixed 4s timer that
+  // fired the popup independently of actual order creation.
+  void _maybeShowConfirmationPopup() {
+    if (_popupShown || !_successAnimationDone || !_orderPushReceived) return;
+    if (!mounted) return;
+    _popupShown = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => _OrderConfirmedDialog(isDark: isDark),
+      ).then((_) {
+        if (!mounted) return;
+        setState(() => step = 2);
+      });
+    });
   }
 
   @override
@@ -51,6 +80,9 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
     _pushFallbackTimer = Timer(const Duration(seconds: 60), () {
       if (mounted && !_orderPushReceived) {
         setState(() => _orderPushReceived = true);
+        // FIX 2026-07-21: fallback must also release the popup so it can never
+        // hang waiting for a push that was dropped.
+        _maybeShowConfirmationPopup();
       }
     });
 
@@ -58,19 +90,14 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
       if (!mounted) return;
       setState(() => step = 1);
       _checkCtrl.forward();
+      // FIX 2026-07-21: After the success animation plays, arm the popup —
+      // it now appears only once the order-created signal has also arrived
+      // (see _maybeShowConfirmationPopup), keeping the loader visible until
+      // the popup shows. If the push already landed, this shows it right away.
       Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (ctx) => _OrderConfirmedDialog(isDark: isDark),
-          ).then((_) {
-            if (!mounted) return;
-            setState(() => step = 2);
-          });
-        });
+        _successAnimationDone = true;
+        _maybeShowConfirmationPopup();
       });
     });
   }
