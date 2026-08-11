@@ -68,6 +68,10 @@ const OUTBOX_PROCESSING_LEASE_MS = 60 * 1000;
 const PAYMENT_SESSION_ACTIVE_MS = 5 * 60 * 1000;
 const PAYMENT_SESSION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 let notificationOutboxTimer;
+// FEATURE 2026-07-22: Auto-reject same-day orders the vendor never accepted,
+// once their IST day is over, so they stop appearing as active orders.
+let stalePendingSweepTimer;
+const STALE_PENDING_SWEEP_MS = 10 * 60 * 1000;
 
 const redisClient = new Redis(process.env.REDIS_URL || 'redis://127.0.0.1:6379');
 redisClient.on('error', (err) => console.warn('Redis error:', err.message));
@@ -1002,6 +1006,47 @@ function startNotificationOutboxWorker() {
     );
   }, 5000);
   notificationOutboxTimer.unref?.();
+}
+
+// FEATURE 2026-07-22: Reject orders still 'Pending' (never accepted by the
+// vendor) whose IST calendar day has passed. Orders are same-day pickup, so any
+// Pending order created before the start of today (IST) can no longer be
+// fulfilled and must leave the active set. The update is a single atomic,
+// idempotent updateMany that ONLY sets status → 'Rejected'; no other order
+// field, fee, notification, or payment record is touched. Running it on every
+// PM2 worker is safe — after the first worker flips them, the filter matches
+// nothing for the rest.
+async function autoRejectStalePendingOrders() {
+  // Start of today in IST, expressed as the equivalent UTC instant (mirrors the
+  // IST date-range logic used by GET /api/orders).
+  const istOffsetMs = 330 * 60 * 1000;
+  const istTodayStr = new Date(Date.now() + istOffsetMs).toISOString().slice(0, 10);
+  const startOfTodayUtc = new Date(new Date(`${istTodayStr}T00:00:00.000Z`).getTime() - istOffsetMs);
+  const result = await Order.updateMany(
+    { status: 'Pending', createdAt: { $lt: startOfTodayUtc } },
+    { $set: { status: 'Rejected' } }
+  );
+  if (result.modifiedCount > 0) {
+    paymentLog('orders.stale_pending_auto_rejected', {
+      count: result.modifiedCount,
+      before: startOfTodayUtc.toISOString(),
+    });
+  }
+}
+
+// CODEX-style timer: runs once shortly after boot and on an interval, unref'd so
+// it never holds PM2 shutdown open.
+function startStalePendingOrderSweeper() {
+  if (stalePendingSweepTimer) return;
+  setImmediate(() => autoRejectStalePendingOrders().catch(error =>
+    paymentLog('orders.stale_pending_sweep_error', { error: safeErrorMessage(error) }, 'error')
+  ));
+  stalePendingSweepTimer = setInterval(() => {
+    autoRejectStalePendingOrders().catch(error =>
+      paymentLog('orders.stale_pending_sweep_error', { error: safeErrorMessage(error) }, 'error')
+    );
+  }, STALE_PENDING_SWEEP_MS);
+  stalePendingSweepTimer.unref?.();
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
@@ -2758,6 +2803,8 @@ connectDatabase()
       console.log(`Server running on port ${PORT}`);
       // CODEX EDITS: Start background delivery only after Mongo and HTTP are ready.
       startNotificationOutboxWorker();
+      // FEATURE 2026-07-22: sweep un-accepted, past-day orders out of active.
+      startStalePendingOrderSweeper();
       if (typeof process.send === 'function') process.send('ready');
     });
   })
@@ -2768,6 +2815,7 @@ connectDatabase()
 async function gracefulShutdown(signal) {
   paymentLog('process.shutdown_started', { signal });
   if (notificationOutboxTimer) clearInterval(notificationOutboxTimer);
+  if (stalePendingSweepTimer) clearInterval(stalePendingSweepTimer);
   const forceTimer = setTimeout(() => process.exit(1), 30 * 1000);
   forceTimer.unref?.();
   const closeResources = async () => {

@@ -96,7 +96,13 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
       // the popup shows. If the push already landed, this shows it right away.
       Timer(const Duration(seconds: 2), () {
         if (!mounted) return;
-        _successAnimationDone = true;
+        // FIX 2026-07-21: setState (not a bare assignment) so a frame is
+        // scheduled. _maybeShowConfirmationPopup shows the dialog via
+        // addPostFrameCallback, which only runs after a rendered frame — when
+        // the push already arrived the scheduler is otherwise idle, so the
+        // popup would hang until an unrelated repaint (screen touch, pulling
+        // down the notification shade). Marking the tree dirty flushes it.
+        setState(() => _successAnimationDone = true);
         _maybeShowConfirmationPopup();
       });
     });
