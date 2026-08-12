@@ -6,11 +6,14 @@ import '../services/notification_service.dart';
 import '../services/session.dart';
 // CODEX EDITS: Cold-start payment reconciliation runs after Firebase auth restore.
 import '../services/pending_payment_service.dart';
+// FEATURE 2026-08-12: Mandatory Play update gate.
+import '../services/update_service.dart';
 import '../model/favorite_model.dart';
 import '../model/cart_model.dart';
 import 'cafeteria_page.dart';
 import 'cart_page.dart';
 import 'success_page.dart';
+import 'update_required_page.dart';
 import 'vendor/vendor_home_page.dart';
 
 class SplashPage extends StatefulWidget {
@@ -32,6 +35,21 @@ class _SplashPageState extends State<SplashPage> {
   void _navigate() async {
     await WidgetsBinding.instance.endOfFrame;
     if (!mounted) return;
+
+    // FEATURE 2026-08-12: Mandatory update gate. If the installed build is below
+    // the backend-configured minimum, block here and force a Play update — the
+    // app is unusable until the user updates. A backend/network failure returns
+    // false, so this never locks anyone out on a transient error.
+    if (await UpdateService.isUpdateMandatory()) {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const UpdateRequiredPage()),
+      );
+      return;
+    }
+    if (!mounted) return;
+
     // Restore persisted cart and favorites before any UI runs
     await Future.wait([
       loadCart(AppSession.userId),

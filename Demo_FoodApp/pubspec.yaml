@@ -38,6 +38,10 @@ dependencies:
   excel: ^4.0.3 
   animated_text_kit: ^4.2.3
   web: ^1.1.1
+  # Mandatory in-app update gate (Google Play In-App Updates). package_info_plus
+  # reads the installed versionCode; in_app_update drives the immediate flow.
+  in_app_update: ^4.2.3
+  package_info_plus: ^8.0.0
 
 dev_dependencies:
   flutter_test:

@@ -434,6 +434,12 @@
       "languageVersion": "3.6"
     },
     {
+      "name": "in_app_update",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/in_app_update-4.2.5",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
+    },
+    {
       "name": "jni",
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/jni-1.0.0",
       "packageUri": "lib/",
@@ -522,6 +528,18 @@
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/package_config-2.2.0",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "package_info_plus",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/package_info_plus-8.3.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "package_info_plus_platform_interface",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/package_info_plus_platform_interface-3.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
     },
     {
       "name": "path",

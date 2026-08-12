@@ -53,6 +53,13 @@ const FEE_DEFAULTS = {
 //   db.app_configs.updateOne({key:'pickup_window'},
 //     {$set:{'value.start':'11:00','value.end':'13:30'}})
 const PICKUP_WINDOW_DEFAULTS = { start: '11:00', end: '13:30' };
+// FEATURE 2026-08-12: Minimum supported Android build. Served to the app; when
+// the installed versionCode is below this, the app forces a mandatory Google
+// Play update before it can be used. Edit directly in MongoDB to force-update
+// every old install (app_configs doc {key:'min_app_version'}):
+//   db.app_configs.updateOne({key:'min_app_version'},
+//     {$set:{'value.minVersionCode': 3}})
+const MIN_APP_VERSION_DEFAULTS = { minVersionCode: 1 };
 // CODEX EDITS: Processing leases allow another worker to safely resume work
 // after a crash without deleting the payment cart.
 const PAYMENT_PROCESSING_LEASE_MS = 30 * 1000;
@@ -480,6 +487,28 @@ async function seedFeeConfigs() {
     { $setOnInsert: { key: 'pickup_window', value: { ...PICKUP_WINDOW_DEFAULTS } } },
     { upsert: true }
   ).catch(ignoreDuplicate);
+  // FEATURE 2026-08-12: Minimum supported app version — inserted once, then
+  // owned by direct DB edits (bump minVersionCode to force a mandatory update).
+  await AppConfig.updateOne(
+    { key: 'min_app_version' },
+    { $setOnInsert: { key: 'min_app_version', value: { ...MIN_APP_VERSION_DEFAULTS } } },
+    { upsert: true }
+  ).catch(ignoreDuplicate);
+}
+
+// FEATURE 2026-08-12: Live-read the minimum supported Android versionCode from
+// app_configs; a malformed/missing value falls back to the default so the app
+// is never accidentally locked out by a bad edit.
+async function getMinAppVersion() {
+  let minVersionCode = MIN_APP_VERSION_DEFAULTS.minVersionCode;
+  try {
+    const doc = await AppConfig.findOne({ key: 'min_app_version' }).lean();
+    const raw = Number(doc?.value?.minVersionCode);
+    if (Number.isFinite(raw) && raw >= 0) minVersionCode = Math.floor(raw);
+  } catch {
+    // Fall through to default.
+  }
+  return { minVersionCode };
 }
 
 // Read live on every request — a direct MongoDB edit reflects immediately in
@@ -1388,12 +1417,16 @@ app.delete('/api/menu/:id', requireFirebaseAuth, validateObjectId('id'), require
 // Public, read live from MongoDB: the app fetches this on cart/checkout open so
 // direct fee_configs edits reflect in real time without a deploy.
 app.get('/api/payment/fees', asyncHandler(async (req, res) => {
-  const [configs, pickupWindow] = await Promise.all([
+  const [configs, pickupWindow, minAppVersion] = await Promise.all([
     Promise.all(PAYMENT_GATEWAYS.map(gateway => getFeeConfig(gateway))),
     getPickupWindow(),
+    getMinAppVersion(),
   ]);
   res.json({
     preferredGateway: PREFERRED_GATEWAY,
+    // FEATURE 2026-08-12: Minimum supported Android versionCode. The app forces
+    // a mandatory Play update when its installed build is below this.
+    minAppVersion,
     gateways: configs.map(config => ({
       gateway: config.gateway,
       active: config.active !== false,
@@ -1561,7 +1594,16 @@ app.post('/api/payment/initiate', requireFirebaseAuth, asyncHandler(async (req, 
     if (channel === 'web') {
       // Web checkout is a full-page redirect: Paytm must return the browser to
       // our callback page, which finalises the order and links back to the app.
-      const publicBase = (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, '');
+      // FIX 2026-08-12: Normalise PUBLIC_BASE_URL so the Paytm web callback is
+      // never doubled. Some deployments set PUBLIC_BASE_URL with a trailing
+      // `/api` (e.g. https://benchbites.nevark.in/api); since we append
+      // `/api/paytm/callback` below, strip a trailing `/api` (and any trailing
+      // slashes) first — otherwise the callback becomes `/api/api/paytm/callback`
+      // and Paytm's return hits a 404. Env value is left as-is; this is
+      // Paytm-callback-scoped only.
+      const publicBase = (process.env.PUBLIC_BASE_URL || '')
+        .replace(/\/+$/, '')
+        .replace(/\/api$/, '');
       if (!publicBase) {
         return res.status(503).json({ message: 'Paytm web payments are not configured (PUBLIC_BASE_URL missing)' });
       }
