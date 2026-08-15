@@ -426,52 +426,57 @@ class _HomePageState extends State<HomePage> {
                           duration: const Duration(milliseconds: 300),
                           child: Align(
                             alignment: Alignment.center,
-                            child: GestureDetector(
-                              onTap: () => _showMenuBottomSheet(isDark),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 20,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? Colors.white
-                                      : const Color(0xFF081F47),
-                                  borderRadius: BorderRadius.circular(24),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color:
-                                          (isDark ? Colors.white : Colors.black)
-                                              .withValues(alpha: 0.2),
-                                      blurRadius: 15,
-                                      offset: const Offset(0, 8),
-                                    ),
-                                  ],
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.restaurant_menu_rounded,
-                                      color: isDark
-                                          ? const Color(0xFF081F47)
-                                          : Colors.white,
-                                      size: 16,
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      "MENU",
-                                      style: TextStyle(
-                                        fontFamily: 'Inter',
-                                        fontSize: 12,
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.click,
+                              child: GestureDetector(
+                                onTap: () => _showMenuBottomSheet(isDark),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 20,
+                                    vertical: 12,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.white
+                                        : const Color(0xFF081F47),
+                                    borderRadius: BorderRadius.circular(24),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color:
+                                            (isDark
+                                                    ? Colors.white
+                                                    : Colors.black)
+                                                .withValues(alpha: 0.2),
+                                        blurRadius: 15,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.restaurant_menu_rounded,
                                         color: isDark
                                             ? const Color(0xFF081F47)
                                             : Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.0,
+                                        size: 16,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "MENU",
+                                        style: TextStyle(
+                                          fontFamily: 'Inter',
+                                          fontSize: 12,
+                                          color: isDark
+                                              ? const Color(0xFF081F47)
+                                              : Colors.white,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.0,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
@@ -882,28 +887,31 @@ class _HomePageState extends State<HomePage> {
               Positioned(
                 top: 8,
                 right: 8,
-                child: GestureDetector(
-                  onTap: () =>
-                      setState(() => FavoriteModel.toggleFavorite(food)),
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.1),
-                          blurRadius: 6,
-                          offset: const Offset(0, 3),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      FavoriteModel.isFavorite(food["id"])
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      color: Colors.redAccent,
-                      size: 16,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () =>
+                        setState(() => FavoriteModel.toggleFavorite(food)),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 6,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        FavoriteModel.isFavorite(food["id"])
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        color: Colors.redAccent,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ),
@@ -1077,108 +1085,114 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget _buildFloatingCartBanner(int totalItems, double totalPrice) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => CartPage(toggleTheme: widget.toggleTheme ?? () {}),
-          ),
-        ).then((_) {
-          setState(() {});
-        });
-      },
-      child: Container(
-        margin: const EdgeInsets.only(left: 16, right: 16),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(colors: [appBlue, const Color(0xFF0033CC)]),
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: appBlue.withValues(alpha: 0.4),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) =>
+                  CartPage(toggleTheme: widget.toggleTheme ?? () {}),
             ),
-          ],
-        ),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.shopping_cart_checkout_rounded,
-              color: Colors.white,
-              size: 20,
+          ).then((_) {
+            setState(() {});
+          });
+        },
+        child: Container(
+          margin: const EdgeInsets.only(left: 16, right: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [appBlue, const Color(0xFF0033CC)],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    "$totalItems Item${totalItems > 1 ? 's' : ''} in Cart",
-                    style: const TextStyle(
-                      fontFamily: 'Inter',
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    "Checkout to proceed",
-                    style: TextStyle(
-                      fontFamily: 'Inter',
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontWeight: FontWeight.w500,
-                      fontSize: 10,
-                    ),
-                  ),
-                ],
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: appBlue.withValues(alpha: 0.4),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
               ),
-            ),
-            Row(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.shopping_cart_checkout_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text(
-                      "View Cart",
-                      style: TextStyle(
+                    Text(
+                      "$totalItems Item${totalItems > 1 ? 's' : ''} in Cart",
+                      style: const TextStyle(
                         fontFamily: 'Inter',
                         color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      "₹$totalPrice",
-                      style: const TextStyle(
-                        fontFamily: 'Nunito',
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
+                      "Checkout to proceed",
+                      style: TextStyle(
+                        fontFamily: 'Inter',
+                        color: Colors.white.withValues(alpha: 0.85),
+                        fontWeight: FontWeight.w500,
+                        fontSize: 10,
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
+              ),
+              Row(
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "View Cart",
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11,
+                        ),
+                      ),
+                      Text(
+                        "₹$totalPrice",
+                        style: const TextStyle(
+                          fontFamily: 'Nunito',
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
                   ),
-                  child: const Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: Colors.white,
-                    size: 10,
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white,
+                      size: 10,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

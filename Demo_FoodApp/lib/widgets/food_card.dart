@@ -51,13 +51,16 @@ class FoodCard extends StatelessWidget {
               Positioned(
                 right: 8,
                 top: 8,
-                child: GestureDetector(
-                  onTap: onFavoriteToggle,
-                  child: Icon(
-                    FavoriteModel.isFavorite(food["name"])
-                        ? Icons.favorite
-                        : Icons.favorite_border,
-                    color: Colors.red,
+                child: MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: onFavoriteToggle,
+                    child: Icon(
+                      FavoriteModel.isFavorite(food["name"])
+                          ? Icons.favorite
+                          : Icons.favorite_border,
+                      color: Colors.red,
+                    ),
                   ),
                 ),
               ),

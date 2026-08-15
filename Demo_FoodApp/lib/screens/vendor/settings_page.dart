@@ -213,7 +213,9 @@ class _SettingsPageState extends State<SettingsPage> {
                   Positioned(
                     bottom: 10,
                     right: 10,
-                    child: GestureDetector(
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
                       onTap: _pickImage,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -252,6 +254,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
+                    ),
                     ),
                   ),
               ],

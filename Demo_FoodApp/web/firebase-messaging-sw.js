@@ -2,10 +2,11 @@ importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js'
 importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: 'AIzaSyBLz1paNFUV35aqD4XbNjf6VmyGKsnN5Hs',
-  appId: '1:561027608241:android:38e49cd43adc4e0370fc90',
+  apiKey: 'AIzaSyBcdjchjHz394BuDCgYTdPGTiFhctu5Cbk',
+  appId: '1:561027608241:web:2a72e25cd9c085a470fc90',
   messagingSenderId: '561027608241',
   projectId: 'nrk-cfs',
+  authDomain: 'nrk-cfs.firebaseapp.com',
   storageBucket: 'nrk-cfs.firebasestorage.app',
 });
 

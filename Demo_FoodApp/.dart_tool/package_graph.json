@@ -22,6 +22,7 @@
         "flutter_local_notifications",
         "google_fonts",
         "google_sign_in",
+        "google_sign_in_web",
         "http",
         "image_picker",
         "in_app_update",
@@ -194,6 +195,18 @@
         "url_launcher_platform_interface",
         "url_launcher_web",
         "url_launcher_windows"
+      ]
+    },
+    {
+      "name": "google_sign_in_web",
+      "version": "0.12.4+4",
+      "dependencies": [
+        "flutter",
+        "flutter_web_plugins",
+        "google_identity_services_web",
+        "google_sign_in_platform_interface",
+        "http",
+        "web"
       ]
     },
     {
@@ -767,23 +780,19 @@
       ]
     },
     {
-      "name": "google_sign_in_web",
-      "version": "0.12.4+4",
-      "dependencies": [
-        "flutter",
-        "flutter_web_plugins",
-        "google_identity_services_web",
-        "google_sign_in_platform_interface",
-        "http",
-        "web"
-      ]
-    },
-    {
       "name": "google_sign_in_platform_interface",
       "version": "2.5.0",
       "dependencies": [
         "flutter",
         "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "google_identity_services_web",
+      "version": "0.3.3+1",
+      "dependencies": [
+        "meta",
+        "web"
       ]
     },
     {
@@ -1162,14 +1171,6 @@
         "firebase_core_platform_interface",
         "flutter",
         "meta"
-      ]
-    },
-    {
-      "name": "google_identity_services_web",
-      "version": "0.3.3+1",
-      "dependencies": [
-        "meta",
-        "web"
       ]
     },
     {

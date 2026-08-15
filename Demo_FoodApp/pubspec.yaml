@@ -29,6 +29,10 @@ dependencies:
   firebase_auth: ^5.1.1
   cloud_firestore: ^5.0.1
   google_sign_in: ^6.2.0
+  # Direct dep so login_page can import web_only.dart (renderButton) on web
+  # without tripping depend_on_referenced_packages. Same version already
+  # resolved transitively via google_sign_in.
+  google_sign_in_web: ^0.12.4+4
   url_launcher: ^6.3.0
   firebase_messaging: ^15.1.0
   flutter_local_notifications: ^19.4.0

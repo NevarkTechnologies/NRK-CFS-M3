@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:async';
 import 'dart:ui' as ui;
+import '../services/google_signin_button_web.dart'
+    if (dart.library.io) '../services/google_signin_button_stub.dart'
+    as gsi_button;
 import 'package:google_fonts/google_fonts.dart';
 import 'vendor/vendor_home_page.dart';
 import 'cafeteria_page.dart';
@@ -27,6 +32,30 @@ class LoginPage extends StatefulWidget {
 class _LoginPageState extends State<LoginPage> {
   final Color appBlue = const Color(0xFF2563EB);
   bool isSigningIn = false;
+
+  // Web-only Google Sign-In. On web the imperative signIn() can't return an
+  // idToken, so we render Google's GIS button and receive the credential
+  // (with idToken) via onCurrentUserChanged. Both are unused on mobile.
+  GoogleSignIn? _webGoogleSignIn;
+  StreamSubscription<GoogleSignInAccount?>? _webAuthSub;
+
+  @override
+  void initState() {
+    super.initState();
+    if (kIsWeb) {
+      // Client ID is auto-detected from the <meta google-signin-client_id>
+      // tag in web/index.html (the same mechanism splash_page relies on).
+      _webGoogleSignIn = GoogleSignIn();
+      _webAuthSub =
+          _webGoogleSignIn!.onCurrentUserChanged.listen(_onWebUserChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    _webAuthSub?.cancel();
+    super.dispose();
+  }
 
   Future<void> _askPhoneNumber(String userId) async {
     final ctrl = TextEditingController();
@@ -218,12 +247,29 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  // Web: Google's rendered GIS button delivers a signed-in account (carrying a
+  // valid idToken) through onCurrentUserChanged. signIn() can't return an
+  // idToken on web, so web routes through here instead of _signInWithGoogle.
+  Future<void> _onWebUserChanged(GoogleSignInAccount? account) async {
+    if (account == null || isSigningIn || !mounted) return;
+    setState(() => isSigningIn = true);
+    try {
+      final googleAuth = await account.authentication;
+      await _authenticateWithGoogle(
+        idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
+      );
+    } catch (e) {
+      _handleSignInError(e);
+    }
+  }
+
+  // Mobile: imperative Google sign-in triggered by the custom button.
   Future<void> _signInWithGoogle() async {
     if (isSigningIn) return;
     setState(() => isSigningIn = true);
 
     try {
-      // 1. Sign in with Google using google_sign_in package (works on mobile and web)
       final GoogleSignIn googleSignIn = GoogleSignIn();
 
       try {
@@ -244,13 +290,28 @@ class _LoginPageState extends State<LoginPage> {
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      final credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
+      await _authenticateWithGoogle(
         idToken: googleAuth.idToken,
+        accessToken: googleAuth.accessToken,
       );
+    } catch (e) {
+      _handleSignInError(e);
+    }
+  }
 
-      final UserCredential userCredential = await FirebaseAuth.instance
-          .signInWithCredential(credential);
+  // Shared post-auth flow: exchange Google tokens for a Firebase session,
+  // resolve role, sync with the backend, and navigate. Mobile + web.
+  Future<void> _authenticateWithGoogle({
+    required String? idToken,
+    required String? accessToken,
+  }) async {
+    final credential = GoogleAuthProvider.credential(
+      accessToken: accessToken,
+      idToken: idToken,
+    );
+
+    final UserCredential userCredential = await FirebaseAuth.instance
+        .signInWithCredential(credential);
       final User? firebaseUser = userCredential.user;
 
       if (firebaseUser == null || firebaseUser.email == null) {
@@ -421,20 +482,39 @@ class _LoginPageState extends State<LoginPage> {
           ),
         );
       }
-    } catch (e) {
-      debugPrint("Sign-in error: $e");
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            "Sign-in failed: Server Not Responding - Try Again Later",
+  }
+
+  void _handleSignInError(Object e) {
+    debugPrint("Sign-in error: $e");
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Sign-in failed: Server Not Responding - Try Again Later",
+        ),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    setState(() => isSigningIn = false);
+  }
+
+  // On web, Google's official GIS button is the reliable path to an idToken;
+  // clicking it drives _onWebUserChanged via onCurrentUserChanged.
+  Widget _buildWebGoogleButton() {
+    if (isSigningIn) {
+      return const Center(
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF2563EB)),
           ),
-          backgroundColor: Colors.redAccent,
-          behavior: SnackBarBehavior.floating,
         ),
       );
-      setState(() => isSigningIn = false);
     }
+    return Center(child: gsi_button.renderGoogleSignInButton());
   }
 
   @override
@@ -880,18 +960,34 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                       ],
                     ),
-              child: Transform.scale(
-                scale: isMobile ? 1.3 : 1.05,
-                child: Image.asset(
-                  'assets/logo1.gif',
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, _, _) => Icon(
-                    Icons.lunch_dining_rounded,
-                    color: isMobile ? appBlue : Colors.white,
-                    size: 30,
-                  ),
-                ),
-              ),
+              // Animated GIFs don't reliably decode on Flutter web (only a
+              // blank first frame paints, leaving just the blue badge). Use the
+              // static logo on web, clipped to match the circular badge; keep
+              // the animated GIF on mobile where it renders correctly.
+              child: kIsWeb
+                  ? ClipOval(
+                      child: Image.asset(
+                        'assets/Nevark.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => const Icon(
+                          Icons.lunch_dining_rounded,
+                          color: Colors.white,
+                          size: 30,
+                        ),
+                      ),
+                    )
+                  : Transform.scale(
+                      scale: isMobile ? 1.3 : 1.05,
+                      child: Image.asset(
+                        'assets/logo1.gif',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, _, _) => Icon(
+                          Icons.lunch_dining_rounded,
+                          color: isMobile ? appBlue : Colors.white,
+                          size: 30,
+                        ),
+                      ),
+                    ),
             ),
             SizedBox(width: isMobile ? 4 : 14),
           ],
@@ -1037,7 +1133,9 @@ class _LoginPageState extends State<LoginPage> {
           SizedBox(
             width: double.infinity,
             height: 56,
-            child: ElevatedButton(
+            child: kIsWeb
+                ? _buildWebGoogleButton()
+                : ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF0F172A),

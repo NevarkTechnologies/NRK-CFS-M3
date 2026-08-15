@@ -476,38 +476,41 @@ class _VendorHomePageState extends State<VendorHomePage> {
             right: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: GestureDetector(
-                onTap: widget.toggleTheme,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 250),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 14,
-                    horizontal: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        isDark
-                            ? Icons.light_mode_rounded
-                            : Icons.dark_mode_rounded,
-                        color: const Color(0xFF0F4CFF),
-                        size: 22,
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        isDark ? 'Light Mode' : 'Dark Mode',
-                        style: TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: isDark ? Colors.white70 : Colors.black87,
+              child: MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  onTap: widget.toggleTheme,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 14,
+                      horizontal: 16,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white10 : const Color(0xFFF4F6F9),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          isDark
+                              ? Icons.light_mode_rounded
+                              : Icons.dark_mode_rounded,
+                          color: const Color(0xFF0F4CFF),
+                          size: 22,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 16),
+                        Text(
+                          isDark ? 'Light Mode' : 'Dark Mode',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? Colors.white70 : Colors.black87,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1100,19 +1103,22 @@ class _InteractiveScaleState extends State<InteractiveScale> {
   bool isPressed = false;
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTapDown: (_) => setState(() => isPressed = true),
-      onTapUp: (_) {
-        setState(() => isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => isPressed = false),
-      child: AnimatedScale(
-        scale: isPressed ? 0.94 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: widget.child,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => isPressed = true),
+        onTapUp: (_) {
+          setState(() => isPressed = false);
+          widget.onTap();
+        },
+        onTapCancel: () => setState(() => isPressed = false),
+        child: AnimatedScale(
+          scale: isPressed ? 0.94 : 1.0,
+          duration: const Duration(milliseconds: 100),
+          curve: Curves.easeOut,
+          child: widget.child,
+        ),
       ),
     );
   }

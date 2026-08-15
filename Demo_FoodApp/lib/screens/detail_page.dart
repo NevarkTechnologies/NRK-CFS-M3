@@ -289,17 +289,20 @@ class _DetailPageState extends State<DetailPage> {
                   ),
                   child: Row(
                     children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white10
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(12),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () => Navigator.pop(context),
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white10
+                                  : Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(Icons.arrow_back, color: primary),
                           ),
-                          child: Icon(Icons.arrow_back, color: primary),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -944,27 +947,30 @@ class _DetailPageState extends State<DetailPage> {
                       spacing: 16,
                       runSpacing: 8,
                       children: [
-                        GestureDetector(
-                          onTap: () => _openDetailsSidebar(
-                            context,
-                            imageUrl,
-                            orderId,
-                            cafeteriaName,
-                            pickupLocation,
-                            orderDate,
-                            pickupTime,
-                            itemsList,
-                            itemTotalSum,
-                            tax,
-                            billTotal,
-                            isDark,
-                          ),
-                          child: Text(
-                            "VIEW DETAILS",
-                            style: TextStyle(
-                              color: primary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
+                        MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: () => _openDetailsSidebar(
+                              context,
+                              imageUrl,
+                              orderId,
+                              cafeteriaName,
+                              pickupLocation,
+                              orderDate,
+                              pickupTime,
+                              itemsList,
+                              itemTotalSum,
+                              tax,
+                              billTotal,
+                              isDark,
+                            ),
+                            child: Text(
+                              "VIEW DETAILS",
+                              style: TextStyle(
+                                color: primary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
                         ),

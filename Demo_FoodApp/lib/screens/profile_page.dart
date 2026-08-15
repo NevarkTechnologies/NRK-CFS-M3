@@ -92,34 +92,40 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   child: Row(
                     children: [
-                      GestureDetector(
-                        onTap: () {
-                          if (Navigator.canPop(context)) {
-                            Navigator.pop(context);
-                          } else {
-                            Navigator.pushAndRemoveUntil(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    CafeteriaPage(toggleTheme: toggleAppTheme),
-                              ),
-                              (route) => false,
-                            );
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0F4CFF).withValues(alpha: 0.2)
-                                : const Color(
-                                    0xFF0F4CFF,
-                                  ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Color(0xFF0F4CFF),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () {
+                            if (Navigator.canPop(context)) {
+                              Navigator.pop(context);
+                            } else {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => CafeteriaPage(
+                                    toggleTheme: toggleAppTheme,
+                                  ),
+                                ),
+                                (route) => false,
+                              );
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(
+                                      0xFF0F4CFF,
+                                    ).withValues(alpha: 0.2)
+                                  : const Color(
+                                      0xFF0F4CFF,
+                                    ).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Color(0xFF0F4CFF),
+                            ),
                           ),
                         ),
                       ),
@@ -139,53 +145,61 @@ class _ProfilePageState extends State<ProfilePage> {
                         valueListenable: themeNotifier,
                         builder: (_, mode, _) {
                           final isCurrentlyDark = mode == ThemeMode.dark;
-                          return GestureDetector(
-                            onTap: toggleAppTheme,
-                            child: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: isCurrentlyDark
-                                    ? const Color(
-                                        0xFF0F4CFF,
-                                      ).withValues(alpha: 0.2)
-                                    : const Color(
-                                        0xFF0F4CFF,
-                                      ).withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                isCurrentlyDark
-                                    ? Icons.light_mode_rounded
-                                    : Icons.dark_mode_rounded,
-                                color: const Color(0xFF0F4CFF),
+                          return MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: toggleAppTheme,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: isCurrentlyDark
+                                      ? const Color(
+                                          0xFF0F4CFF,
+                                        ).withValues(alpha: 0.2)
+                                      : const Color(
+                                          0xFF0F4CFF,
+                                        ).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  isCurrentlyDark
+                                      ? Icons.light_mode_rounded
+                                      : Icons.dark_mode_rounded,
+                                  color: const Color(0xFF0F4CFF),
+                                ),
                               ),
                             ),
                           );
                         },
                       ),
                       const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const NotificationPage(),
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const NotificationPage(),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(
+                                      0xFF0F4CFF,
+                                    ).withValues(alpha: 0.2)
+                                  : const Color(
+                                      0xFF0F4CFF,
+                                    ).withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                          );
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? const Color(0xFF0F4CFF).withValues(alpha: 0.2)
-                                : const Color(
-                                    0xFF0F4CFF,
-                                  ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.notifications_none,
-                            color: Color(0xFF0F4CFF),
+                            child: const Icon(
+                              Icons.notifications_none,
+                              color: Color(0xFF0F4CFF),
+                            ),
                           ),
                         ),
                       ),

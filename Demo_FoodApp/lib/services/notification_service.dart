@@ -17,6 +17,14 @@ import 'session.dart';
 final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
 const MethodChannel _settingsChannel = MethodChannel('nevark_foods/settings');
 
+/// FCM Web Push (VAPID) PUBLIC key — Firebase Console → Project Settings →
+/// Cloud Messaging → Web Push certificates ("Key pair"). Used only on web
+/// (mobile uses native FCM/APNs tokens). This is a public key and is safe to
+/// ship in the client; the matching private key is managed by Firebase and
+/// must never appear here.
+const String _fcmWebVapidKey =
+    'BMIj-F-Asq4zaD5hD0EXM3gxDzqJJkA3REv6f5_HQJQam4px8mSMTiKYeTh-tqa5lAYmK-sgI4CsICinTvqSSVM';
+
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _initializeLocalNotifications();
   await _showNotification(message);
@@ -178,6 +186,16 @@ class NotificationService {
         return true;
       }
 
+      // Web cannot re-prompt or open the browser's notification settings once
+      // the user has blocked them — the branded "Open Settings" flow below only
+      // works on mobile (native deep-link). Show manual unblock guidance and
+      // stop, instead of looping on a settings URL that is a no-op on web.
+      if (kIsWeb) {
+        if (!context.mounted) return false;
+        await _showWebBlockedDialog(context);
+        return false;
+      }
+
       // Permission denied — show branded dialog directing to settings
       if (!context.mounted) return false;
       final goToSettings = await showDialog<bool>(
@@ -297,11 +315,95 @@ class NotificationService {
     }
   }
 
+  /// Web-only: once the browser has blocked notifications there is no API to
+  /// re-prompt or to open the browser's site-settings panel. Guide the user to
+  /// unblock it manually via the address bar, then reload.
+  Future<void> _showWebBlockedDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF0F172A) : Colors.white,
+              borderRadius: BorderRadius.circular(28),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F4CFF).withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.notifications_off_rounded,
+                    color: Color(0xFF0F4CFF),
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'Notifications are blocked',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Your browser has blocked notifications for BenchBites. To turn '
+                  'them on, click the lock (or tune) icon on the left of the '
+                  'address bar → Notifications → Allow, then reload the page.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: isDark ? Colors.white60 : const Color(0xFF64748B),
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F4CFF),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      'Got it',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> registerFcmToken(String userId) async {
     if (userId.isEmpty) return;
 
     try {
-      final token = await _messaging.getToken();
+      final token = kIsWeb
+          ? await _messaging.getToken(vapidKey: _fcmWebVapidKey)
+          : await _messaging.getToken();
       if (token == null || token.isEmpty) return;
       await ApiService.registerFcmToken(userId, token);
     } catch (error) {

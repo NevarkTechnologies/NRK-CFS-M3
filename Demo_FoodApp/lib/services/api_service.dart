@@ -17,10 +17,15 @@ void Function()? _onAuthError;
 class ApiService {
   static set onAuthError(void Function() handler) => _onAuthError = handler;
 
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:5000/api',
-  );
+  // Production/staging builds pass --dart-define=API_BASE_URL=... which always
+  // wins. The fallback is for local `flutter run` only and must be
+  // platform-aware: 10.0.2.2 is the Android-emulator alias for the host's
+  // localhost and is unreachable from a browser, so web falls back to
+  // localhost instead (otherwise every request fails with "Failed to fetch").
+  static const String _envBaseUrl = String.fromEnvironment('API_BASE_URL');
+  static final String baseUrl = _envBaseUrl.isNotEmpty
+      ? _envBaseUrl
+      : (kIsWeb ? 'http://localhost:5000/api' : 'http://10.0.2.2:5000/api');
 
   static Future<Map<String, dynamic>> googleSignIn({
     required String googleId,

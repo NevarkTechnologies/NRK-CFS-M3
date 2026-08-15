@@ -93,18 +93,35 @@ const allowedOrigins = (process.env.CLIENT_ORIGIN || '')
   .map(o => o.trim())
   .filter(Boolean);
 
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman in dev)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') {
-      // Dev-only fallback: allow all origins only when explicitly not in production
-      return callback(null, true);
-    }
-    if (allowedOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`CORS: origin ${origin} not allowed`));
-  },
-  credentials: true,
+// Payment-provider callbacks/webhooks are cross-origin by design and we do NOT
+// initiate them from our own web app, so they must bypass the CORS origin
+// allowlist: Razorpay POSTs a server-side webhook, and Paytm does a full-page
+// browser redirect (POST) from its checkout domain (e.g.
+// securestage.paytmpayments.com) to /api/paytm/callback. Both verify a signed
+// payload / render a return page and never expose app JSON to a foreign site's
+// JS — origin-allowlisting them only breaks the payment return with a 403.
+// NOTE: this middleware is mounted at the app root, so req.path is the FULL
+// path (unlike the /api/-mounted rate limiter, which sees it relative).
+const corsExemptPaths = new Set(['/api/paytm/callback', '/api/razorpay/webhook']);
+
+const strictCorsOrigin = (origin, callback) => {
+  // Allow requests with no origin (mobile apps, Postman in dev)
+  if (!origin) return callback(null, true);
+  if (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') {
+    // Dev-only fallback: allow all origins only when explicitly not in production
+    return callback(null, true);
+  }
+  if (allowedOrigins.includes(origin)) return callback(null, true);
+  callback(new Error(`CORS: origin ${origin} not allowed`));
+};
+
+app.use(cors((req, callback) => {
+  if (corsExemptPaths.has(req.path)) {
+    // Reflect origin instead of allowlisting — provider redirect/webhook, not
+    // an app XHR. No cross-origin JSON is read here.
+    return callback(null, { origin: true, credentials: true });
+  }
+  callback(null, { origin: strictCorsOrigin, credentials: true });
 }));
 
 app.use(express.json({

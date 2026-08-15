@@ -252,60 +252,65 @@ class _OrdersPageState extends State<OrdersPage> {
                 final selected = _selectedTab == i;
                 return Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedTab = i),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? primaryBlue
-                            : (isDark
-                                  ? Colors.white10
-                                  : const Color(0xFFF4F6F9)),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            _tabs[i],
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                              color: selected
-                                  ? Colors.white
-                                  : (isDark ? Colors.white70 : textColor),
-                            ),
-                          ),
-                          if (count > 0) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _selectedTab = i),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? primaryBlue
+                              : (isDark
+                                    ? Colors.white10
+                                    : const Color(0xFFF4F6F9)),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              _tabs[i],
+                              style: TextStyle(
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
                                 color: selected
-                                    ? Colors.white.withValues(alpha: 0.3)
-                                    : primaryBlue,
-                                borderRadius: BorderRadius.circular(10),
+                                    ? Colors.white
+                                    : (isDark ? Colors.white70 : textColor),
                               ),
-                              child: Text(
-                                '$count',
-                                style: TextStyle(
-                                  color: selected ? Colors.white : Colors.white,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
+                            ),
+                            if (count > 0) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: selected
+                                      ? Colors.white.withValues(alpha: 0.3)
+                                      : primaryBlue,
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Text(
+                                  '$count',
+                                  style: TextStyle(
+                                    color: selected
+                                        ? Colors.white
+                                        : Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
-                            ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
                     ),
                   ),
