@@ -414,81 +414,88 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } else {
-      // WEB FIX: isSigningIn deliberately stays true across this dialog. On web
-      // the Google button is Google's own DOM element rendered through a
-      // platform view, so it sits above the Flutter canvas and a Flutter dialog
-      // cannot intercept pointer events over it — tapping "Got it" fell through
-      // to the iframe and started a second sign-in. Keeping the flag set leaves
-      // the spinner in its place, so the element is not in the tree at all
-      // while the dialog is up. Navigation below replaces this page anyway.
-      await showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color.fromARGB(220, 15, 23, 42),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: BorderSide(
-              color: const Color(0xFF0F4CFF).withValues(alpha: 0.3),
-            ),
-          ),
-          title: Row(
-            children: [
-              Icon(
-                Icons.schedule_rounded,
-                color: const Color(0xFF0F4CFF),
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'Pickup Time Notice',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-          content: const Text(
-            'Please ensure your selected pickup time is accurate. Canteen prepares order based on the time provided.\nOnce prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.\nThank you for your understanding.',
-            style: TextStyle(
-              color: Color(0xFFCBD5E1),
-              fontSize: 13.5,
-              height: 1.55,
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: TextButton.styleFrom(
-                backgroundColor: const Color(0xFF0F4CFF),
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 10,
-                ),
-              ),
-              child: const Text(
-                'Got it',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        ),
-      );
-      if (!mounted) return;
-      Navigator.pushReplacement(
-        context,
+      // WEB FIX: leave this page before showing the pickup notice. On web the
+      // Google button is Google's own DOM element inside a Flutter platform
+      // view, and GIS keeps its overlay div focused there. A Flutter dialog
+      // drawn over it does not block it: the engine only marks the platform
+      // view aria-hidden, which hides it from assistive tech but leaves it
+      // clickable (Chrome logs exactly this and suggests `inert` instead). The
+      // "Got it" button sits right on top of it, so the tap fell through and
+      // started a second sign-in. Replacing the route first disposes every GIS
+      // platform view, leaving nothing under the dialog to receive the tap.
+      final navigator = Navigator.of(context);
+      navigator.pushReplacement(
         MaterialPageRoute(
           builder: (_) =>
               CafeteriaPage(toggleTheme: widget.toggleTheme ?? () {}),
         ),
       );
+      // One frame later the cafeteria route is mounted and this page is gone,
+      // so the notice is shown against the navigator's own context rather than
+      // this State's (which is defunct after the replacement).
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showPickupNotice(navigator.context);
+      });
     }
+  }
+
+  void _showPickupNotice(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color.fromARGB(220, 15, 23, 42),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: const Color(0xFF0F4CFF).withValues(alpha: 0.3),
+          ),
+        ),
+        title: Row(
+          children: [
+            Icon(
+              Icons.schedule_rounded,
+              color: const Color(0xFF0F4CFF),
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'Pickup Time Notice',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Please ensure your selected pickup time is accurate. Canteen prepares order based on the time provided.\nOnce prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.\nThank you for your understanding.',
+          style: TextStyle(
+            color: Color(0xFFCBD5E1),
+            fontSize: 13.5,
+            height: 1.55,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(
+              backgroundColor: const Color(0xFF0F4CFF),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            ),
+            child: const Text(
+              'Got it',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _handleSignInError(Object e) {
@@ -1154,9 +1161,9 @@ class _LoginPageState extends State<LoginPage> {
               child: kIsWeb
                   ? Image.asset(
                       'assets/Nevark.png',
-                      
+
                       fit: BoxFit.contain,
-                      
+
                       errorBuilder: (_, _, _) => Icon(
                         Icons.lunch_dining_rounded,
                         color: appBlue,
@@ -1278,7 +1285,7 @@ class _LoginPageState extends State<LoginPage> {
     if (!kIsWeb) return card;
     return _StreakBorder(
       borderRadius: 32,
-      color: appBlue,// Color.fromARGB(255, 114, 112, 235),
+      color: appBlue, // Color.fromARGB(255, 114, 112, 235),
       child: card,
     );
   }
@@ -1295,7 +1302,10 @@ class _LoginPageState extends State<LoginPage> {
       decoration: BoxDecoration(
         color: const Color.fromARGB(189, 255, 255, 255),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: const Color.fromARGB(133, 255, 255, 255), width: 2),
+        border: Border.all(
+          color: const Color.fromARGB(133, 255, 255, 255),
+          width: 2,
+        ),
         boxShadow: [
           BoxShadow(
             color: appBlue.withValues(alpha: 0.5),
@@ -1500,13 +1510,13 @@ class _LoginPageState extends State<LoginPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _storeBadge(
-                icon: Image.asset('assets/googleplay.png', fit: BoxFit.contain,),
+                icon: Image.asset('assets/googleplay.png', fit: BoxFit.contain),
                 caption: "Get It On",
                 store: "Google Play",
               ),
               const SizedBox(width: 10),
               _storeBadge(
-                icon: Image.asset('assets/appstore.png', fit: BoxFit.contain,),
+                icon: Image.asset('assets/appstore.png', fit: BoxFit.contain),
                 caption: "Available on",
                 store: "App Store",
               ),
