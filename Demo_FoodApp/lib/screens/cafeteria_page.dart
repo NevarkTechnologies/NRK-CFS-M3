@@ -278,7 +278,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                   const SizedBox(height: 10),
 
                   Text(
-                    'Skip Queues.',
+                    'Skip the Wait.',
                     style: TextStyle(
                       fontFamily: 'Nunito',
                       fontSize: 32,
