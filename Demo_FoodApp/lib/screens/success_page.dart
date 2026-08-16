@@ -15,7 +15,8 @@ class SuccessPage extends StatefulWidget {
   State<SuccessPage> createState() => _SuccessPageState();
 }
 
-class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin {
+class _SuccessPageState extends State<SuccessPage>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   int step = 0;
   late final AnimationController _checkCtrl;
   late final Animation<double> _checkScale;
@@ -25,6 +26,13 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
   // fallback timeout fired) — drives the "Order is being created" footer.
   bool _orderPushReceived = false;
   Timer? _pushFallbackTimer;
+
+  // How long the footer waits for the order-created push before releasing on
+  // its own, and when this page was mounted — the pair lets a resumed tab work
+  // out what should already have happened (see _catchUpDelayedMilestones).
+  static const _pushFallbackDelay = Duration(seconds: 10);
+  static const _successAnimationDelay = Duration(seconds: 4);
+  final DateTime _mountedAt = DateTime.now();
   // FIX 2026-07-21: The confirmation popup is now driven by the same signal as
   // the footer loader (order-created push / fallback) instead of a blind 4s
   // timer, so the loader stays visible right up until the popup appears.
@@ -75,9 +83,43 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
     });
   }
 
+  // WEB FIX: every milestone on this page is driven by a Timer, and Dart's
+  // Timer compiles to setTimeout on web. Chrome throttles setTimeout in hidden
+  // tabs (and stops the frame pump entirely), so when the Paytm redirect brings
+  // the app back while the user is still looking at another tab, this page
+  // mounts in the background and its timers simply do not run — the footer was
+  // still spinning long after the 10s fallback should have released it.
+  //
+  // On resume, work out from wall-clock time what should already have happened
+  // and apply it immediately instead of waiting for the throttled timers to
+  // catch up. Wall clock is unaffected by throttling; the Timers stay in place
+  // for the normal foreground case.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _catchUpDelayedMilestones();
+  }
+
+  void _catchUpDelayedMilestones() {
+    if (!mounted) return;
+    final elapsed = DateTime.now().difference(_mountedAt);
+
+    if (elapsed >= _successAnimationDelay && !_successAnimationDone) {
+      setState(() {
+        step = 1;
+        _successAnimationDone = true;
+      });
+      _checkCtrl.forward();
+    }
+    if (elapsed >= _pushFallbackDelay && !_orderPushReceived) {
+      setState(() => _orderPushReceived = true);
+    }
+    _maybeShowConfirmationPopup();
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600));
     _checkScale = CurvedAnimation(parent: _checkCtrl, curve: Curves.elasticOut);
 
@@ -88,7 +130,13 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
     // FCM delivery has no latency guarantee (Doze, OEM battery savers, campus
     // Wi-Fi NAT timeouts) — don't spin forever if it's very late or the app
     // was briefly backgrounded and the foreground listener missed it.
-    _pushFallbackTimer = Timer(const Duration(seconds: 60), () {
+    // FIX: 60s was far too long as a visible wait. The order is already created
+    // and returned by confirmOrder before this page is pushed — widget.order is
+    // proof of it — so the push is only corroboration, never the source of
+    // truth. The server drains its notification outbox on a 5s tick, so a
+    // healthy push lands well inside 10s and the popup still waits for it;
+    // anything slower now releases the loader instead of stranding the user.
+    _pushFallbackTimer = Timer(_pushFallbackDelay, () {
       if (mounted && !_orderPushReceived) {
         setState(() => _orderPushReceived = true);
         // FIX 2026-07-21: fallback must also release the popup so it can never
@@ -121,6 +169,7 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     NotificationService.lastOrderPushOrderId.removeListener(_onOrderPush);
     _pushFallbackTimer?.cancel();
     _checkCtrl.dispose();

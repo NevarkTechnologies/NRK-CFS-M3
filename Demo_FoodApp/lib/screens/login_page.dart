@@ -414,7 +414,13 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } else {
-      setState(() => isSigningIn = false);
+      // WEB FIX: isSigningIn deliberately stays true across this dialog. On web
+      // the Google button is Google's own DOM element rendered through a
+      // platform view, so it sits above the Flutter canvas and a Flutter dialog
+      // cannot intercept pointer events over it — tapping "Got it" fell through
+      // to the iframe and started a second sign-in. Keeping the flag set leaves
+      // the spinner in its place, so the element is not in the tree at all
+      // while the dialog is up. Navigation below replaces this page anyway.
       await showDialog(
         context: context,
         barrierDismissible: false,
@@ -898,6 +904,16 @@ class _LoginPageState extends State<LoginPage> {
           right: 0,
           child: _FadeSlide(delay: 600, child: _buildWatermark()),
         ),
+
+        // WEB ONLY: store availability teaser, bottom-left corner. The mobile
+        // layout has no room for it and the Android build is already on the
+        // store, so it never renders there.
+        if (kIsWeb)
+          Positioned(
+            bottom: 24,
+            left: 28,
+            child: _FadeSlide(delay: 800, child: _buildComingSoonStores()),
+          ),
       ],
     );
   }
@@ -1442,6 +1458,106 @@ class _LoginPageState extends State<LoginPage> {
           ],
         ),
         child: row,
+      ),
+    );
+  }
+
+  /// "Coming Soon on" + the two app-store badges. Web desktop only — see the
+  /// call site in [_buildDesktop].
+  ///
+  /// The store marks are trademarked artwork — assets/googleplay.png and
+  /// assets/appstore.png must stay the official versions and keep the clear
+  /// space each brand's guidelines require.
+  Widget _buildComingSoonStores() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color.fromARGB(255, 255, 255, 255).withValues(alpha: 0.68),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color.fromARGB(106, 0, 0, 0).withValues(alpha: 0.18),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            "Coming Soon on",
+            style: GoogleFonts.manrope(
+              color: const Color.fromARGB(255, 27, 31, 36),
+              fontSize: 12,
+              letterSpacing: 0.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _storeBadge(
+                icon: Image.asset('assets/googleplay.png', fit: BoxFit.contain,),
+                caption: "Get It On",
+                store: "Google Play",
+              ),
+              const SizedBox(width: 10),
+              _storeBadge(
+                icon: Image.asset('assets/appstore.png', fit: BoxFit.contain,),
+                caption: "Available on",
+                store: "App Store",
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _storeBadge({
+    required Widget icon,
+    required String caption,
+    required String store,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color.fromARGB(141, 15, 23, 42),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(width: 22, height: 22, child: icon),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                caption,
+                style: GoogleFonts.manrope(
+                  color: Colors.white.withValues(alpha: 0.75),
+                  fontSize: 8,
+                  letterSpacing: 0.6,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Text(
+                store,
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontSize: 13,
+                  height: 1.1,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -2136,7 +2252,7 @@ class _LoopingFeaturePointsState extends State<_LoopingFeaturePoints>
           child: Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.max,
               children: [
                 Container(
                   padding: const EdgeInsets.all(6),

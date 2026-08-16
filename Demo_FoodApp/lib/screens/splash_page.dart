@@ -60,6 +60,19 @@ class _SplashPageState extends State<SplashPage> {
     await NotificationService.instance.ensurePermissionRequired(context);
     if (!mounted) return;
 
+    // FIX: re-register the FCM token on every launch, not only right after a
+    // fresh sign-in. On web getToken() only succeeds once the browser has
+    // actually granted the Notification permission, and the permission prompt
+    // above may resolve after the sign-in that ran registerFcmToken — so a
+    // returning session could sit with no token on the server and never get a
+    // push. Registration is a cheap idempotent upsert; fire and forget so it
+    // never delays the splash.
+    if (AppSession.isLoggedIn) {
+      unawaited(
+        NotificationService.instance.registerFcmToken(AppSession.userId),
+      );
+    }
+
     // Run splash timer and Firebase auth restore in parallel — don't navigate
     // until Firebase confirms whether a session exists, or token calls will 401.
     final results = await Future.wait([
