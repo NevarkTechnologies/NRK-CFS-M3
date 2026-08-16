@@ -735,6 +735,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                                     });
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
+                                        duration: const Duration(seconds: 1),
                                         content: Text(
                                           'Thanks for rating $selected ★',
                                         ),
@@ -788,6 +789,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
                           });
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
+                              duration: Duration(seconds: 1),
                               content: Text('Rating removed'),
                               behavior: SnackBarBehavior.floating,
                             ),

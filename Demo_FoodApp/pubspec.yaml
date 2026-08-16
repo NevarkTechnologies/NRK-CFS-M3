@@ -63,7 +63,11 @@ flutter:
   assets:
     - assets/cafes/
     - assets/
-    - assets/icon/
+    # Only icon3 is used by the app (sign-in card, cafeteria header). The other
+    # files in assets/icon/ exist solely as flutter_launcher_icons source art
+    # and are never loaded at runtime, so they stay on disk but out of the
+    # bundle — shipping the whole folder added ~6 MB to every build.
+    - assets/icon/icon3.png
     - assets/Nevark_Logo.png
     - assets/Nevark.png
     

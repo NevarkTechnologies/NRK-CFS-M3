@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'login_page.dart';
 import 'detail_page.dart';
@@ -7,6 +9,7 @@ import 'about_page.dart';
 import '../services/session.dart';
 import '../model/favorite_model.dart';
 import '../services/theme_service.dart';
+import '../utils/avatar_cache.dart';
 import 'cart_page.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -257,16 +260,7 @@ class _ProfilePageState extends State<ProfilePage> {
                                     ),
                                     clipBehavior: Clip.antiAlias,
                                     child: avatarUrl.isNotEmpty
-                                        ? Image.network(
-                                            avatarUrl,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (ctx, e, stack) =>
-                                                const Icon(
-                                                  Icons.person,
-                                                  color: Colors.white,
-                                                  size: 32,
-                                                ),
-                                          )
+                                        ? _CachedAvatar(url: avatarUrl)
                                         : const Icon(
                                             Icons.person,
                                             color: Colors.white,
@@ -606,6 +600,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             if (confirmed != true) return;
                             clearCart();
                             FavoriteModel.clear();
+                            await AvatarCache.clear();
                             await AppSession.clear();
                             if (!context.mounted) return;
                             Navigator.pushAndRemoveUntil(
@@ -642,6 +637,87 @@ class _ProfilePageState extends State<ProfilePage> {
         isDark: isDark,
         toggleTheme: toggleAppTheme,
       ),
+    );
+  }
+}
+
+/// Profile avatar backed by [AvatarCache].
+///
+/// Google's avatar CDN answers 429 when the source IP is hot — routine on
+/// campus Wi-Fi where every device shares one NATed IP — so the picture would
+/// intermittently fail to load. Once the bytes are cached the image renders
+/// with no network request at all, which both fixes the flicker and stops
+/// adding load to the shared IP.
+///
+/// On a cache miss it renders exactly the previous `Image.network` and fills
+/// the cache in the background, so behaviour is unchanged when the cache is
+/// cold or the fetch is blocked.
+class _CachedAvatar extends StatefulWidget {
+  final String url;
+  const _CachedAvatar({required this.url});
+
+  @override
+  State<_CachedAvatar> createState() => _CachedAvatarState();
+}
+
+class _CachedAvatarState extends State<_CachedAvatar> {
+  Uint8List? _bytes;
+  bool _checkedCache = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  @override
+  void didUpdateWidget(_CachedAvatar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _checkedCache = false;
+      _bytes = null;
+      _resolve();
+    }
+  }
+
+  Future<void> _resolve() async {
+    final cached = await AvatarCache.load(widget.url);
+    if (!mounted) return;
+    setState(() {
+      _bytes = cached;
+      _checkedCache = true;
+    });
+    // Cold cache: the network image is on screen, so fill the cache quietly
+    // for subsequent launches.
+    if (cached == null) {
+      await AvatarCache.populate(widget.url);
+      final stored = await AvatarCache.load(widget.url);
+      if (!mounted || stored == null) return;
+      setState(() => _bytes = stored);
+    }
+  }
+
+  static const _fallback = Icon(Icons.person, color: Colors.white, size: 32);
+
+  @override
+  Widget build(BuildContext context) {
+    // Avoid a network request until the cache lookup has resolved, otherwise a
+    // cache hit would still fire off a request on first frame.
+    if (!_checkedCache) return const SizedBox.shrink();
+
+    final bytes = _bytes;
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, _, _) => _fallback,
+      );
+    }
+    return Image.network(
+      widget.url,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _fallback,
     );
   }
 }

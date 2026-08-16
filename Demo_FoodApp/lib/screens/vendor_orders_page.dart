@@ -23,15 +23,11 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
         : orders.where((o) => o["status"] == selectedFilter).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Orders"),
-        backgroundColor: Colors.blue,
-      ),
+      appBar: AppBar(title: const Text("Orders"), backgroundColor: Colors.blue),
 
       /// 🔽 BODY
       body: Column(
         children: [
-
           /// 🔥 FILTER CHIPS
           SizedBox(
             height: 60,
@@ -79,16 +75,28 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
 
           /// 👉 TEMP NAVIGATION (you can replace later)
           if (index == 0) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text("Dashboard")));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Dashboard"),
+                duration: Duration(seconds: 1),
+              ),
+            );
           } else if (index == 1) {
             // already here
           } else if (index == 2) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text("Menu Page")));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Menu Page"),
+                duration: Duration(seconds: 1),
+              ),
+            );
           } else if (index == 3) {
-            ScaffoldMessenger.of(context)
-                .showSnackBar(const SnackBar(content: Text("Profile Page")));
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Profile Page"),
+                duration: Duration(seconds: 1),
+              ),
+            );
           }
         },
 
@@ -105,10 +113,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
             icon: Icon(Icons.restaurant_menu),
             label: "Menu",
           ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: "Profile",
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
     );
@@ -138,23 +143,24 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: Colors.white,
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6)
-        ],
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(order["id"],
-                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                order["id"],
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
 
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -163,7 +169,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
                   order["status"],
                   style: TextStyle(color: statusColor),
                 ),
-              )
+              ),
             ],
           ),
 
@@ -193,8 +199,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
           children: [
             Expanded(
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                 onPressed: () {
                   setState(() {
                     order["status"] = "Preparing";
@@ -206,8 +211,7 @@ class _VendorOrdersPageState extends State<VendorOrdersPage> {
             const SizedBox(width: 10),
             Expanded(
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
                 onPressed: () {
                   setState(() {
                     orders.remove(order);

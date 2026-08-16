@@ -1,4 +1,5 @@
 ﻿import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../model/cart_model.dart';
@@ -48,6 +49,16 @@ class _SuccessPageState extends State<SuccessPage> with TickerProviderStateMixin
   // FCM push or the 60s fallback). Replaces the previous fixed 4s timer that
   // fired the popup independently of actual order creation.
   void _maybeShowConfirmationPopup() {
+    // WEB FIX: the footer-loader/popup signals here are flipped by FCM callbacks
+    // and Timers, not by user input. When the tab was backgrounded during the
+    // payment redirect the browser drops the requestAnimationFrame that
+    // setState scheduled, and the engine's stuck _hasScheduledFrame guard makes
+    // later scheduleFrame() calls no-ops — so the dirty tree never repaints and
+    // the post-frame callback below never fires until an unrelated tab switch.
+    // scheduleForcedFrame() bypasses that guard and forces a real frame, so the
+    // footer stops spinning and the popup appears without needing a tab switch.
+    // Android renders on a vsync ticker and never hit this, so keep it web-only.
+    if (kIsWeb) WidgetsBinding.instance.scheduleForcedFrame();
     if (_popupShown || !_successAnimationDone || !_orderPushReceived) return;
     if (!mounted) return;
     _popupShown = true;

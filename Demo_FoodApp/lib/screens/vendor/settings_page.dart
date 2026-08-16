@@ -216,45 +216,45 @@ class _SettingsPageState extends State<SettingsPage> {
                     child: MouseRegion(
                       cursor: SystemMouseCursors.click,
                       child: GestureDetector(
-                      onTap: _pickImage,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: primaryBlue,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: [
-                            BoxShadow(
-                              color: primaryBlue.withValues(alpha: 0.4),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(
-                              Icons.upload_rounded,
-                              color: Colors.white,
-                              size: 16,
-                            ),
-                            SizedBox(width: 6),
-                            Text(
-                              'Upload Photo',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
+                        onTap: _pickImage,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primaryBlue,
+                            borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: primaryBlue.withValues(alpha: 0.4),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(
+                                Icons.upload_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              SizedBox(width: 6),
+                              Text(
+                                'Upload Photo',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontFamily: 'Inter',
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
                     ),
                   ),
               ],
@@ -320,7 +320,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SnackBar(
           content: Text(errorMsg),
           backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 4),
+          duration: const Duration(seconds: 1),
         ),
       );
       return;
@@ -357,7 +357,8 @@ class _SettingsPageState extends State<SettingsPage> {
         if (_pickedImageBase64 != null) 'imageType': 'base64',
       };
 
-      final firebaseToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      final firebaseToken = await FirebaseAuth.instance.currentUser
+          ?.getIdToken();
       final authHeaders = {
         'Content-Type': 'application/json',
         if (firebaseToken != null) 'Authorization': 'Bearer $firebaseToken',
@@ -422,7 +423,7 @@ class _SettingsPageState extends State<SettingsPage> {
         const SnackBar(
           content: Text("Settings saved successfully!"),
           backgroundColor: Colors.green,
-          duration: Duration(seconds: 2),
+          duration: Duration(seconds: 1),
         ),
       );
     } catch (e) {
@@ -431,7 +432,7 @@ class _SettingsPageState extends State<SettingsPage> {
         SnackBar(
           content: Text('Error saving settings: ${e.toString()}'),
           backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 1),
         ),
       );
     } finally {

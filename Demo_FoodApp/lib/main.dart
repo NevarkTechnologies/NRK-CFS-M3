@@ -11,6 +11,7 @@ import 'services/notification_service.dart';
 import 'services/nav.dart';
 import 'services/theme_service.dart';
 import 'model/favorite_model.dart';
+import 'utils/avatar_cache.dart';
 import 'screens/login_page.dart';
 import 'screens/splash_page.dart';
 import 'screens/cart_page.dart';
@@ -21,13 +22,19 @@ Future<void> handleAuthError() async {
   await FirebaseAuth.instance.signOut();
   clearCart();
   FavoriteModel.clear();
+  await AvatarCache.clear();
   await AppSession.clear();
   navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (_) => false);
 }
 
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // PROD: silence every debugPrint in release builds — on web they would
+  // otherwise land in the browser DevTools console. Debug/profile keep logs.
+  if (kReleaseMode) {
+    debugPrint = (String? message, {int? wrapWidth}) {};
+  }
 
   // Edge-to-edge on every Android version, not just 15+ where the OS forces
   // it — all screens already handle insets via SafeArea/AppBar/padding.

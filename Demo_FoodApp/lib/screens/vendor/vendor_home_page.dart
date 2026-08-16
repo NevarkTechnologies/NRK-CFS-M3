@@ -1174,6 +1174,7 @@ class _VendorOrderDetailsPageState extends State<VendorOrderDetailsPage> {
       setState(() => currentStatus = prev);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 1),
           content: Text(error.toString().replaceFirst("Exception: ", "")),
           backgroundColor: Colors.redAccent,
         ),

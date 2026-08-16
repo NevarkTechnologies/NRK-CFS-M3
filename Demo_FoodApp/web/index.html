@@ -1,52 +1,37 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
-
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="BenchBites - Your Favorite Food Ordering App">
-
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="BenchBites">
   <link rel="apple-touch-icon" href="icons/icon3.png">
-
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="icons/icon3.png"/>
-
+  <link rel="icon" type="image/png" href="icons/icon3.png" />
   <title>BenchBites</title>
   <link rel="manifest" href="manifest.json">
-
-  <!-- Google Sign-In (web) OAuth client ID. Read by google_sign_in_web's
-       autoDetectedClientId; required for GIS init on web (splash + login). -->
-  <meta name="google-signin-client_id" content="561027608241-bl6kp0f38qfpvl9rubm63o6mth8k2vj2.apps.googleusercontent.com">
-
-  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <meta name="google-signin-client_id"
+    content="561027608241-bl6kp0f38qfpvl9rubm63o6mth8k2vj2.apps.googleusercontent.com">
+  <script>
+    (function () {
+      ['log', 'info', 'warn', 'error', 'debug'].forEach(function (m) {
+        var original = console[m].bind(console);
+        console[m] = function () {
+          if (typeof arguments[0] === 'string' && arguments[0].indexOf('[GSI_LOGGER') !== -1) return;
+          original.apply(null, arguments);
+        };
+      });
+    })();
+  </script>
 </head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+<body>
   <script src="flutter_bootstrap.js" async></script>
 </body>
+
 </html>

@@ -157,6 +157,7 @@ class _MenuPageState extends State<MenuPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
+            duration: const Duration(seconds: 1),
             content: Text(error.toString().replaceFirst('Exception: ', '')),
             backgroundColor: Colors.redAccent,
           ),
@@ -376,6 +377,7 @@ class _MenuPageState extends State<MenuPage> {
                   if (cafeId.isEmpty) {
                     messenger.showSnackBar(
                       const SnackBar(
+                        duration: Duration(seconds: 1),
                         content: Text('Vendor cafe id missing'),
                         backgroundColor: Colors.redAccent,
                       ),
@@ -411,6 +413,7 @@ class _MenuPageState extends State<MenuPage> {
 
                     messenger.showSnackBar(
                       const SnackBar(
+                        duration: Duration(seconds: 1),
                         content: Text('Menu item added successfully'),
                         backgroundColor: Colors.green,
                       ),
@@ -420,6 +423,7 @@ class _MenuPageState extends State<MenuPage> {
 
                     messenger.showSnackBar(
                       SnackBar(
+                        duration: const Duration(seconds: 1),
                         content: Text(
                           error.toString().replaceFirst('Exception: ', ''),
                         ),
@@ -496,6 +500,7 @@ class _MenuPageState extends State<MenuPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 1),
           content: Text(error.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.redAccent,
         ),
@@ -512,6 +517,7 @@ class _MenuPageState extends State<MenuPage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          duration: Duration(seconds: 1),
           content: Text('Menu item deleted'),
           backgroundColor: Colors.green,
         ),
@@ -520,6 +526,7 @@ class _MenuPageState extends State<MenuPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 1),
           content: Text(error.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.redAccent,
         ),
@@ -802,6 +809,7 @@ class _MenuPageState extends State<MenuPage> {
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          duration: Duration(seconds: 1),
           content: Text('Menu item updated'),
           backgroundColor: Colors.green,
         ),
@@ -810,6 +818,7 @@ class _MenuPageState extends State<MenuPage> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 1),
           content: Text(error.toString().replaceFirst('Exception: ', '')),
           backgroundColor: Colors.redAccent,
         ),

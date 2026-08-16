@@ -214,13 +214,17 @@ class _DetailPageState extends State<DetailPage> {
       await AppSession.setUser(updated);
       if (!mounted) return;
       setState(() => isEdit = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile updated")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Profile updated"),
+          duration: Duration(seconds: 1),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 1),
           content: Text(error.toString().replaceFirst("Exception: ", "")),
           backgroundColor: Colors.redAccent,
         ),

@@ -46,8 +46,9 @@ class _LoginPageState extends State<LoginPage> {
       // Client ID is auto-detected from the <meta google-signin-client_id>
       // tag in web/index.html (the same mechanism splash_page relies on).
       _webGoogleSignIn = GoogleSignIn();
-      _webAuthSub =
-          _webGoogleSignIn!.onCurrentUserChanged.listen(_onWebUserChanged);
+      _webAuthSub = _webGoogleSignIn!.onCurrentUserChanged.listen(
+        _onWebUserChanged,
+      );
     }
   }
 
@@ -212,7 +213,7 @@ class _LoginPageState extends State<LoginPage> {
                                           ),
                                           backgroundColor: Colors.redAccent,
                                           behavior: SnackBarBehavior.floating,
-                                          duration: Duration(seconds: 2),
+                                          duration: Duration(seconds: 1),
                                         ),
                                       );
                                       return;
@@ -312,176 +313,176 @@ class _LoginPageState extends State<LoginPage> {
 
     final UserCredential userCredential = await FirebaseAuth.instance
         .signInWithCredential(credential);
-      final User? firebaseUser = userCredential.user;
+    final User? firebaseUser = userCredential.user;
 
-      if (firebaseUser == null || firebaseUser.email == null) {
-        setState(() => isSigningIn = false);
-        return;
-      }
+    if (firebaseUser == null || firebaseUser.email == null) {
+      setState(() => isSigningIn = false);
+      return;
+    }
 
-      // 2. Check Firestore 'user' collection where 'email' array contains the logged-in email
-      final querySnapshot = await FirebaseFirestore.instance
+    // 2. Check Firestore 'user' collection where 'email' array contains the logged-in email
+    final querySnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('email', arrayContains: firebaseUser.email)
+        .get();
+
+    String role;
+    if (querySnapshot.docs.isEmpty) {
+      // New user — add email to the students document and read its role
+      final studentsRef = FirebaseFirestore.instance
           .collection('users')
-          .where('email', arrayContains: firebaseUser.email)
-          .get();
+          .doc('students');
+      await studentsRef.update({
+        'email': FieldValue.arrayUnion([firebaseUser.email!]),
+      });
+      final studentsSnap = await studentsRef.get();
+      role = (studentsSnap.data()?['role'] as String?) ?? 'customer';
+    } else {
+      // Get the role from the matching Firestore document
+      final userData = querySnapshot.docs.first.data();
+      role = userData['role'] ?? 'customer';
+    }
 
-      String role;
-      if (querySnapshot.docs.isEmpty) {
-        // New user — add email to the students document and read its role
-        final studentsRef = FirebaseFirestore.instance
-            .collection('users')
-            .doc('students');
-        await studentsRef.update({
-          'email': FieldValue.arrayUnion([firebaseUser.email!]),
-        });
-        final studentsSnap = await studentsRef.get();
-        role = (studentsSnap.data()?['role'] as String?) ?? 'customer';
-      } else {
-        // Get the role from the matching Firestore document
-        final userData = querySnapshot.docs.first.data();
-        role = userData['role'] ?? 'customer';
-      }
+    // 4. Send the authenticated Firebase user to the backend
+    final backendUser = await ApiService.googleSignIn(
+      googleId: firebaseUser.uid,
+      name: firebaseUser.displayName ?? '',
+      email: firebaseUser.email!,
+      role: role,
+      avatar:
+          firebaseUser.photoURL ??
+          firebaseUser.providerData
+              .firstWhere(
+                (p) => p.providerId == 'google.com',
+                orElse: () => firebaseUser.providerData.first,
+              )
+              .photoURL ??
+          '',
+      idToken: await firebaseUser.getIdToken(),
+    );
+    //final b = backendUser;
+    //debugPrint(b.toString());
+    await AppSession.setUser(backendUser);
+    await Future.wait([
+      loadCart(AppSession.userId),
+      FavoriteModel.load(AppSession.userId),
+    ]);
+    await NotificationService.instance.registerFcmToken(AppSession.userId);
 
-      // 4. Send the authenticated Firebase user to the backend
-      final backendUser = await ApiService.googleSignIn(
-        googleId: firebaseUser.uid,
-        name: firebaseUser.displayName ?? '',
-        email: firebaseUser.email!,
-        role: role,
-        avatar:
-            firebaseUser.photoURL ??
-            firebaseUser.providerData
-                .firstWhere(
-                  (p) => p.providerId == 'google.com',
-                  orElse: () => firebaseUser.providerData.first,
-                )
-                .photoURL ??
-            '',
-        idToken: await firebaseUser.getIdToken(),
-      );
-      //final b = backendUser;
-      //debugPrint(b.toString());
-      await AppSession.setUser(backendUser);
-      await Future.wait([
-        loadCart(AppSession.userId),
-        FavoriteModel.load(AppSession.userId),
-      ]);
-      await NotificationService.instance.registerFcmToken(AppSession.userId);
+    if ((backendUser['phone'] ?? '').toString().isEmpty) {
+      await _askPhoneNumber(AppSession.userId);
+    }
 
-      if ((backendUser['phone'] ?? '').toString().isEmpty) {
-        await _askPhoneNumber(AppSession.userId);
-      }
+    if (!mounted) return;
 
-      if (!mounted) return;
-
-      // CODEX EDITS: A customer who had to sign in again must see the already
-      // captured order before any home-page retry can create confusion.
-      if (role != 'vendor') {
-        try {
-          final recovered = await PendingPaymentService.reconcile();
+    // CODEX EDITS: A customer who had to sign in again must see the already
+    // captured order before any home-page retry can create confusion.
+    if (role != 'vendor') {
+      try {
+        final recovered = await PendingPaymentService.reconcile();
+        if (!mounted) return;
+        if (recovered?['state'] == 'captured' && recovered?['order'] is Map) {
+          final order = Map<String, dynamic>.from(recovered!['order'] as Map);
+          globalCartItems.clear();
+          CartModel.clear();
+          await saveCart();
+          // CODEX EDITS: Clear only after local success state is durable.
+          await PendingPaymentService.clear();
           if (!mounted) return;
-          if (recovered?['state'] == 'captured' && recovered?['order'] is Map) {
-            final order = Map<String, dynamic>.from(recovered!['order'] as Map);
-            globalCartItems.clear();
-            CartModel.clear();
-            await saveCart();
-            // CODEX EDITS: Clear only after local success state is durable.
-            await PendingPaymentService.clear();
-            if (!mounted) return;
-            setState(() => isSigningIn = false);
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
-            );
-            return;
-          }
-        } catch (error) {
-          debugPrint(
-            'CODEX EDITS: Post-login payment reconciliation deferred: $error',
+          setState(() => isSigningIn = false);
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
           );
+          return;
         }
-      }
-
-      // 5. Navigate based on the fetched role
-      if (role == 'vendor') {
-        setState(() => isSigningIn = false);
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                VendorHomePage(toggleTheme: widget.toggleTheme ?? () {}),
-          ),
+      } catch (error) {
+        debugPrint(
+          'CODEX EDITS: Post-login payment reconciliation deferred: $error',
         );
-      } else {
-        setState(() => isSigningIn = false);
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: const Color.fromARGB(220, 15, 23, 42),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: BorderSide(
-                color: const Color(0xFF0F4CFF).withValues(alpha: 0.3),
+      }
+    }
+
+    // 5. Navigate based on the fetched role
+    if (role == 'vendor') {
+      setState(() => isSigningIn = false);
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              VendorHomePage(toggleTheme: widget.toggleTheme ?? () {}),
+        ),
+      );
+    } else {
+      setState(() => isSigningIn = false);
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color.fromARGB(220, 15, 23, 42),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(
+              color: const Color(0xFF0F4CFF).withValues(alpha: 0.3),
+            ),
+          ),
+          title: Row(
+            children: [
+              Icon(
+                Icons.schedule_rounded,
+                color: const Color(0xFF0F4CFF),
+                size: 20,
               ),
-            ),
-            title: Row(
-              children: [
-                Icon(
-                  Icons.schedule_rounded,
-                  color: const Color(0xFF0F4CFF),
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Pickup Time Notice',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-            content: const Text(
-              'Please ensure your selected pickup time is accurate. Canteen prepares order based on the time provided.\nOnce prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.\nThank you for your understanding.',
-              style: TextStyle(
-                color: Color(0xFFCBD5E1),
-                fontSize: 13.5,
-                height: 1.55,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                style: TextButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F4CFF),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 10,
-                  ),
-                ),
-                child: const Text(
-                  'Got it',
-                  style: TextStyle(fontWeight: FontWeight.w600),
+              const SizedBox(width: 8),
+              const Text(
+                'Pickup Time Notice',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ],
           ),
-        );
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                CafeteriaPage(toggleTheme: widget.toggleTheme ?? () {}),
+          content: const Text(
+            'Please ensure your selected pickup time is accurate. Canteen prepares order based on the time provided.\nOnce prepared, food will not be reheated. We are not responsible for food that has gone cold due to delayed pickup.\nThank you for your understanding.',
+            style: TextStyle(
+              color: Color(0xFFCBD5E1),
+              fontSize: 13.5,
+              height: 1.55,
+            ),
           ),
-        );
-      }
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: TextButton.styleFrom(
+                backgroundColor: const Color(0xFF0F4CFF),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 10,
+                ),
+              ),
+              child: const Text(
+                'Got it',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              CafeteriaPage(toggleTheme: widget.toggleTheme ?? () {}),
+        ),
+      );
+    }
   }
 
   void _handleSignInError(Object e) {
@@ -494,6 +495,7 @@ class _LoginPageState extends State<LoginPage> {
         ),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
       ),
     );
     setState(() => isSigningIn = false);
@@ -520,10 +522,10 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final isDesktop = size.width > 800;
+    final isDesktop = size.width > 1000;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       backgroundColor: const Color(0xFFF0F4FC),
       body: SizedBox(
         width: size.width,
@@ -564,20 +566,20 @@ class _LoginPageState extends State<LoginPage> {
         // PULSING FOOD ANIMATIONS
         _buildFood(
           'assets/burger.png',
-          top: size.height * 0.08,
-          left: size.width * 0.48,
-          size: 140,
-          duration: 3500,
-          delay: 0,
+          top: size.height * 0.1,
+          left: size.width * 0.43,
+          size: 180,
+          duration: 2500,
+          delay: 500,
           isMobile: isMobile,
-          angle: 0.35,
+          angle: 0.10,
         ),
         _buildFood(
-          'assets/food_bowl.jpg',
+          'assets/food_bowl.png',
           bottom: size.height * 0.05,
-          left: size.width * 0.35,
-          size: 300,
-          duration: 4000,
+          left: size.width * 0.30,
+          size: 280,
+          duration: 2500,
           delay: 500,
           isMobile: isMobile,
         ),
@@ -586,17 +588,17 @@ class _LoginPageState extends State<LoginPage> {
           bottom: size.height * 0.12,
           right: size.width * 0.05,
           size: 110,
-          blur: 5.0,
+          blur: 1.0,
           duration: 3000,
           delay: 1000,
           isMobile: isMobile,
         ),
         _buildFood(
-          'assets/coke.png',
+          'assets/pizza.png',
           bottom: size.height * 0.3,
           right: size.width * 0.12,
-          size: 100,
-          blur: 4.5,
+          size: 200,
+          blur: 2.5,
           duration: 4500,
           delay: 200,
           isMobile: isMobile,
@@ -606,10 +608,78 @@ class _LoginPageState extends State<LoginPage> {
           top: size.height * 0.42,
           left: size.width * 0.32,
           size: 80,
-          blur: 4.0,
+          blur: 2.0,
           duration: 3200,
           delay: 800,
           isMobile: isMobile,
+        ),
+
+        // Fillers for the otherwise-empty corners/edges — placed away from the
+        // branding column, sign-in card, name, and watermark. Same breathing
+        // animation; smaller ones blurred so they read as ambient depth.
+        _buildFood(
+          'assets/leaf.png',
+          top: size.height * 0.06,
+          right: size.width * 0.08,
+          size: 110,
+          duration: 3700,
+          delay: 400,
+          isMobile: isMobile,
+          angle: -0.3,
+        ),
+        _buildFood(
+          'assets/tomato.png',
+          top: size.height * 0.26,
+          right: size.width * 0.24,
+          size: 70,
+          blur: 2.0,
+          duration: 4100,
+          delay: 1100,
+          isMobile: isMobile,
+          angle: 0.5,
+        ),
+        _buildFood(
+          'assets/donut.png',
+          top: size.height * 0.04,
+          left: size.width * 0.16,
+          size: 80,
+          blur: 2.0,
+          duration: 3300,
+          delay: 700,
+          isMobile: isMobile,
+          angle: 0.25,
+        ),
+        _buildFood(
+          'assets/pizza.png',
+          bottom: size.height * 0.08,
+          left: size.width * 0.06,
+          size: 200,
+          duration: 3900,
+          delay: 300,
+          isMobile: isMobile,
+          angle: -0.15,
+        ),
+        _buildFood(
+          'assets/leaf.png',
+          bottom: size.height * 0.40,
+          left: size.width * 0.18,
+          size: 80,
+          blur: 1.5,
+          duration: 4300,
+          delay: 900,
+          isMobile: isMobile,
+          angle: 0.7,
+        ),
+        _buildFood(
+          'assets/burger.png',
+          bottom: size.height * 0.20,
+          right: size.width * 0.28,
+          size: 70,
+          blur: 2.0,
+          duration: 3500,
+          delay: 600,
+          isMobile: isMobile,
+          angle: 0.4,
         ),
 
         // 🌟 UTENSILS (DESKTOP) - 6 TOTAL 🌟
@@ -686,12 +756,112 @@ class _LoginPageState extends State<LoginPage> {
           angle: 1.2,
         ),
 
+        // Extra scattered dining glyphs filling the remaining gaps. Varied
+        // sizes/angles/durations and irregular positions so the spread reads
+        // as random rather than gridded; all keep the breathing animation.
+        _buildFood(
+          null,
+          top: size.height * 0.07,
+          right: size.width * 0.42,
+          size: 26,
+          duration: 3550,
+          delay: 450,
+          iconData: Icons.restaurant_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.45),
+          isMobile: isMobile,
+          angle: -0.7,
+        ),
+        _buildFood(
+          null,
+          top: size.height * 0.47,
+          right: size.width * 0.07,
+          size: 34,
+          duration: 4100,
+          delay: 850,
+          iconData: Icons.local_dining_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.55),
+          isMobile: isMobile,
+          angle: 0.95,
+        ),
+        _buildFood(
+          null,
+          bottom: size.height * 0.07,
+          right: size.width * 0.38,
+          size: 30,
+          duration: 3750,
+          delay: 150,
+          iconData: Icons.restaurant_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.5),
+          isMobile: isMobile,
+          angle: -0.35,
+        ),
+        _buildFood(
+          null,
+          top: size.height * 0.36,
+          right: size.width * 0.17,
+          size: 24,
+          duration: 4350,
+          delay: 1000,
+          iconData: Icons.local_dining_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.4),
+          isMobile: isMobile,
+          angle: 1.5,
+        ),
+        _buildFood(
+          null,
+          bottom: size.height * 0.33,
+          right: size.width * 0.06,
+          size: 28,
+          duration: 3450,
+          delay: 550,
+          iconData: Icons.restaurant_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.45),
+          isMobile: isMobile,
+          angle: 0.15,
+        ),
+        _buildFood(
+          null,
+          top: size.height * 0.72,
+          right: size.width * 0.33,
+          size: 32,
+          duration: 4250,
+          delay: 350,
+          iconData: Icons.local_dining_rounded,
+          iconColor: Colors.white.withValues(alpha: 0.5),
+          isMobile: isMobile,
+          angle: -0.9,
+        ),
+        _buildFood(
+          null,
+          bottom: size.height * 0.52,
+          left: size.width * 0.03,
+          size: 26,
+          duration: 3650,
+          delay: 750,
+          iconData: Icons.restaurant_rounded,
+          iconColor: appBlue.withValues(alpha: 0.28),
+          isMobile: isMobile,
+          angle: 0.6,
+        ),
+        _buildFood(
+          null,
+          top: size.height * 0.2,
+          left: size.width * 0.24,
+          size: 22,
+          duration: 4450,
+          delay: 950,
+          iconData: Icons.local_dining_rounded,
+          iconColor: appBlue.withValues(alpha: 0.25),
+          isMobile: isMobile,
+          angle: -1.1,
+        ),
+
         // Scattered pulsing dots
         _buildDotGroup(
           top: size.height * 0.25,
           left: size.width * 0.37,
           color: appBlue,
-          dotSize: 8,
+          dotSize: 12,
           isMobile: isMobile,
         ),
         _buildDotGroup(
@@ -704,7 +874,7 @@ class _LoginPageState extends State<LoginPage> {
 
         // WELCOME CARD CENTERED
         Align(
-          alignment: const Alignment(0, 0.4),
+          alignment: const Alignment(0, 0.1),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -755,7 +925,7 @@ class _LoginPageState extends State<LoginPage> {
           angle: 0.35,
         ),
         _buildFood(
-          'assets/food_bowl.jpg',
+          'assets/food_bowl.png',
           top: size.height * 0.2,
           right: -50,
           size: 240,
@@ -774,10 +944,10 @@ class _LoginPageState extends State<LoginPage> {
           isMobile: isMobile,
         ),
         _buildFood(
-          'assets/coke.png',
+          'assets/pizza.png',
           bottom: -10,
           right: -20,
-          size: 120,
+          size: 240,
           blur: 4.0,
           duration: 4500,
           delay: 200,
@@ -788,7 +958,7 @@ class _LoginPageState extends State<LoginPage> {
           top: size.height * 0.45,
           left: 10,
           size: 70,
-          blur: 3.5,
+          blur: 2.5,
           duration: 3200,
           delay: 800,
           isMobile: isMobile,
@@ -945,9 +1115,10 @@ class _LoginPageState extends State<LoginPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: isMobile ? 65 : 90,
-              height: isMobile ? 65 : 90,
-              decoration: isMobile
+              width: isMobile ? 110 : (kIsWeb ? 150 : 80),
+              height: isMobile ? 60 : (kIsWeb ? 80 : 80),
+              // WEB: bare logo — no blue circular badge behind Nevark.png.
+              decoration: (isMobile || kIsWeb)
                   ? null
                   : BoxDecoration(
                       color: appBlue,
@@ -962,24 +1133,24 @@ class _LoginPageState extends State<LoginPage> {
                     ),
               // Animated GIFs don't reliably decode on Flutter web (only a
               // blank first frame paints, leaving just the blue badge). Use the
-              // static logo on web, clipped to match the circular badge; keep
-              // the animated GIF on mobile where it renders correctly.
+              // static logo on web — shown bare, no badge/clip; keep the
+              // animated GIF on mobile where it renders correctly.
               child: kIsWeb
-                  ? ClipOval(
-                      child: Image.asset(
-                        'assets/Nevark.png',
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, _, _) => const Icon(
-                          Icons.lunch_dining_rounded,
-                          color: Colors.white,
-                          size: 30,
-                        ),
+                  ? Image.asset(
+                      'assets/Nevark.png',
+                      
+                      fit: BoxFit.contain,
+                      
+                      errorBuilder: (_, _, _) => Icon(
+                        Icons.lunch_dining_rounded,
+                        color: appBlue,
+                        size: 80,
                       ),
                     )
                   : Transform.scale(
-                      scale: isMobile ? 1.3 : 1.05,
+                      scale: isMobile ? 1.3 : 1.8,
                       child: Image.asset(
-                        'assets/logo1.gif',
+                        'assets/Nevark.png',
                         fit: BoxFit.contain,
                         errorBuilder: (_, _, _) => Icon(
                           Icons.lunch_dining_rounded,
@@ -1006,6 +1177,10 @@ class _LoginPageState extends State<LoginPage> {
 
         if (isMobile)
           _LoopingFeaturePoints(subTextColor: subTextColor, isMobile: isMobile)
+        else if (kIsWeb)
+          // WEB: the taglines rotate through a circular carousel instead of
+          // sitting as a static list.
+          _RotatingFeaturePoints(subTextColor: subTextColor, appBlue: appBlue)
         else ...[
           _buildFeaturePoint(
             Icons.bolt_rounded,
@@ -1080,20 +1255,36 @@ class _LoginPageState extends State<LoginPage> {
     required bool isMobile,
     required BuildContext context,
   }) {
+    final card = _buildGoogleCardBody(isMobile: isMobile, context: context);
+    // WEB: a faint blue streak of light continuously runs around the card's
+    // rounded border. Painted as a foreground overlay so it sits on top of the
+    // opaque card edge rather than behind it.
+    if (!kIsWeb) return card;
+    return _StreakBorder(
+      borderRadius: 32,
+      color: appBlue,// Color.fromARGB(255, 114, 112, 235),
+      child: card,
+    );
+  }
+
+  Widget _buildGoogleCardBody({
+    required bool isMobile,
+    required BuildContext context,
+  }) {
     return Container(
       padding: EdgeInsets.symmetric(
         horizontal: 28,
-        vertical: isMobile ? 36 : 48,
+        vertical: isMobile ? 36 : 44,
       ),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: const Color.fromARGB(189, 255, 255, 255),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white, width: 2),
+        border: Border.all(color: const Color.fromARGB(133, 255, 255, 255), width: 2),
         boxShadow: [
           BoxShadow(
-            color: appBlue.withValues(alpha: 0.2),
+            color: appBlue.withValues(alpha: 0.5),
             blurRadius: 40,
-            offset: const Offset(0, 15),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -1101,34 +1292,46 @@ class _LoginPageState extends State<LoginPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 64,
-            height: 64,
+            width: 72,
+            height: 72,
             decoration: const BoxDecoration(
-              color: Color(0xFFF1F5F9),
-              shape: BoxShape.circle,
+              color: Color.fromARGB(0, 241, 245, 249),
+              shape: BoxShape.rectangle,
             ),
-            child: Icon(Icons.person_outline_rounded, color: appBlue, size: 30),
+            // App logo instead of the bare person glyph (web + Android).
+            child: ClipOval(
+              child: Image.asset(
+                'assets/icon/icon3.png',
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => Icon(
+                  Icons.person_outline_rounded,
+                  color: appBlue,
+                  size: 30,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           Text(
-            "Welcome  Back",
+            "Welcome Back",
             style: GoogleFonts.plusJakartaSans(
-              fontSize: 30,
+              fontSize: 34,
               fontWeight: FontWeight.w700,
               color: const Color(0xFF0F172A),
               letterSpacing: 0,
             ),
           ),
+          const SizedBox(height: 8),
 
           Text(
             "Login to Your Account",
             style: GoogleFonts.plusJakartaSans(
               fontSize: 15,
               fontWeight: FontWeight.w500,
-              color: const Color(0xFF64748B),
+              color: const Color.fromARGB(255, 83, 97, 117),
             ),
           ),
-          const SizedBox(height: 48),
+          const SizedBox(height: 38),
 
           SizedBox(
             width: double.infinity,
@@ -1136,56 +1339,58 @@ class _LoginPageState extends State<LoginPage> {
             child: kIsWeb
                 ? _buildWebGoogleButton()
                 : ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF0F172A),
-                elevation: 3,
-                side: BorderSide(color: Colors.grey.shade200, width: 1.5),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              onPressed: isSigningIn ? null : _signInWithGoogle,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (!isSigningIn) ...[
-                    Image.asset(
-                      'assets/google.png',
-                      height: 24,
-                      errorBuilder: (_, _, _) => const Icon(
-                        Icons.g_mobiledata,
-                        size: 28,
-                        color: Colors.blue,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF0F172A),
+                      elevation: 3,
+                      side: BorderSide(color: Colors.grey.shade200, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
                       ),
                     ),
-                    const SizedBox(width: 14),
-                  ],
+                    onPressed: isSigningIn ? null : _signInWithGoogle,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (!isSigningIn) ...[
+                          Image.asset(
+                            'assets/google.png',
+                            height: 24,
+                            errorBuilder: (_, _, _) => const Icon(
+                              Icons.g_mobiledata,
+                              size: 28,
+                              color: Colors.blue,
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                        ],
 
-                  Text(
-                    isSigningIn ? "Signing in..." : "Continue with Google",
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+                        Text(
+                          isSigningIn
+                              ? "Signing in..."
+                              : "Continue with Google",
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+
+                        if (isSigningIn) ...[
+                          const SizedBox(width: 12),
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Color(0xFF2563EB),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-
-                  if (isSigningIn) ...[
-                    const SizedBox(width: 12),
-                    const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFF2563EB),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
           ),
         ],
       ),
@@ -1194,8 +1399,9 @@ class _LoginPageState extends State<LoginPage> {
 
   // ─── 5. WATERMARK ────────────────────────────────────────────────────────
   Widget _buildWatermark() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    final row = Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
           "Powered  by  ",
@@ -1216,6 +1422,27 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
       ],
+    );
+    if (!kIsWeb) return row;
+    // WEB: the watermark sits over the blue wave at the bottom where the grey
+    // and blue lettering nearly vanish — float it on a frosted white pill so
+    // it stays legible on any part of the background.
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: row,
+      ),
     );
   }
 
@@ -1359,6 +1586,215 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+// ─── WEB ANIMATED BORDER STREAK ──────────────────────────────────────────
+// Runs a faint blue light streak continuously around a rounded-rect border.
+// The streak is a moving slice of the border path (extracted via PathMetric)
+// stroked with a blur mask, so it traces the exact card outline including the
+// corner curves.
+class _StreakBorder extends StatefulWidget {
+  final Widget child;
+  final double borderRadius;
+  final Color color;
+  const _StreakBorder({
+    required this.child,
+    required this.borderRadius,
+    required this.color,
+  });
+
+  @override
+  State<_StreakBorder> createState() => _StreakBorderState();
+}
+
+class _StreakBorderState extends State<_StreakBorder>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (context, child) => CustomPaint(
+        foregroundPainter: _StreakPainter(
+          progress: _ctrl.value,
+          borderRadius: widget.borderRadius,
+          color: widget.color,
+        ),
+        child: child,
+      ),
+      child: widget.child,
+    );
+  }
+}
+
+class _StreakPainter extends CustomPainter {
+  final double progress;
+  final double borderRadius;
+  final Color color;
+
+  _StreakPainter({
+    required this.progress,
+    required this.borderRadius,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final border = Path()
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Offset.zero & size,
+          Radius.circular(borderRadius),
+        ),
+      );
+
+    for (final metric in border.computeMetrics()) {
+      final total = metric.length;
+      // Streak spans ~10% of the perimeter; wraps around the seam.
+      final tailLength = total * 0.3;
+      final head = progress * total;
+      final start = head - tailLength;
+
+      Path segment;
+      if (start >= 0) {
+        segment = metric.extractPath(start, head);
+      } else {
+        segment = metric.extractPath(total + start, total)
+          ..addPath(metric.extractPath(0, head), Offset.zero);
+      }
+
+      // Soft outer halo, then a brighter core — both faint.
+      canvas.drawPath(
+        segment,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..strokeCap = StrokeCap.round
+          ..color = color.withValues(alpha: 0.58)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+      );
+      canvas.drawPath(
+        segment,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.2
+          ..strokeCap = StrokeCap.round
+          ..color = color.withValues(alpha: 0.55)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StreakPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+// ─── WEB ROTATING TAGLINES (circular carousel) ───────────────────────────
+// Desktop-web replacement for the static 4-line feature list: one tagline is
+// visible at a time and the set cycles circularly, each entry sliding up and
+// fading in while the previous slides away.
+class _RotatingFeaturePoints extends StatefulWidget {
+  final Color subTextColor;
+  final Color appBlue;
+  const _RotatingFeaturePoints({
+    required this.subTextColor,
+    required this.appBlue,
+  });
+
+  @override
+  State<_RotatingFeaturePoints> createState() => _RotatingFeaturePointsState();
+}
+
+class _RotatingFeaturePointsState extends State<_RotatingFeaturePoints> {
+  static const _features = [
+    (icon: Icons.bolt_rounded, text: 'Instant Food Order'),
+    (icon: Icons.local_offer_outlined, text: 'Exclusive App Discounts'),
+    (icon: Icons.map_outlined, text: 'Real-Time Order Tracking'),
+    (icon: Icons.health_and_safety_outlined, text: '100% Contactless Options'),
+  ];
+  int _index = 0;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(milliseconds: 2400), (_) {
+      if (mounted) {
+        setState(() => _index = (_index + 1) % _features.length);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final feature = _features[_index];
+    return SizedBox(
+      height: 42,
+      child: ClipRect(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 450),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          transitionBuilder: (child, animation) => FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.9),
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          ),
+          child: Row(
+            key: ValueKey(_index),
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(feature.icon, color: widget.appBlue, size: 16),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                feature.text,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: widget.subTextColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── STATIC NAME COMPONENT ────────────────────────────
 class _AnimatedName extends StatelessWidget {
   final bool isMobile;
@@ -1368,7 +1804,7 @@ class _AnimatedName extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
+    final fill = Text(
       "BenchBites",
       style: GoogleFonts.poppins(
         fontSize: isMobile ? 34 : 54,
@@ -1377,6 +1813,29 @@ class _AnimatedName extends StatelessWidget {
         letterSpacing: 0,
         height: 1.0,
       ),
+    );
+    if (!kIsWeb) return fill;
+    // WEB: the name sits across the light/blue wave boundary where the plain
+    // blue fill loses contrast on the blue half — draw a white outline (stroke
+    // pass under the fill pass) so it reads on both backgrounds.
+    return Stack(
+      children: [
+        Text(
+          "BenchBites",
+          style: GoogleFonts.poppins(
+            fontSize: isMobile ? 34 : 54,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0,
+            height: 1.0,
+            foreground: Paint()
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 6
+              ..strokeJoin = StrokeJoin.round
+              ..color = Colors.white,
+          ),
+        ),
+        fill,
+      ],
     );
   }
 }
@@ -1553,7 +2012,7 @@ class _FloatingAnimState extends State<_FloatingAnim>
 
     _scaleAnim = Tween<double>(
       begin: 1.0,
-      end: 1.1,
+      end: 1.2,
     ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOutSine));
 
     Future.delayed(Duration(milliseconds: widget.delayMillis), () {

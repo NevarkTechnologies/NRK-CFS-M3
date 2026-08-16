@@ -12,6 +12,7 @@ import '../model/favorite_model.dart';
 import '../model/cart_model.dart';
 import 'cafeteria_page.dart';
 import 'cart_page.dart';
+import 'checkout_page.dart';
 import 'success_page.dart';
 import 'update_required_page.dart';
 import 'vendor/vendor_home_page.dart';
@@ -102,6 +103,39 @@ class _SplashPageState extends State<SplashPage> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(builder: (_) => SuccessPage(order: order)),
+            );
+            return;
+          }
+          // A Paytm web redirect that returned to a cold app load reconciles to
+          // a terminal failure here (reconcile clears the pending record). Open
+          // Checkout straight into the blocker's failure panel — matching the
+          // in-page Razorpay/Paytm-mobile failure behaviour — so the user lands
+          // where they can retry, not on the home page. Cart is still restored.
+          if (recovered?['state'] == 'expired') {
+            if (!mounted) return;
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CafeteriaPage(toggleTheme: widget.toggleTheme),
+              ),
+            );
+            if (!mounted) return;
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CheckoutPage(
+                  initialPaymentFailed: true,
+                  cafeteriaName: globalCartItems.isNotEmpty
+                      ? globalCartItems.first['cafeteriaName']?.toString()
+                      : null,
+                  cafeId: globalCartItems.isNotEmpty
+                      ? globalCartItems.first['cafeId']?.toString()
+                      : null,
+                  pickupLocation: globalCartItems.isNotEmpty
+                      ? globalCartItems.first['location']?.toString()
+                      : null,
+                ),
+              ),
             );
             return;
           }

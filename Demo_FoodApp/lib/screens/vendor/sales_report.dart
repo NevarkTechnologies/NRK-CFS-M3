@@ -333,7 +333,10 @@ class _SalesReportPageState extends State<SalesReportPage> {
   Future<void> _downloadCsvReport() async {
     if (filteredOrders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No orders available to export.')),
+        const SnackBar(
+          content: Text('No orders available to export.'),
+          duration: Duration(seconds: 1),
+        ),
       );
       return;
     }
@@ -389,14 +392,20 @@ class _SalesReportPageState extends State<SalesReportPage> {
     try {
       final savedPath = await saveCsvFile(fileName, csvData);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('CSV saved: $savedPath')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('CSV saved: $savedPath'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('CSV export failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('CSV export failed: $error'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
     }
   }
 
@@ -404,7 +413,10 @@ class _SalesReportPageState extends State<SalesReportPage> {
   Future<void> _downloadExcelReport() async {
     if (filteredOrders.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No orders available to export.')),
+        const SnackBar(
+          content: Text('No orders available to export.'),
+          duration: Duration(seconds: 1),
+        ),
       );
       return;
     }
@@ -416,14 +428,20 @@ class _SalesReportPageState extends State<SalesReportPage> {
     try {
       final savedPath = await saveExcelReport(fileName, filteredOrders);
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Excel saved: $savedPath')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Excel saved: $savedPath'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Excel export failed: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Excel export failed: $error'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
     }
   }
 

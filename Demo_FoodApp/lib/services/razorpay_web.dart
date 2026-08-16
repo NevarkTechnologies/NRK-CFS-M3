@@ -1,6 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+
+import 'package:web/web.dart' as web;
+
+import 'session.dart';
 
 // Razorpay key is NOT stored here — it is fetched from the backend
 // at payment-initiation time and passed directly to openRazorpayCheckout().
@@ -18,6 +23,48 @@ late void Function(Map<String, dynamic>) _paymentErrorCallback;
 // ignore: unused_element
 void Function(String)? _externalWalletCallback;
 
+const String _razorpayScriptSrc = 'https://checkout.razorpay.com/v1/checkout.js';
+
+// checkout.js is injected on demand instead of from index.html: loading it on
+// every page booted Razorpay's checkout iframe app-wide, which preloads
+// hundreds of UI chunks it never uses (Chrome logs a "preloaded but not used"
+// warning for each). Kicked off when Checkout opens, so it is ready well
+// before the user taps Pay — no added latency on the payment itself.
+Future<void>? _razorpayScriptLoad;
+
+/// Loads Razorpay's checkout script once per page. Safe to call repeatedly —
+/// concurrent and later calls await the same in-flight load.
+Future<void> ensureRazorpayScriptLoaded() {
+  // Already present (script finished, or index.html still provides it).
+  if (globalContext.hasProperty('Razorpay'.toJS).toDart) {
+    return Future.value();
+  }
+  return _razorpayScriptLoad ??= _injectRazorpayScript();
+}
+
+Future<void> _injectRazorpayScript() {
+  final completer = Completer<void>();
+  final script =
+      web.document.createElement('script') as web.HTMLScriptElement
+        ..src = _razorpayScriptSrc
+        ..async = true;
+
+  script.onload = ((JSAny _) {
+    if (!completer.isCompleted) completer.complete();
+  }).toJS;
+
+  script.onerror = ((JSAny _) {
+    // Allow a later attempt to retry rather than caching the failure forever.
+    _razorpayScriptLoad = null;
+    if (!completer.isCompleted) {
+      completer.completeError(StateError('Failed to load Razorpay checkout'));
+    }
+  }).toJS;
+
+  web.document.head!.appendChild(script);
+  return completer.future;
+}
+
 Future<void> initRazorpay(
   void Function(Map<String, dynamic>) onSuccess,
   void Function(Map<String, dynamic>) onError, {
@@ -26,6 +73,8 @@ Future<void> initRazorpay(
   _paymentSuccessCallback = onSuccess;
   _paymentErrorCallback = onError;
   _externalWalletCallback = onExternalWallet;
+  // Warm the script as soon as Checkout initialises this helper.
+  unawaited(ensureRazorpayScriptLoaded().catchError((_) {}));
 }
 
 Future<void> openRazorpayCheckout(
@@ -45,7 +94,17 @@ Future<void> openRazorpayCheckout(
       return;
     }
 
-    final prefill = <String, dynamic>{'email': email, 'contact': '9876543210'};
+    // checkout.js is injected on demand — normally already loaded (warmed when
+    // Checkout opened), but await it so a slow network can never open checkout
+    // before the Razorpay global exists.
+    await ensureRazorpayScriptLoaded();
+
+    // Parity with razorpay_mobile.dart: prefill the user's real phone so
+    // Razorpay's payment SMS/receipts reach them, not a dummy number.
+    final prefill = <String, dynamic>{
+      'email': email,
+      'contact': AppSession.phone.isNotEmpty ? AppSession.phone : '9876543210',
+    };
 
     if (upiId != null && upiId.isNotEmpty) {
       prefill['vpa'] = upiId;

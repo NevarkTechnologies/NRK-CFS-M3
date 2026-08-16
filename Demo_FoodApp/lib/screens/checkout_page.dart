@@ -20,6 +20,10 @@ class CheckoutPage extends StatefulWidget {
   final String? cafeId;
   final String? pickupLocation;
   final bool isReorder;
+  // Cold-boot entry after a Paytm web redirect returned to a fresh app load: the
+  // pending session already reconciled to a terminal failure in splash, so open
+  // straight into the blocker's failure panel instead of the bare checkout page.
+  final bool initialPaymentFailed;
   const CheckoutPage({
     super.key,
     this.items,
@@ -27,6 +31,7 @@ class CheckoutPage extends StatefulWidget {
     this.cafeId,
     this.pickupLocation,
     this.isReorder = false,
+    this.initialPaymentFailed = false,
   });
   @override
   State<CheckoutPage> createState() => _CheckoutPageState();
@@ -58,6 +63,10 @@ class _CheckoutPageState extends State<CheckoutPage>
   bool _isReconcilingPayment = false;
   bool _paymentTerminalHandled = false;
   Timer? _resumeReconcileTimer;
+  // When set, the blocker overlay shows a terminal-failure panel (message +
+  // Try Again / Close) instead of the "completing payment" spinner. Only real
+  // failures (declined / expired session) set this — pending stays a spinner.
+  String? _paymentFailureMessage;
 
   void _setAwaitingPayment(bool value) {
     if (mounted && _awaitingPayment != value) {
@@ -105,7 +114,7 @@ class _CheckoutPageState extends State<CheckoutPage>
               'Pickup is available between ${FeeService.pickupStartLabel} and ${FeeService.pickupEndLabel}. Today\'s window has closed.',
             ),
             backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 3),
+            duration: const Duration(seconds: 1),
           ),
         );
       }
@@ -216,7 +225,7 @@ class _CheckoutPageState extends State<CheckoutPage>
               'Pickup Time Must Be Between ${FeeService.pickupStartLabel} and ${FeeService.pickupEndLabel}.',
             ),
             backgroundColor: Colors.redAccent,
-            duration: const Duration(seconds: 2),
+            duration: const Duration(seconds: 1),
           ),
         );
       }
@@ -258,8 +267,17 @@ class _CheckoutPageState extends State<CheckoutPage>
     _loadFees();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // CODEX EDITS: Reconcile when Checkout is reopened after process death.
-      _restorePendingPayment();
+      if (widget.initialPaymentFailed) {
+        // Paytm web redirect returned to a cold app load; splash already
+        // reconciled this session to a failure. Show the blocker's failure
+        // panel directly (the pending pointer is already cleared).
+        _showPaymentFailed(
+          'Payment failed. No amount was captured. Tap Try Again to retry.',
+        );
+      } else {
+        // CODEX EDITS: Reconcile when Checkout is reopened after process death.
+        _restorePendingPayment();
+      }
     });
   }
 
@@ -315,8 +333,9 @@ class _CheckoutPageState extends State<CheckoutPage>
 
     return PopScope(
       // Block back navigation while a payment is being finalized — popping the
-      // page here would orphan the SuccessPage navigation.
-      canPop: !_awaitingPayment,
+      // page here would orphan the SuccessPage navigation. The failure panel is
+      // terminal (nothing in flight), so back is allowed there.
+      canPop: !_awaitingPayment || _paymentFailureMessage != null,
       child: Stack(
         children: [
           _buildScaffold(background, cardColor, textColor),
@@ -328,10 +347,16 @@ class _CheckoutPageState extends State<CheckoutPage>
 
   /// Full-screen barrier shown from checkout open until SuccessPage or a
   /// terminal failure — covers the bare checkout page seen after returning
-  /// from an external UPI app while the payment is still being verified.
+  /// from an external UPI app while the payment is still being verified. On a
+  /// terminal failure it swaps to a failure panel (message + Try Again / Close)
+  /// instead of dropping away, so the failure is shown on the blocker itself.
   Widget _paymentLoaderOverlay(Color cardColor, Color textColor) {
+    final failureMessage = _paymentFailureMessage;
     return Positioned.fill(
       child: AbsorbPointer(
+        // The failure panel has interactive buttons — only absorb taps while the
+        // neutral loader (nothing to tap) is showing.
+        absorbing: failureMessage == null,
         child: Container(
           color: Colors.black.withValues(alpha: 0.6),
           child: Center(
@@ -342,34 +367,123 @@ class _CheckoutPageState extends State<CheckoutPage>
                 color: cardColor,
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(color: primaryColor),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Completing your payment…',
-                    style: TextStyle(
-                      color: textColor,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
+              child: failureMessage == null
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: primaryColor),
+                        const SizedBox(height: 18),
+                        Text(
+                          'Completing your payment…',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Please don\'t close the app',
+                          style: TextStyle(
+                            color: textColor.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 46,
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Payment failed',
+                          style: TextStyle(
+                            color: textColor,
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          failureMessage,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: textColor.withValues(alpha: 0.7),
+                            fontSize: 13,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: _dismissPaymentFailure,
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: primaryColor,
+                                  side: BorderSide(
+                                    color: primaryColor.withValues(alpha: 0.4),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: const Text('Close'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () {
+                                  _dismissPaymentFailure();
+                                  _handlePayment();
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: primaryColor,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                ),
+                                child: const Text('Try Again'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Please don\'t close the app',
-                    style: TextStyle(
-                      color: textColor.withValues(alpha: 0.6),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  // A terminal payment failure (declined or expired session). Keep the
+  // full-screen blocker visible but swap it to the failure panel, instead of
+  // dropping to the bare checkout page with only a fleeting snackbar.
+  void _showPaymentFailed(String message) {
+    if (!mounted) return;
+    _paytmOrder = null;
+    _razorpayOrder = null;
+    _razorpayKeyId = null;
+    setState(() {
+      _paymentFailureMessage = message;
+      _awaitingPayment = true;
+    });
+  }
+
+  void _dismissPaymentFailure() {
+    if (!mounted) return;
+    setState(() {
+      _paymentFailureMessage = null;
+      _awaitingPayment = false;
+    });
   }
 
   Widget _buildScaffold(Color background, Color cardColor, Color textColor) {
@@ -667,10 +781,7 @@ class _CheckoutPageState extends State<CheckoutPage>
             ),
             if (preferred)
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 3,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: primaryColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
@@ -802,6 +913,7 @@ class _CheckoutPageState extends State<CheckoutPage>
         final result = await _reconcilePendingPayment(
           pollAttempts: 1,
           showPendingMessage: false,
+          showFailureOverlay: false,
         );
         if (_paymentTerminalHandled) {
           if (mounted) setState(() => isSubmitting = false);
@@ -975,7 +1087,11 @@ class _CheckoutPageState extends State<CheckoutPage>
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 1),
+      ),
     );
   }
 
@@ -995,7 +1111,7 @@ class _CheckoutPageState extends State<CheckoutPage>
     if (!mounted || _paymentTerminalHandled) return;
     final state = result?['state']?.toString();
     if (state == 'expired') {
-      _showError('Payment session expired. Please tap Pay again.');
+      // reconcile already showed the failure panel on the blocker overlay.
       return;
     }
     if (_isUserCancelledPayment(sdkError)) {
@@ -1026,13 +1142,8 @@ class _CheckoutPageState extends State<CheckoutPage>
     if (!mounted || _paymentTerminalHandled) return;
     final state = result?['state']?.toString();
     if (state == 'expired') {
-      // Terminal for this Paytm order (failed or window over) — the pending
-      // pointer is already cleared, so the next Pay starts a fresh payment.
-      _paytmOrder = null;
-      _razorpayOrder = null;
-      _razorpayKeyId = null;
-      _setAwaitingPayment(false);
-      _showError('Payment did not complete. Please tap Pay to try again.');
+      // reconcile already showed the failure panel on the blocker overlay and
+      // cleared the stored orders; leaving it up so the user can Try Again.
       return;
     }
     if (_isUserCancelledPayment(sdkError)) {
@@ -1049,6 +1160,7 @@ class _CheckoutPageState extends State<CheckoutPage>
       SnackBar(
         content: Text('Continue payment in $walletName'),
         backgroundColor: primaryColor,
+        duration: const Duration(seconds: 1),
       ),
     );
   }
@@ -1069,6 +1181,10 @@ class _CheckoutPageState extends State<CheckoutPage>
     Map<String, dynamic>? sdkError,
     int pollAttempts = 1,
     bool showPendingMessage = false,
+    // A terminal failure normally takes over the blocker with the failure panel.
+    // The Pay-button resume path opts out: for it, an expired session just means
+    // "start a fresh payment", not "show a failure".
+    bool showFailureOverlay = true,
   }) async {
     if (_isReconcilingPayment || _paymentTerminalHandled) return null;
     _isReconcilingPayment = true;
@@ -1089,11 +1205,13 @@ class _CheckoutPageState extends State<CheckoutPage>
           return latest;
         }
         if (state == 'expired') {
-          _setAwaitingPayment(false);
-          if (showPendingMessage) {
-            _showError(
-              'The previous payment session expired. No confirmed payment was found.',
+          // Terminal for this order (declined, or the resume window closed).
+          if (showFailureOverlay) {
+            _showPaymentFailed(
+              'Payment failed. No amount was captured. Tap Try Again to retry.',
             );
+          } else {
+            _setAwaitingPayment(false);
           }
           return latest;
         }
@@ -1167,29 +1285,28 @@ class _CheckoutPageState extends State<CheckoutPage>
   void _showPaymentCancelledPending() {
     if (!mounted) return;
     final pendingOrderId =
-        _paytmOrder?['orderId']?.toString() ?? _razorpayOrder?['id']?.toString();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Payment cancelled. We verified no payment capture yet.',
-        ),
-        backgroundColor: const Color(0xFFF59E0B),
-        duration: const Duration(seconds: 8),
-        action: SnackBarAction(
-          label: 'Start new',
-          textColor: Colors.white,
-          onPressed: () {
-            unawaited(
-              PendingPaymentService.clear(expectedOrderId: pendingOrderId),
-            );
-            _razorpayOrder = null;
-            _razorpayKeyId = null;
-            _paytmOrder = null;
-            _setAwaitingPayment(false);
-          },
-        ),
-      ),
-    );
+        _paytmOrder?['orderId']?.toString() ??
+        _razorpayOrder?['id']?.toString();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Payment is cancelled. Start a fresh order.',
+            ),
+            backgroundColor: const Color(0xFFF59E0B),
+            duration: const Duration(seconds: 3),
+          ),
+        )
+        .closed
+        .then((_) {
+          unawaited(
+            PendingPaymentService.clear(expectedOrderId: pendingOrderId),
+          );
+          _razorpayOrder = null;
+          _razorpayKeyId = null;
+          _paytmOrder = null;
+          _setAwaitingPayment(false);
+        });
   }
 
   // CODEX EDITS: Pending is deliberately neutral and instructs against a
