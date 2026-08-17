@@ -46,6 +46,7 @@ dependencies:
   # reads the installed versionCode; in_app_update drives the immediate flow.
   in_app_update: ^4.2.3
   package_info_plus: ^8.0.0
+  flutter_tts: ^4.2.5
 
 dev_dependencies:
   flutter_test:

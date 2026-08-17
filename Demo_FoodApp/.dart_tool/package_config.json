@@ -314,6 +314,12 @@
       "languageVersion": "3.10"
     },
     {
+      "name": "flutter_tts",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_tts-4.2.5",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
       "name": "flutter_web_plugins",
       "rootUri": "file:///D:/flutter/packages/flutter_web_plugins",
       "packageUri": "lib/",

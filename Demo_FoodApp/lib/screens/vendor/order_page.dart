@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../services/api_service.dart';
+import '../../services/order_speech_service.dart';
 import '../../services/session.dart';
 import 'vendor_page_wrapper.dart';
 
@@ -57,6 +58,9 @@ class _OrdersPageState extends State<OrdersPage> {
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    // Leaving the page must silence the readout — the platform engine keeps
+    // talking after the widget is gone otherwise.
+    OrderSpeechService.instance.stop();
     super.dispose();
   }
 
@@ -371,6 +375,35 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  // FEATURE: read the order aloud ("2 Veg Biryani, 1 Coke, for Arjun") so the
+  // counter can work without reading the screen. Listens to the shared service
+  // so the icon shows "stop" only on the card that is actually talking, and
+  // reverts on every card when playback ends.
+  Widget _readAloudButton(Map<String, dynamic> order) {
+    final orderId = order["id"]?.toString() ?? '';
+    return ValueListenableBuilder<String?>(
+      valueListenable: OrderSpeechService.instance.speakingOrderId,
+      builder: (context, speakingId, _) {
+        final isSpeaking = speakingId == orderId && orderId.isNotEmpty;
+        return Tooltip(
+          message: isSpeaking ? 'Stop reading' : 'Read order aloud',
+          child: IconButton(
+            onPressed: () => OrderSpeechService.instance.toggle(order),
+            icon: Icon(
+              isSpeaking ? Icons.stop_circle_rounded : Icons.volume_up_rounded,
+              size: 24,
+              color: primaryBlue,
+            ),
+            splashRadius: 22,
+            visualDensity: VisualDensity.compact,
+            constraints: const BoxConstraints.tightFor(width: 40, height: 40),
+            padding: EdgeInsets.zero,
+          ),
+        );
+      },
+    );
+  }
+
   Widget buildOrderCard(
     Map<String, dynamic> order,
     Color cardColor,
@@ -448,7 +481,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              _readAloudButton(order),
+              const SizedBox(width: 4),
               statusChip(order["status"]),
             ],
           ),
