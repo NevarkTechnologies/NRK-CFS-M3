@@ -574,6 +574,21 @@
       font-size: 15px;
     }
 
+    .app-status {
+      position: fixed;
+      z-index: 10;
+      right: 24px;
+      bottom: 24px;
+      max-width: min(420px, calc(100vw - 48px));
+      padding: 16px 20px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-md);
+      background: var(--surface);
+      color: var(--fg);
+      box-shadow: var(--shadow-md);
+      font-size: 15px;
+    }
+
     /* CTA band */
     .band {
       background: linear-gradient(135deg, var(--blue-deep) 0%, #2563EB 100%);
@@ -674,6 +689,7 @@
 </head>
 
 <body>
+  <p class="app-status" role="alert" hidden></p>
 
   <header class="site">
     <div class="wrap nav">
@@ -959,6 +975,52 @@
         });
       }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
       items.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+
+  <script>
+    (function () {
+      var appLinks = document.querySelectorAll('a[href="/"]');
+      var status = document.querySelector('.app-status');
+      var isChecking = false;
+
+      appLinks.forEach(function (link) {
+        link.addEventListener('click', async function (event) {
+          if (event.defaultPrevented || event.button !== 0 ||
+            event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+          }
+
+          event.preventDefault();
+          if (isChecking) return;
+
+          isChecking = true;
+          status.hidden = true;
+          var controller = new AbortController();
+          var timeout = window.setTimeout(function () { controller.abort(); }, 8000);
+
+          try {
+            var response = await fetch(link.href, {
+              method: 'GET',
+              cache: 'no-store',
+              credentials: 'same-origin',
+              signal: controller.signal
+            });
+
+            if (!response.ok) {
+              throw new Error('App route returned HTTP ' + response.status);
+            }
+
+            window.location.assign(link.href);
+          } catch (error) {
+            status.textContent = 'The app server is not running at the moment. Please try again later.';
+            status.hidden = false;
+          } finally {
+            window.clearTimeout(timeout);
+            isChecking = false;
+          }
+        });
+      });
     })();
   </script>
 
