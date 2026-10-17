@@ -19,6 +19,7 @@
         "fl_chart",
         "flutter",
         "flutter_animate",
+        "flutter_foreground_task",
         "flutter_local_notifications",
         "flutter_tts",
         "google_fonts",
@@ -31,6 +32,8 @@
         "package_info_plus",
         "path_provider",
         "paytm_allinonesdk",
+        "permission_handler",
+        "print_bluetooth_thermal",
         "qr_flutter",
         "razorpay_flutter",
         "shared_preferences",
@@ -79,6 +82,41 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "permission_handler",
+      "version": "13.0.2",
+      "dependencies": [
+        "flutter",
+        "meta",
+        "permission_handler_android",
+        "permission_handler_apple",
+        "permission_handler_html",
+        "permission_handler_platform_interface",
+        "permission_handler_windows"
+      ]
+    },
+    {
+      "name": "flutter_foreground_task",
+      "version": "11.0.3",
+      "dependencies": [
+        "flutter",
+        "platform",
+        "plugin_platform_interface",
+        "shared_preferences"
+      ]
+    },
+    {
+      "name": "print_bluetooth_thermal",
+      "version": "1.2.4",
+      "dependencies": [
+        "flutter",
+        "flutter_web_plugins",
+        "image",
+        "plugin_platform_interface",
+        "web",
+        "win_ble"
       ]
     },
     {
@@ -515,6 +553,70 @@
       ]
     },
     {
+      "name": "permission_handler_platform_interface",
+      "version": "4.4.1",
+      "dependencies": [
+        "flutter",
+        "meta",
+        "plugin_platform_interface"
+      ]
+    },
+    {
+      "name": "permission_handler_windows",
+      "version": "0.2.2",
+      "dependencies": [
+        "flutter",
+        "permission_handler_platform_interface"
+      ]
+    },
+    {
+      "name": "permission_handler_html",
+      "version": "0.1.4+1",
+      "dependencies": [
+        "flutter",
+        "flutter_web_plugins",
+        "permission_handler_platform_interface",
+        "web"
+      ]
+    },
+    {
+      "name": "permission_handler_apple",
+      "version": "9.6.1",
+      "dependencies": [
+        "flutter",
+        "permission_handler_platform_interface",
+        "yaml"
+      ]
+    },
+    {
+      "name": "permission_handler_android",
+      "version": "14.1.0",
+      "dependencies": [
+        "flutter",
+        "permission_handler_platform_interface"
+      ]
+    },
+    {
+      "name": "platform",
+      "version": "3.1.6",
+      "dependencies": []
+    },
+    {
+      "name": "plugin_platform_interface",
+      "version": "2.1.8",
+      "dependencies": [
+        "meta"
+      ]
+    },
+    {
+      "name": "win_ble",
+      "version": "1.1.1",
+      "dependencies": [
+        "flutter",
+        "path_provider"
+      ]
+    },
+    {
       "name": "flutter_web_plugins",
       "version": "0.0.0",
       "dependencies": [
@@ -638,13 +740,6 @@
       "dependencies": [
         "meta",
         "web"
-      ]
-    },
-    {
-      "name": "plugin_platform_interface",
-      "version": "2.1.8",
-      "dependencies": [
-        "meta"
       ]
     },
     {
@@ -1123,11 +1218,6 @@
         "collection",
         "meta"
       ]
-    },
-    {
-      "name": "platform",
-      "version": "3.1.6",
-      "dependencies": []
     },
     {
       "name": "xdg_directories",

@@ -997,7 +997,16 @@ async function processNotificationOutboxOnce() {
           [vendorUser._id],
           'New Order 🛎️',
           `Token #${order.tokenNumber} — new order from ${order.customerName || 'a customer'}`,
-          { type: 'vendor_order', orderId: order.orderId, status: 'Pending' }
+          // tokenNumber rides along so the vendor app can announce the order
+          // aloud from the FCM background isolate, where it has no DB access.
+          // Defaulted because the schema allows '' and String(undefined) would
+          // otherwise put the literal "undefined" in the payload.
+          {
+            type: 'vendor_order',
+            orderId: order.orderId,
+            status: 'Pending',
+            tokenNumber: order.tokenNumber || '',
+          }
         );
         if (!sent) throw new Error('Vendor FCM delivery failed');
       }

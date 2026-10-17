@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nevark's BenchBites — Campus food ordering, without the queue</title>
+  <meta name="description"
+    content="Nevark's BenchBites is a campus food ordering app. Browse your canteen's live menu, pay online, and collect your order with a token — no queue, no cash.">
+  <meta name="theme-color" content="#2563EB">
+  <link rel="icon" type="image/png" href="../icons/icon3.png">
+
+  <meta property="og:title" content="Nevark's BenchBites">
+  <meta property="og:description" content="Campus food ordering, without the queue.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://benchbites.nevark.in/about/">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap"
+    rel="stylesheet">
+
+  <style>
+    /* ── TOKENS ──────────────────────────────────────────────────────────── */
+    :root {
+      --blue: #2563EB;
+      --blue-deep: #1E3A5F;
+      --blue-ink: #1D4ED8;
+      --on-primary: #FFFFFF;
+
+      --bg: #F8FAFC;
+      --surface: #FFFFFF;
+      --fg: #0F172A;
+      --fg-muted: #475569;
+      --line: #E2E8F0;
+      --tint: #EFF4FF;
+
+      --shadow-sm: 0 1px 2px rgba(15, 23, 42, .06);
+      --shadow-md: 0 8px 24px -8px rgba(15, 23, 42, .14);
+      --shadow-lg: 0 24px 60px -20px rgba(30, 58, 95, .35);
+
+      --r-sm: 10px;
+      --r-md: 16px;
+      --r-lg: 24px;
+
+      --space-1: 8px;
+      --space-2: 16px;
+      --space-3: 24px;
+      --space-4: 40px;
+      --space-5: 64px;
+      --space-6: 96px;
+
+      --ease: cubic-bezier(.22, 1, .36, 1);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #020617;
+        --surface: #0F172A;
+        --fg: #F1F5F9;
+        --fg-muted: #94A3B8;
+        --line: #1E293B;
+        --tint: #12203D;
+        --blue: #60A5FA;
+        --blue-ink: #93C5FD;
+        --shadow-md: 0 8px 24px -8px rgba(0, 0, 0, .6);
+        --shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, .8);
+      }
+    }
+
+    /* ── BASE ────────────────────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 17px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    h1,
+    h2,
+    h3 {
+      line-height: 1.15;
+      letter-spacing: -0.02em;
+      margin: 0;
+      color: var(--fg);
+    }
+
+    p {
+      margin: 0;
+      color: var(--fg-muted);
+    }
+
+    a {
+      color: var(--blue-ink);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    img {
+      max-width: 100%;
+      display: block;
+    }
+
+    :focus-visible {
+      outline: 3px solid var(--blue);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
+
+    .wrap {
+      width: 100%;
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--blue-ink);
+      background: var(--tint);
+      border: 1px solid var(--line);
+      padding: 7px 14px;
+      border-radius: 999px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      min-height: 48px;
+      padding: 0 26px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: transform .2s var(--ease), background-color .2s var(--ease), box-shadow .2s var(--ease);
+    }
+
+    .btn:hover {
+      text-decoration: none;
+      transform: translateY(-2px);
+    }
+
+    .btn-primary {
+      background: var(--blue);
+      color: #fff;
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-primary:hover {
+      background: var(--blue-ink);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--fg);
+      border-color: var(--line);
+    }
+
+    .btn-ghost:hover {
+      background: var(--tint);
+    }
+
+    /* ── HEADER ──────────────────────────────────────────────────────────── */
+    header.site {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(14px);
+      background: color-mix(in srgb, var(--bg) 82%, transparent);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 68px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 700;
+      font-size: 17px;
+      color: var(--fg);
+    }
+
+    .brand:hover {
+      text-decoration: none;
+    }
+
+    .brand img {
+      width: 36px;
+      height: 36px;
+      border-radius: 9px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 28px;
+      font-size: 15px;
+      font-weight: 500;
+    }
+
+    .nav-links a {
+      color: var(--fg-muted);
+    }
+
+    .nav-links a:hover {
+      color: var(--blue-ink);
+    }
+
+    @media (max-width: 780px) {
+      .nav-links {
+        display: none;
+      }
+    }
+
+    /* ── HERO ────────────────────────────────────────────────────────────── */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      padding: var(--space-6) 0 var(--space-5);
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: .45;
+      pointer-events: none;
+    }
+
+    .hero::before {
+      width: 460px;
+      height: 460px;
+      background: #2563EB;
+      top: -180px;
+      left: -140px;
+    }
+
+    .hero::after {
+      width: 380px;
+      height: 380px;
+      background: #A16207;
+      bottom: -200px;
+      right: -120px;
+      opacity: .22;
+    }
+
+    .hero .wrap {
+      position: relative;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.15fr .85fr;
+      gap: var(--space-5);
+      align-items: center;
+    }
+
+    h1 {
+      font-size: clamp(38px, 5.4vw, 62px);
+      margin: 22px 0 20px;
+    }
+
+    h1 .accent {
+      color: var(--blue);
+    }
+
+    .lede {
+      font-size: 19px;
+      max-width: 52ch;
+    }
+
+    .hero-cta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin-top: var(--space-3);
+    }
+
+    .hero-note {
+      margin-top: 18px;
+      font-size: 14px;
+    }
+
+    /* Phone mock */
+    .mock {
+      position: relative;
+      justify-self: center;
+      width: 260px;
+      aspect-ratio: 9 / 18.5;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 34px;
+      box-shadow: var(--shadow-lg);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .mock-bar {
+      height: 5px;
+      width: 64px;
+      border-radius: 99px;
+      background: var(--line);
+      margin: 2px auto 6px;
+    }
+
+    .mock-hero {
+      border-radius: var(--r-md);
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-deep) 100%);
+      color: #fff;
+      padding: 16px;
+    }
+
+    .mock-hero span {
+      display: block;
+      font-size: 11px;
+      opacity: .85;
+    }
+
+    .mock-hero strong {
+      font-size: 17px;
+    }
+
+    .mock-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-sm);
+    }
+
+    .mock-thumb {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      background: var(--tint);
+      flex: none;
+    }
+
+    .mock-line {
+      height: 7px;
+      border-radius: 99px;
+      background: var(--line);
+    }
+
+    .mock-price {
+      margin-left: auto;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--blue-ink);
+    }
+
+    .mock-pay {
+      margin-top: auto;
+      background: var(--blue);
+      color: #fff;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 11px;
+      border-radius: var(--r-sm);
+    }
+
+    @media (max-width: 860px) {
+      .hero-grid {
+        grid-template-columns: 1fr;
+        gap: var(--space-4);
+      }
+
+      .mock {
+        display: none;
+      }
+
+      .hero {
+        padding: var(--space-4) 0;
+      }
+    }
+
+    /* ── SECTIONS ────────────────────────────────────────────────────────── */
+    section {
+      padding: var(--space-5) 0;
+    }
+
+    .sec-head {
+      max-width: 60ch;
+      margin-bottom: var(--space-4);
+    }
+
+    .sec-head h2 {
+      font-size: clamp(27px, 3.4vw, 37px);
+      margin: 16px 0 12px;
+    }
+
+    /* Steps */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-3);
+      counter-reset: step;
+    }
+
+    .step {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 30px 26px;
+      box-shadow: var(--shadow-sm);
+      transition: transform .25s var(--ease), box-shadow .25s var(--ease);
+    }
+
+    .step:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .step::before {
+      counter-increment: step;
+      content: "0" counter(step);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      color: var(--blue);
+    }
+
+    .step h3 {
+      font-size: 20px;
+      margin: 10px 0 8px;
+    }
+
+    .step p {
+      font-size: 15px;
+    }
+
+    /* Features */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-3);
+    }
+
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: 28px 26px;
+      transition: transform .25s var(--ease), border-color .25s var(--ease);
+    }
+
+    .feature:hover {
+      transform: translateY(-4px);
+      border-color: var(--blue);
+    }
+
+    .ico {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      background: var(--tint);
+      display: grid;
+      place-items: center;
+      margin-bottom: 16px;
+    }
+
+    .ico svg {
+      width: 22px;
+      height: 22px;
+      stroke: var(--blue-ink);
+      fill: none;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .feature h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .feature p {
+      font-size: 15px;
+    }
+
+    @media (max-width: 860px) {
+
+      .steps,
+      .features {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Google data panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-lg);
+      padding: var(--space-4);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .scopes {
+      list-style: none;
+      margin: 22px 0 22px;
+      padding: 0;
+      display: grid;
+      gap: 12px;
+    }
+
+    .scopes li {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      font-size: 15px;
+      color: var(--fg-muted);
+    }
+
+    .scopes svg {
+      width: 20px;
+      height: 20px;
+      flex: none;
+      margin-top: 3px;
+      stroke: var(--blue);
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .scopes strong {
+      color: var(--fg);
+    }
+
+    .callout {
+      border-left: 3px solid var(--blue);
+      background: var(--tint);
+      border-radius: 0 var(--r-sm) var(--r-sm) 0;
+      padding: 16px 20px;
+      font-size: 15px;
+    }
+
+    /* CTA band */
+    .band {
+      background: linear-gradient(135deg, var(--blue-deep) 0%, #2563EB 100%);
+      border-radius: var(--r-lg);
+      padding: var(--space-4);
+      text-align: center;
+      color: #fff;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .band h2 {
+      color: #fff;
+      font-size: clamp(25px, 3vw, 34px);
+      margin-bottom: 12px;
+    }
+
+    .band p {
+      color: rgba(255, 255, 255, .88);
+      max-width: 46ch;
+      margin: 0 auto 26px;
+    }
+
+    .band .btn-primary {
+      background: #fff;
+      color: var(--blue-deep);
+    }
+
+    .band .btn-primary:hover {
+      background: #EFF4FF;
+    }
+
+    /* Footer */
+    footer.site {
+      border-top: 1px solid var(--line);
+      padding: var(--space-4) 0;
+      margin-top: var(--space-5);
+    }
+
+    .foot {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px 28px;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 15px;
+    }
+
+    .foot nav {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+    }
+
+    .foot a {
+      color: var(--fg-muted);
+    }
+
+    .foot a:hover {
+      color: var(--blue-ink);
+    }
+
+    .copy {
+      font-size: 14px;
+      color: var(--fg-muted);
+    }
+
+    /* ── MOTION ──────────────────────────────────────────────────────────── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(18px);
+      transition: opacity .55s var(--ease), transform .55s var(--ease);
+    }
+
+    .reveal.in {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      *,
+      *::before,
+      *::after {
+        animation: none !important;
+        transition: none !important;
+      }
+
+      html {
+        scroll-behavior: auto;
+      }
+
+      .reveal {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <header class="site">
+    <div class="wrap nav">
+      <a class="brand" href="#top">
+        <img src="../icons/icon3.png" alt="">
+        <span>Nevark's BenchBites</span>
+      </a>
+      <nav class="nav-links" aria-label="Page sections">
+        <a href="#how">How it Works</a>
+        <a href="#features">Features</a>
+        <a href="#privacy">Your Data</a>
+      </nav>
+      <a class="btn btn-primary" href="/">Open the app</a>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <span class="eyebrow">Campus Food Ordering</span>
+          <p class="lede">
+            <strong>Nevark's BenchBites</strong> is a campus food-ordering
+            application developed by Nevark LLP.
+
+            The application allows students and staff to browse canteen menus,
+            place orders, make online payments, track orders in real time,
+            and collect food using a digital token.
+
+            BenchBites is intended for use within educational institutions,
+            including universities and colleges.
+            </p>
+            <div class="hero-cta">
+              <a class="btn btn-primary" href="/">Open the app</a>
+              <a class="btn btn-ghost" href="#how">See how it works</a>
+            </div>
+            <p class="hero-note">Sign in with Google. No separate password to remember.</p>
+        </div>
+
+        <div class="mock" aria-hidden="true">
+          <div class="mock-bar"></div>
+          <div class="mock-hero">
+            <span>Main Block Canteen</span>
+            <strong>Open · Pickup 11:30</strong>
+          </div>
+          <div class="mock-row">
+            <div class="mock-thumb"></div>
+            <div style="flex:1">
+              <div class="mock-line" style="width:70%"></div>
+              <div class="mock-line" style="width:40%;margin-top:6px;opacity:.6"></div>
+            </div>
+            <div class="mock-price">₹60</div>
+          </div>
+          <div class="mock-row">
+            <div class="mock-thumb"></div>
+            <div style="flex:1">
+              <div class="mock-line" style="width:58%"></div>
+              <div class="mock-line" style="width:34%;margin-top:6px;opacity:.6"></div>
+            </div>
+            <div class="mock-price">₹35</div>
+          </div>
+          <div class="mock-row">
+            <div class="mock-thumb"></div>
+            <div style="flex:1">
+              <div class="mock-line" style="width:64%"></div>
+              <div class="mock-line" style="width:44%;margin-top:6px;opacity:.6"></div>
+            </div>
+            <div class="mock-price">₹90</div>
+          </div>
+          <div class="mock-pay">Pay ₹185</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- WHAT IT IS -->
+    <section>
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <span class="eyebrow">What it is</span>
+          <h2>An ordering counter that fits in your pocket</h2>
+          <p>
+            Nevark's BenchBites connects students and staff with the canteens on their own campus. You browse each
+            canteen's live menu, add items to a cart, and place the order from your phone or browser. Payment is
+            handled online through our payment partners, and you receive a token-coded order that the canteen verifies
+            when
+            you collect your food.
+          </p>
+          <p style="margin-top:14px">
+            Because the order is placed and paid for in advance, the kitchen starts preparing it before you arrive. You
+            follow the status in real time and get a notification the moment it is ready — no waiting at the counter
+            during a short break between classes.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <span class="eyebrow">How it works</span>
+          <h2>Three steps, one break</h2>
+        </div>
+        <div class="steps">
+          <article class="step reveal">
+            <h3>Pick your Canteen</h3>
+            <p>Open the live menu for any canteen on your campus. Items and prices are set by the vendor, and sold-out
+              dishes disappear as they go.</p>
+          </article>
+          <article class="step reveal">
+            <h3>Order and Pay</h3>
+            <p>Build your cart and pay online. You get a token-coded receipt and a pickup window straight away.</p>
+          </article>
+          <article class="step reveal">
+            <h3>Collect and Go</h3>
+            <p>Track the status in real time, walk over when it's ready, and show the token at the counter.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <span class="eyebrow">Features</span>
+          <h2>Built for the ten minutes you actually have</h2>
+        </div>
+        <div class="features">
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M4 6h16M4 12h16M4 18h10" />
+              </svg>
+            </div>
+            <h3>Live Canteen Menus</h3>
+            <p>Every vendor manages their own items, pricing and availability, so what you see is what's actually
+              cooking.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <path d="M2 10h20" />
+              </svg>
+            </div>
+            <h3>Online Payment</h3>
+            <p>Pay by UPI, card or wallet through our payment partners. No cash, no change, no counter fumbling.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <path d="M14 14h3v3h-3zM19 19h2M17 21h-3" />
+              </svg>
+            </div>
+            <h3>Token Pickup</h3>
+            <p>Each order carries a token the canteen verifies at handover, so nobody collects the wrong order.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </div>
+            <h3>Real-time Status</h3>
+            <p>Watch the order move from accepted to preparing to ready, with a notification at each stage.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M3 12a9 9 0 1 0 3-6.7" />
+                <path d="M3 4v5h5" />
+              </svg>
+            </div>
+            <h3>History and Reorder</h3>
+            <p>Past orders stay in your account, so your usual is two taps away tomorrow.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="ico" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M3 20V10M9 20V4M15 20v-8M21 20v-4" />
+              </svg>
+            </div>
+            <h3>Vendor Dashboard</h3>
+            <p>Canteens get their own view to manage menus, accept incoming orders and see the day's totals.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- GOOGLE DATA -->
+    <section id="privacy">
+      <div class="wrap">
+        <div class="sec-head reveal">
+          <span class="eyebrow">Your data</span>
+          <h2>Why we use Google Sign-In</h2>
+          <p>
+            Google Sign-In is the only sign-in method in Nevark's BenchBites, so you never create or remember another
+            password. When you sign in we request the basic profile scopes only:
+          </p>
+        </div>
+        <div class="panel reveal">
+          <ul class="scopes">
+            <li>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span><strong>Name</strong> — shown on your profile and passed to the canteen so they can identify your
+                order at pickup.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span><strong>Email address</strong> — used as your unique account identifier and for order
+                receipts.</span>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              <span><strong>Profile picture</strong> — displayed on your profile screen inside the app.</span>
+            </li>
+          </ul>
+          <p class="callout">
+            We do not request access to your Gmail, Drive, Contacts, Calendar or any other Google service. We never
+            sell Google user data or share it with third parties for advertising. Data received from Google APIs is
+            used solely to provide the ordering features described on this page.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section>
+      <div class="wrap">
+        <div class="band reveal">
+          <h2>Order your next meal in under a minute</h2>
+          <p>Open Nevark's BenchBites in your browser and sign in with your Google account to get started.</p>
+          <a class="btn btn-primary" href="/">Open Nevark's BenchBites</a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="site">
+    <div class="wrap foot">
+      <a class="brand" href="#top">
+        <img src="../icons/icon3.png" alt="">
+        <span>Nevark's BenchBites</span>
+      </a>
+      <nav aria-label="Legal and contact">
+        <a href="https://nevark.in/privacy">Privacy Policy</a>
+        <a href="https://nevark.in/terms-condition">Terms of Service</a>
+        <a href="mailto:team@nevark.in">team@nevark.in</a>
+      </nav>
+    </div>
+    <div class="wrap copy" style="margin-top:18px">&copy; Nevark LLP. All rights reserved.</div>
+  </footer>
+
+  <script>
+    (function () {
+      var items = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window) ||
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        items.forEach(function (el) { el.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry, i) {
+          if (!entry.isIntersecting) return;
+          var el = entry.target;
+          // Small stagger so siblings cascade instead of popping together.
+          setTimeout(function () { el.classList.add('in'); }, (i % 3) * 90);
+          io.unobserve(el);
+        });
+      }, { rootMargin: '0px 0px -8% 0px', threshold: 0.12 });
+      items.forEach(function (el) { io.observe(el); });
+    })();
+  </script>
+
+</body>
+
+</html>

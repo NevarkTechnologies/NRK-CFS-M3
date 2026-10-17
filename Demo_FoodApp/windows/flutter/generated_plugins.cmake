@@ -8,6 +8,8 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   flutter_tts
+  permission_handler_windows
+  print_bluetooth_thermal
   url_launcher_windows
 )
 

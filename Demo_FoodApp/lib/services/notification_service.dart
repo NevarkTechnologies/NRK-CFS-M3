@@ -12,9 +12,11 @@ import '../screens/detail_page.dart';
 import '../screens/vendor/order_page.dart';
 import 'api_service.dart';
 import 'nav.dart';
+import 'order_speech_service.dart';
 import 'session.dart';
 
-final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
+final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 const MethodChannel _settingsChannel = MethodChannel('nevark_foods/settings');
 
 /// FCM Web Push (VAPID) PUBLIC key — Firebase Console → Project Settings →
@@ -25,9 +27,32 @@ const MethodChannel _settingsChannel = MethodChannel('nevark_foods/settings');
 const String _fcmWebVapidKey =
     'BMIj-F-Asq4zaD5hD0EXM3gxDzqJJkA3REv6f5_HQJQam4px8mSMTiKYeTh-tqa5lAYmK-sgI4CsICinTvqSSVM';
 
+@pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await _initializeLocalNotifications();
   await _showNotification(message);
+
+  // FEATURE: announce new orders aloud even when the vendor app is backgrounded.
+  // onMessage only fires in the foreground, so this isolate is the only place
+  // that sees the push here. The token comes from the payload because this
+  // isolate has no session, no API client and no widget tree — it cannot look
+  // the order up. Deduplication against the foreground path is handled inside
+  // announceNewOrder via SharedPreferences, which both isolates share.
+  //
+  // Web never reaches this: background messages there are handled by
+  // firebase-messaging-sw.js, which cannot run Dart.
+  if (!kIsWeb && message.data['type']?.toString() == 'vendor_order') {
+    try {
+      await OrderSpeechService.instance.announceNewOrder(
+        tokenNumber: message.data['tokenNumber']?.toString() ?? '',
+        orderId: message.data['orderId']?.toString() ?? '',
+      );
+    } catch (error) {
+      // The notification itself has already been shown; a failed readout must
+      // not take the handler down with it.
+      debugPrint('Background announcement failed: $error');
+    }
+  }
 }
 
 Future<void> _initializeLocalNotifications() async {
@@ -41,10 +66,7 @@ Future<void> _initializeLocalNotifications() async {
   );
 
   await _localNotificationsPlugin.initialize(
-    const InitializationSettings(
-      android: android,
-      iOS: ios,
-    ),
+    const InitializationSettings(android: android, iOS: ios),
   );
 
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
@@ -54,7 +76,11 @@ Future<void> _initializeLocalNotifications() async {
       description: 'Notifications for Order Status',
       importance: Importance.high,
     );
-    await _localNotificationsPlugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.createNotificationChannel(channel);
+    await _localNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(channel);
   }
 }
 
@@ -106,7 +132,13 @@ class NotificationService {
   /// Retains its value so listeners that mount after the push arrives (e.g.
   /// SuccessPage when the webhook-sent push beats the page transition) can
   /// still read it. Used to drive the "Order is being created" footer.
-  static final ValueNotifier<String?> lastOrderPushOrderId = ValueNotifier<String?>(null);
+  static final ValueNotifier<String?> lastOrderPushOrderId =
+      ValueNotifier<String?>(null);
+
+  /// Bumped every time a 'vendor_order' push lands in the foreground. The
+  /// vendor orders page listens to it so a new order refreshes the list (and is
+  /// announced aloud) immediately, instead of waiting out the 30s poll.
+  static final ValueNotifier<int> vendorOrderPushTick = ValueNotifier<int>(0);
 
   bool _initialized = false;
   late final FirebaseMessaging _messaging;
@@ -131,7 +163,9 @@ class NotificationService {
     final initialMessage = await _messaging.getInitialMessage();
     if (initialMessage != null) {
       // Delay so the navigator is ready after app startup
-      WidgetsBinding.instance.addPostFrameCallback((_) => _handleMessageOpenedApp(initialMessage));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _handleMessageOpenedApp(initialMessage),
+      );
     }
 
     _messaging.onTokenRefresh.listen((token) {
@@ -180,7 +214,9 @@ class NotificationService {
         // Set foreground options now that permission is confirmed
         if (!kIsWeb) {
           await _messaging.setForegroundNotificationPresentationOptions(
-            alert: true, badge: true, sound: true,
+            alert: true,
+            badge: true,
+            sound: true,
           );
         }
         return true;
@@ -269,7 +305,10 @@ class NotificationService {
                       onPressed: () => Navigator.pop(ctx, true),
                       child: const Text(
                         'Open Settings',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                   ),
@@ -385,7 +424,10 @@ class NotificationService {
                     onPressed: () => Navigator.pop(ctx),
                     child: const Text(
                       'Got it',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
                     ),
                   ),
                 ),
@@ -423,11 +465,16 @@ class NotificationService {
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
     await _showNotification(message);
-    if (message.data['type']?.toString() == 'order') {
+    final type = message.data['type']?.toString();
+    if (type == 'order') {
       lastOrderPushOrderId.value = message.data['orderId']?.toString();
+    } else if (type == 'vendor_order') {
+      vendorOrderPushTick.value++;
     }
     if (AppSession.isLoggedIn) {
-      NotificationModel.fetchNotifications(AppSession.userId).catchError((_) {});
+      NotificationModel.fetchNotifications(
+        AppSession.userId,
+      ).catchError((_) {});
     }
   }
 
@@ -438,13 +485,13 @@ class NotificationService {
     if (nav == null) return;
 
     if (type == 'vendor_order') {
-      nav.push(MaterialPageRoute(
-        builder: (_) => OrdersPage(toggleTheme: () {}),
-      ));
+      nav.push(
+        MaterialPageRoute(builder: (_) => OrdersPage(toggleTheme: () {})),
+      );
     } else if (type == 'order') {
-      nav.push(MaterialPageRoute(
-        builder: (_) => DetailPage(title: AppSession.name),
-      ));
+      nav.push(
+        MaterialPageRoute(builder: (_) => DetailPage(title: AppSession.name)),
+      );
     }
   }
 }

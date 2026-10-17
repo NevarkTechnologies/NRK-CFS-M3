@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "561027608241",
+    "project_id": "nrk-cfs",
+    "storage_bucket": "nrk-cfs.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:561027608241:android:38e49cd43adc4e0370fc90",
+        "android_client_info": {
+          "package_name": "com.nevark.foodapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "561027608241-24anaimhf8tbacrgolc192k4fn1u6lrk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLz1paNFUV35aqD4XbNjf6VmyGKsnN5Hs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "561027608241-24anaimhf8tbacrgolc192k4fn1u6lrk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

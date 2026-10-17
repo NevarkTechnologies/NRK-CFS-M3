@@ -260,6 +260,12 @@
       "languageVersion": "2.17"
     },
     {
+      "name": "flutter_foreground_task",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_foreground_task-11.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.12"
+    },
+    {
       "name": "flutter_launcher_icons",
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_launcher_icons-0.14.4",
       "packageUri": "lib/",
@@ -596,6 +602,42 @@
       "languageVersion": "2.12"
     },
     {
+      "name": "permission_handler",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler-13.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "permission_handler_android",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_android-14.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "permission_handler_apple",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_apple-9.6.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "permission_handler_html",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_html-0.1.4+1",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "permission_handler_platform_interface",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_platform_interface-4.4.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
+      "name": "permission_handler_windows",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_windows-0.2.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.6"
+    },
+    {
       "name": "petitparser",
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-7.0.2",
       "packageUri": "lib/",
@@ -612,6 +654,12 @@
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/plugin_platform_interface-2.1.8",
       "packageUri": "lib/",
       "languageVersion": "3.0"
+    },
+    {
+      "name": "print_bluetooth_thermal",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/print_bluetooth_thermal-1.2.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.2"
     },
     {
       "name": "pub_semver",
@@ -810,6 +858,12 @@
       "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/win32-5.15.0",
       "packageUri": "lib/",
       "languageVersion": "3.8"
+    },
+    {
+      "name": "win_ble",
+      "rootUri": "file:///C:/Users/Nikhil%20Emmanuel/AppData/Local/Pub/Cache/hosted/pub.dev/win_ble-1.1.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
     },
     {
       "name": "xdg_directories",

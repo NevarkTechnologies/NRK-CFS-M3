@@ -1,6 +1,27 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 <uses-permission android:name="android.permission.INTERNET"/>
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Thermal receipt printer over Bluetooth Classic.
+         BLUETOOTH_CONNECT is the Android 12+ permission and must also be
+         requested at runtime; the two below it are its pre-12 equivalents and
+         are capped so Play does not see them requested on modern devices.
+         Deliberately no BLUETOOTH_SCAN and no location permission: the app
+         lists only printers already paired in Android's own Bluetooth
+         settings, which needs neither. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"/>
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30"/>
+
+    <!-- Foreground service that keeps the vendor app receiving and printing
+         orders while the counter phone sits idle. Android 14+ requires each
+         declared service type to be permitted explicitly: connectedDevice
+         covers the link to the printer, dataSync covers pulling orders down.
+         FOREGROUND_SERVICE, WAKE_LOCK, RECEIVE_BOOT_COMPLETED and the boot
+         receiver itself are contributed by flutter_foreground_task's own
+         manifest through the merger. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
         android:label="BenchBites(Beta)"
         android:name="${applicationName}"

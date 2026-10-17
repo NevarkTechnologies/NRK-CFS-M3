@@ -14,6 +14,7 @@ import 'sales_report.dart';
 import 'order_page.dart';
 import 'vendor_data.dart';
 import '../../services/api_service.dart';
+import '../../services/keep_alive_service.dart';
 import '../../services/session.dart';
 import '../../widgets/smooth_marquee_text.dart';
 
@@ -45,6 +46,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
   void initState() {
     super.initState();
     _cafeActive = AppSession.cafe?['active'] as bool? ?? true;
+    // Started from the vendor's landing page, not just the Orders page, so the
+    // app keeps receiving and printing orders even if they never open Orders.
+    // Idempotent — it no-ops when the service is already running.
+    KeepAliveService.instance.start();
     loadDashboard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_requiresBusinessDetails) {
@@ -256,6 +261,10 @@ class _VendorHomePageState extends State<VendorHomePage> {
     try {
       clearCart();
       FavoriteModel.clear();
+      // Nothing left to receive orders for, so the persistent "Receiving
+      // orders" notification must go with the session rather than sitting in
+      // the shade until the next reboot.
+      await KeepAliveService.instance.stop();
       await AppSession.clear();
       await FirebaseAuth.instance.signOut();
     } catch (_) {}

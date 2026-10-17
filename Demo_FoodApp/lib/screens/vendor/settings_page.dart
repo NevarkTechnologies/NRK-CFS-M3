@@ -7,6 +7,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../services/session.dart';
 import '../../services/api_service.dart';
+import '../../services/order_print_service.dart';
+import '../../services/order_speech_service.dart';
+import '../../services/printer_transport.dart';
+import '../../services/receipt_builder.dart';
 import 'vendor_data.dart';
 import 'vendor_page_wrapper.dart';
 
@@ -59,6 +63,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void initState() {
     super.initState();
+    _loadVoiceAvailability();
+    _loadPrinterSettings();
     _currentImageUrl = VendorData.displayImage;
     nameCtrl = TextEditingController(
       text: VendorData.displayName == "Not set yet"
@@ -101,6 +107,23 @@ class _SettingsPageState extends State<SettingsPage> {
     if (cuisineStr != "Not set yet") {
       selectedCuisines = cuisineStr.split(',').map((c) => c.trim()).toSet();
     }
+  }
+
+  @override
+  void dispose() {
+    // NOTE: this page had no dispose() at all — the profile controllers below
+    // were already leaking. Added here rather than disposing only the two new
+    // printer fields, which would have looked like an oversight.
+    nameCtrl.dispose();
+    descCtrl.dispose();
+    phoneCtrl.dispose();
+    emailCtrl.dispose();
+    addressCtrl.dispose();
+    cityCtrl.dispose();
+    pinCtrl.dispose();
+    _printerIpCtrl.dispose();
+    _printerPortCtrl.dispose();
+    super.dispose();
   }
 
   bool get _hasValidBusinessDetails {
@@ -579,6 +602,29 @@ class _SettingsPageState extends State<SettingsPage> {
                       isDark,
                     ).animate().fade(delay: 200.ms).slideY(begin: 0.1),
 
+                    /// 🔹 ORDER ANNOUNCEMENTS
+                    buildCard(
+                      "Order Announcements",
+                      Icons.campaign_rounded,
+                      _buildAnnouncementSettings(textColor, isDark),
+                      cardColor,
+                      textColor,
+                      isDark,
+                    ).animate().fade(delay: 250.ms).slideY(begin: 0.1),
+
+                    /// 🔹 ORDER PRINTING
+                    // Hidden on web: a browser can open neither a raw socket
+                    // nor a Bluetooth link, so there is nothing to offer there.
+                    if (OrderPrintService.instance.isSupported)
+                      buildCard(
+                        "Order Printing",
+                        Icons.print_rounded,
+                        _buildPrinterSettings(textColor, isDark),
+                        cardColor,
+                        textColor,
+                        isDark,
+                      ).animate().fade(delay: 300.ms).slideY(begin: 0.1),
+
                     const SizedBox(height: 50),
                   ],
                 ),
@@ -866,6 +912,707 @@ class _SettingsPageState extends State<SettingsPage> {
             fontFamily: 'Inter',
           ),
         ),
+      ),
+    );
+  }
+
+  // FEATURE: spoken "One new order, token N" alerts. These are per-device
+  // preferences rather than cafe profile fields, so they save immediately and
+  // are deliberately not gated behind the Edit Profile mode.
+  Map<String, bool> _voiceAvailable = {};
+
+  Future<void> _loadVoiceAvailability() async {
+    await OrderSpeechService.instance.loadPreferences();
+    final availability = <String, bool>{};
+    for (final code in OrderSpeechService.announcementLanguages.keys) {
+      availability[code] = await OrderSpeechService.instance
+          .isLanguageAvailable(code);
+    }
+    if (mounted) setState(() => _voiceAvailable = availability);
+  }
+
+  Widget _buildAnnouncementSettings(Color text, bool isDark) {
+    final service = OrderSpeechService.instance;
+    final missing = OrderSpeechService.announcementLanguages.keys
+        .where((code) => _voiceAvailable[code] == false)
+        .map((code) => OrderSpeechService.announcementLanguages[code])
+        .join(', ');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ValueListenableBuilder<bool>(
+          valueListenable: service.announcementsEnabled,
+          builder: (context, enabled, _) => Material(
+            color: Colors.transparent,
+            child: SwitchListTile(
+              activeThumbColor: primaryBlue,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                "Announce New Orders",
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  color: text,
+                ),
+              ),
+              subtitle: Text(
+                'Reads "One new order, token 12" aloud while this page is open',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12,
+                  color: text.withValues(alpha: 0.6),
+                ),
+              ),
+              value: enabled,
+              onChanged: service.setAnnouncementsEnabled,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          "Announcement language",
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            color: text.withValues(alpha: 0.7),
+          ),
+        ),
+        const SizedBox(height: 10),
+        ValueListenableBuilder<String>(
+          valueListenable: service.announcementLanguage,
+          builder: (context, selected, _) => Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: OrderSpeechService.announcementLanguages.entries.map((
+              entry,
+            ) {
+              // null availability = not checked yet; assume usable rather than
+              // locking the vendor out while the engine is still starting.
+              final usable = _voiceAvailable[entry.key] != false;
+              return ChoiceChip(
+                label: Text(entry.value),
+                selected: selected == entry.key,
+                onSelected: usable
+                    ? (_) => service.setAnnouncementLanguage(entry.key)
+                    : null,
+                labelStyle: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: selected == entry.key
+                      ? Colors.white
+                      : text.withValues(alpha: usable ? 0.85 : 0.35),
+                ),
+                selectedColor: primaryBlue,
+                backgroundColor: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.grey.shade100,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        if (missing.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            "$missing not installed on this device. Add the voice under "
+            "Settings → System → Languages & input → Text-to-speech output → "
+            "Install voice data.",
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              height: 1.5,
+              color: Colors.orange.shade700,
+            ),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () => OrderSpeechService.instance.previewAnnouncement(),
+            icon: const Icon(Icons.play_arrow_rounded, size: 18),
+            label: const Text(
+              "Test announcement",
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryBlue,
+              side: BorderSide(color: primaryBlue.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // FEATURE: thermal kitchen tickets. Per-device settings like the
+  // announcement ones — the printer is physically attached to this one phone,
+  // so they save immediately and are deliberately not gated behind Edit
+  // Profile, and they are never synced to the server.
+  final TextEditingController _printerIpCtrl = TextEditingController();
+  final TextEditingController _printerPortCtrl = TextEditingController();
+  List<PairedDevice> _pairedPrinters = const [];
+  List<String> _discoveredPrinters = const [];
+  bool _loadingPaired = false;
+  bool _scanningNetwork = false;
+
+  /// null = not checked yet, so the status row stays quiet rather than
+  /// claiming the printer is offline before anything has been tried.
+  bool? _printerOnline;
+
+  Future<void> _loadPrinterSettings() async {
+    final printer = OrderPrintService.instance;
+    if (!printer.isSupported) return;
+    await printer.loadSettings();
+    if (!mounted) return;
+    _printerIpCtrl.text = printer.config.value.ip;
+    _printerPortCtrl.text = printer.config.value.port.toString();
+    setState(() {});
+    if (printer.config.value.connection == PrinterConnection.bluetooth) {
+      await _refreshPairedPrinters();
+    }
+    await _refreshPrinterStatus();
+  }
+
+  Future<void> _refreshPairedPrinters() async {
+    setState(() => _loadingPaired = true);
+    // Requests BLUETOOTH_CONNECT if it has not been granted yet — Android 12+
+    // needs it at runtime, the manifest entry alone is not enough.
+    final devices = await OrderPrintService.instance.pairedDevices();
+    if (!mounted) return;
+    setState(() {
+      _pairedPrinters = devices;
+      _loadingPaired = false;
+    });
+  }
+
+  Future<void> _refreshPrinterStatus() async {
+    final printer = OrderPrintService.instance;
+    if (!printer.isReady) {
+      if (mounted) setState(() => _printerOnline = null);
+      return;
+    }
+    final online = await printer.probe();
+    if (!mounted) return;
+    setState(() => _printerOnline = online);
+  }
+
+  Future<void> _scanForPrinters() async {
+    setState(() {
+      _scanningNetwork = true;
+      _discoveredPrinters = const [];
+    });
+    final port =
+        int.tryParse(_printerPortCtrl.text.trim()) ?? PrinterConfig.defaultPort;
+    final found = await OrderPrintService.instance.scanForNetworkPrinters(
+      port: port,
+    );
+    if (!mounted) return;
+    setState(() {
+      _discoveredPrinters = found;
+      _scanningNetwork = false;
+    });
+    if (found.isEmpty) {
+      _toast(
+        'No printers found on this network. Check the printer is switched on '
+        'and joined to the same Wi-Fi.',
+      );
+    }
+  }
+
+  Future<void> _testPrint() async {
+    try {
+      await OrderPrintService.instance.testPrint();
+      if (!mounted) return;
+      _toast('Test ticket sent to the printer');
+    } catch (error) {
+      if (!mounted) return;
+      _toast(error.toString(), isError: true);
+    }
+    await _refreshPrinterStatus();
+  }
+
+  void _toast(String message, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: isError ? Colors.redAccent : null,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Widget _buildPrinterSettings(Color text, bool isDark) {
+    final printer = OrderPrintService.instance;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── How orders are handled ────────────────────────────────────────
+        // The one setting here that changes how service actually runs, so it
+        // leads and spells out the consequence rather than just naming a mode.
+        _printerLabel('When an order arrives', text),
+        const SizedBox(height: 10),
+        ValueListenableBuilder<OrderHandlingMode>(
+          valueListenable: printer.orderMode,
+          builder: (context, mode, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _printerChip(
+                    label: 'Manual',
+                    selected: mode == OrderHandlingMode.manual,
+                    onTap: () => printer.setOrderMode(OrderHandlingMode.manual),
+                    text: text,
+                    isDark: isDark,
+                  ),
+                  _printerChip(
+                    label: 'Automatic',
+                    selected: mode == OrderHandlingMode.auto,
+                    onTap: () => printer.setOrderMode(OrderHandlingMode.auto),
+                    text: text,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                mode == OrderHandlingMode.auto
+                    ? 'Orders are accepted and the ticket prints on its own. '
+                          'You can still reject one before it is handed over.'
+                    : 'You tap Accept on each order, and the ticket prints '
+                          'then. Rejected orders never print.',
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 12,
+                  height: 1.5,
+                  color: text.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 32),
+
+        // ── Connection ────────────────────────────────────────────────────
+        _printerLabel('Printer connection', text),
+        const SizedBox(height: 10),
+        ValueListenableBuilder<PrinterConfig>(
+          valueListenable: printer.config,
+          builder: (context, config, _) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  _printerChip(
+                    label: 'Off',
+                    selected: config.connection == PrinterConnection.off,
+                    onTap: () async {
+                      await printer.setConnection(PrinterConnection.off);
+                      await _refreshPrinterStatus();
+                    },
+                    text: text,
+                    isDark: isDark,
+                  ),
+                  _printerChip(
+                    label: 'Bluetooth',
+                    selected: config.connection == PrinterConnection.bluetooth,
+                    onTap: () async {
+                      await printer.setConnection(PrinterConnection.bluetooth);
+                      await _refreshPairedPrinters();
+                      await _refreshPrinterStatus();
+                    },
+                    text: text,
+                    isDark: isDark,
+                  ),
+                  _printerChip(
+                    label: 'Wi-Fi / LAN',
+                    selected: config.connection == PrinterConnection.network,
+                    onTap: () async {
+                      await printer.setConnection(PrinterConnection.network);
+                      await _refreshPrinterStatus();
+                    },
+                    text: text,
+                    isDark: isDark,
+                  ),
+                ],
+              ),
+              if (config.connection == PrinterConnection.bluetooth) ...[
+                const SizedBox(height: 16),
+                _buildBluetoothPicker(config, text, isDark),
+              ],
+              if (config.connection == PrinterConnection.network) ...[
+                const SizedBox(height: 16),
+                _buildNetworkPicker(config, text, isDark),
+              ],
+            ],
+          ),
+        ),
+
+        // ── Paper, copies, status ─────────────────────────────────────────
+        const Divider(height: 32),
+        _printerLabel('Paper width', text),
+        const SizedBox(height: 10),
+        ValueListenableBuilder<PaperWidth>(
+          valueListenable: printer.paper,
+          builder: (context, paper, _) => Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: PaperWidth.values
+                .map(
+                  (width) => _printerChip(
+                    label: width.label,
+                    selected: paper == width,
+                    onTap: () => printer.setPaper(width),
+                    text: text,
+                    isDark: isDark,
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+        const SizedBox(height: 18),
+        ValueListenableBuilder<int>(
+          valueListenable: printer.copies,
+          builder: (context, copies, _) => Row(
+            children: [
+              Expanded(child: _printerLabel('Copies per order', text)),
+              IconButton(
+                onPressed: copies > 1
+                    ? () => printer.setCopies(copies - 1)
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline_rounded),
+                color: primaryBlue,
+              ),
+              Text(
+                '$copies',
+                style: TextStyle(
+                  fontFamily: 'Nunito',
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  color: text,
+                ),
+              ),
+              IconButton(
+                onPressed: copies < 3
+                    ? () => printer.setCopies(copies + 1)
+                    : null,
+                icon: const Icon(Icons.add_circle_outline_rounded),
+                color: primaryBlue,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        _buildPrinterStatusRow(text),
+        const SizedBox(height: 14),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _testPrint,
+            icon: const Icon(Icons.receipt_long_rounded, size: 18),
+            label: const Text(
+              "Test print",
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: primaryBlue,
+              side: BorderSide(color: primaryBlue.withValues(alpha: 0.5)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBluetoothPicker(PrinterConfig config, Color text, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: _printerLabel('Paired printers', text)),
+            IconButton(
+              onPressed: _loadingPaired ? null : _refreshPairedPrinters,
+              icon: const Icon(Icons.refresh_rounded, size: 20),
+              color: primaryBlue,
+              tooltip: 'Refresh list',
+            ),
+          ],
+        ),
+        if (_loadingPaired)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(minHeight: 2),
+          )
+        else if (_pairedPrinters.isEmpty)
+          Text(
+            'No paired printers found. Pair the printer once in Android '
+            'Settings → Bluetooth, then tap refresh.',
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              height: 1.5,
+              color: Colors.orange.shade700,
+            ),
+          )
+        else
+          ..._pairedPrinters.map(
+            (device) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+              leading: Icon(
+                Icons.bluetooth_rounded,
+                color: primaryBlue,
+                size: 20,
+              ),
+              title: Text(
+                device.name.isEmpty ? device.mac : device.name,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                  color: text,
+                ),
+              ),
+              subtitle: Text(
+                device.mac,
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontSize: 11,
+                  color: text.withValues(alpha: 0.5),
+                ),
+              ),
+              trailing: config.btMac == device.mac
+                  ? Icon(
+                      Icons.check_circle_rounded,
+                      color: primaryBlue,
+                      size: 20,
+                    )
+                  : null,
+              onTap: () async {
+                await OrderPrintService.instance.setBluetoothDevice(device);
+                await _refreshPrinterStatus();
+              },
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildNetworkPicker(PrinterConfig config, Color text, bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: TextField(
+                controller: _printerIpCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(fontFamily: 'Inter', color: text),
+                decoration: const InputDecoration(
+                  labelText: 'Printer IP address',
+                  hintText: '192.168.1.87',
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: TextField(
+                controller: _printerPortCtrl,
+                keyboardType: TextInputType.number,
+                style: TextStyle(fontFamily: 'Inter', color: text),
+                decoration: const InputDecoration(
+                  labelText: 'Port',
+                  isDense: true,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            TextButton.icon(
+              onPressed: () async {
+                await OrderPrintService.instance.setNetworkTarget(
+                  _printerIpCtrl.text,
+                  int.tryParse(_printerPortCtrl.text.trim()) ??
+                      PrinterConfig.defaultPort,
+                );
+                await _refreshPrinterStatus();
+                if (mounted) _toast('Printer address saved');
+              },
+              icon: const Icon(Icons.save_rounded, size: 18),
+              label: const Text('Save address'),
+            ),
+            TextButton.icon(
+              onPressed: _scanningNetwork ? null : _scanForPrinters,
+              icon: _scanningNetwork
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.wifi_find_rounded, size: 18),
+              label: Text(_scanningNetwork ? 'Scanning…' : 'Scan for printers'),
+            ),
+          ],
+        ),
+        // Saves the vendor having to find the printer's IP by hand, which is
+        // not a reasonable thing to ask of a canteen owner.
+        ..._discoveredPrinters.map(
+          (ip) => ListTile(
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            leading: Icon(Icons.print_rounded, color: primaryBlue, size: 20),
+            title: Text(
+              ip,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: text,
+              ),
+            ),
+            trailing: config.ip == ip
+                ? Icon(Icons.check_circle_rounded, color: primaryBlue, size: 20)
+                : null,
+            onTap: () async {
+              _printerIpCtrl.text = ip;
+              await OrderPrintService.instance.setNetworkTarget(
+                ip,
+                int.tryParse(_printerPortCtrl.text.trim()) ??
+                    PrinterConfig.defaultPort,
+              );
+              await _refreshPrinterStatus();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrinterStatusRow(Color text) {
+    final printer = OrderPrintService.instance;
+    if (!printer.isReady) {
+      return Text(
+        'No printer selected yet.',
+        style: TextStyle(
+          fontFamily: 'Inter',
+          fontSize: 12,
+          color: text.withValues(alpha: 0.6),
+        ),
+      );
+    }
+
+    final online = _printerOnline;
+    final color = online == null
+        ? Colors.grey
+        : (online ? Colors.green : Colors.redAccent);
+    return Row(
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            online == null
+                ? 'Checking ${printer.config.value.label}…'
+                : (online
+                      ? 'Connected to ${printer.config.value.label}'
+                      : 'Cannot reach ${printer.config.value.label}'),
+            style: TextStyle(
+              fontFamily: 'Inter',
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: text.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: _refreshPrinterStatus,
+          icon: const Icon(Icons.sync_rounded, size: 18),
+          color: primaryBlue,
+          tooltip: 'Check connection',
+        ),
+      ],
+    );
+  }
+
+  Widget _printerLabel(String label, Color text) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: text.withValues(alpha: 0.7),
+      ),
+    );
+  }
+
+  /// Same chip styling as the announcement language picker, so the two cards
+  /// read as one settings screen rather than two.
+  Widget _printerChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required Color text,
+    required bool isDark,
+  }) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      labelStyle: TextStyle(
+        fontFamily: 'Inter',
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: selected ? Colors.white : text.withValues(alpha: 0.85),
+      ),
+      selectedColor: primaryBlue,
+      backgroundColor: isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.grey.shade100,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
       ),
     );
   }

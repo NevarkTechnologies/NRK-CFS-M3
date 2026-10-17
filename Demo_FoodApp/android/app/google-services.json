@@ -14,6 +14,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "561027608241-2221ba03qbvko4a4qcvv08nmu2tgh3rj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nevark.foodapp",
+            "certificate_hash": "e581821ab37f65846f31a03e5ac728b9f284cfb3"
+          }
+        },
+        {
+          "client_id": "561027608241-pfr1qvnr4j0d0mt18krq9hhnht7cvkkk.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.nevark.foodapp",
+            "certificate_hash": "4e63f098e89817131d71ec1051bf6dda2ee07a2a"
+          }
+        },
+        {
           "client_id": "561027608241-24anaimhf8tbacrgolc192k4fn1u6lrk.apps.googleusercontent.com",
           "client_type": 3
         }
@@ -29,6 +45,13 @@
             {
               "client_id": "561027608241-24anaimhf8tbacrgolc192k4fn1u6lrk.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "561027608241-fif5b97k0et50ip6glakair16sdefvks.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.foodApp"
+              }
             }
           ]
         }

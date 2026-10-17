@@ -99,7 +99,7 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
   void _filterCafes() {
     setState(() {
       final query = searchQuery.toLowerCase();
-      filteredCafes = cafes.where((cafe) {
+      final matches = cafes.where((cafe) {
         final name = cafe['name']?.toString().toLowerCase() ?? '';
         final cuisine = cafe['cuisine']?.toString().toLowerCase() ?? '';
         final location = cafe['location']?.toString().toLowerCase() ?? '';
@@ -107,7 +107,19 @@ class _CafeteriaPageState extends State<CafeteriaPage> {
             name.contains(query) ||
             cuisine.contains(query) ||
             location.contains(query);
-      }).toList();
+      });
+
+      // Open cafes first — a closed one cannot be ordered from, so it should
+      // never push an orderable cafe below the fold. Partitioned rather than
+      // sorted because List.sort is not stable in Dart and would scramble the
+      // server's own ordering (rating desc, then name) inside each group.
+      final open = <Map<String, dynamic>>[];
+      final closed = <Map<String, dynamic>>[];
+      for (final cafe in matches) {
+        final isActive = cafe['active'] as bool? ?? true;
+        (isActive ? open : closed).add(cafe);
+      }
+      filteredCafes = [...open, ...closed];
     });
   }
 
