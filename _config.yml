@@ -1,0 +1,6 @@
+
+exclude:
+  - Backend/node_modules
+  - Backend/node_modules/**
+  - Backend/package.json
+  - Backend/package-lock.json
